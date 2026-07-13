@@ -36,6 +36,8 @@ FMT_CODE = {"fp8": 0, "fp6": 1, "fp4": 2}
 # Shapes the committed kernels #include but that have no header.
 MISSING_FP8 = [(64, 64, 128), (64, 64, 512), (128, 128, 128),
                (128, 128, 256), (128, 128, 512), (256, 256, 256)]
+MISSING_FP4 = [(64, 64, 64), (64, 64, 128), (128, 128, 128),
+               (128, 128, 256), (128, 128, 512), (128, 128, 1024)]
 
 
 def rand_fp8(rng, n):
@@ -54,13 +56,45 @@ def emit(f, ctype, name, dims, arr):
     f.write("\n};\n")
 
 
+def rand_fp4(rng, n):
+    """Random fp4 e2m1 nibbles with |value| <= 1.5 (exp field <= 1).
+
+    e2m1: e=0 -> {0, 0.5}; e=1 -> {1.0, 1.5}; e=2 -> {2,3}; e=3 -> {4,6}. Capping e<=1 keeps
+    partial sums inside the e4 block accumulators (same reason as the fp8 cap).
+    """
+    exp = rng.integers(0, 2, size=n, dtype=np.uint8)
+    mant = rng.integers(0, 2, size=n, dtype=np.uint8)
+    sign = rng.integers(0, 2, size=n, dtype=np.uint8)
+    return ((sign << 3) | (exp << 1) | mant).astype(np.uint8)
+
+
+def pack_nibbles_along_axis0(x):
+    """[R, C] nibbles -> [R/2, C] bytes; row r goes to low nibble if r even, else high."""
+    R, C = x.shape
+    assert R % 2 == 0
+    return ((x[1::2, :].astype(np.uint8) << 4) | (x[0::2, :].astype(np.uint8) & 0xF)).astype(np.uint8)
+
+
+def pack_nibbles_along_axis1(x):
+    """[R, C] nibbles -> [R, C/2] bytes; col c goes to low nibble if c even, else high."""
+    R, C = x.shape
+    assert C % 2 == 0
+    return ((x[:, 1::2].astype(np.uint8) << 4) | (x[:, 0::2].astype(np.uint8) & 0xF)).astype(np.uint8)
+
+
 def gen(fmt, M, N, K):
-    assert fmt == "fp8", "sub-byte (fp4/fp6) packing + LUTs not yet supported here"
+    assert fmt in ("fp8", "fp4"), "fp6 (LUT-indexed) not supported here yet"
     GK, GN = K // GROUP, N // GROUP
     rng = np.random.default_rng(hash((fmt, M, N, K)) & 0xFFFFFFFF)
 
-    A = rand_fp8(rng, M * K).reshape(M, K)
-    B = rand_fp8(rng, K * N).reshape(K, N)
+    if fmt == "fp8":
+        A = rand_fp8(rng, M * K).reshape(M, K)
+        B = rand_fp8(rng, K * N).reshape(K, N)
+    else:  # fp4: 32x32 PE tiles, nibble-packed (A along M, B along N)
+        A_nib = rand_fp4(rng, M * K).reshape(M, K)
+        B_nib = rand_fp4(rng, K * N).reshape(K, N)
+        A = pack_nibbles_along_axis0(A_nib)  # [M/2][K]
+        B = pack_nibbles_along_axis1(B_nib)  # [K][N/2]
     # e8m0 scale codes near 1.0 (0x7f == 2^0)
     SA = rng.integers(0x7B, 0x83, size=(GK, M), dtype=np.uint8)
     SB = rng.integers(0x7B, 0x83, size=(GK, N), dtype=np.uint8)
@@ -100,8 +134,14 @@ def gen(fmt, M, N, K):
         f.write(f"#ifndef {guard}\n#define {guard}\n\n#include <stdint.h>\n\n")
         f.write(f"#define MATMUL_M {M}\n#define MATMUL_K {K}\n#define MATMUL_N {N}\n")
         f.write(f"#define MATMUL_GK {GK}\n#define MATMUL_GN {GN}\n\n")
-        emit(f, "uint8_t", "A_in", "[MATMUL_M][MATMUL_K]", A)
-        emit(f, "uint8_t", "B_in", "[MATMUL_K][MATMUL_N]", B)
+        if fmt == "fp8":
+            emit(f, "uint8_t", "A_in", "[MATMUL_M][MATMUL_K]", A)
+            emit(f, "uint8_t", "B_in", "[MATMUL_K][MATMUL_N]", B)
+        else:
+            # sub-byte: A nibble-packed along M, B along N. The kernels alias
+            # `A_in = &A_in_hw[0][0]` (see mxgemm.fp4.*.cpp).
+            emit(f, "uint8_t", "A_in_hw", "[MATMUL_M / 2][MATMUL_K]", A)
+            emit(f, "uint8_t", "B_in", "[MATMUL_K][MATMUL_N / 2]", B)
         emit(f, "uint8_t", "A_scales_row", "[MATMUL_GK][MATMUL_M]", SA)
         emit(f, "uint8_t", "B_scales_col", "[MATMUL_GK][MATMUL_N]", SB)
         emit(f, "uint8_t", "C_out", "[MATMUL_M][MATMUL_N]", C_q)
@@ -117,6 +157,9 @@ if __name__ == "__main__":
     if sys.argv[1:2] == ["--all-fp8"]:
         for M, N, K in MISSING_FP8:
             gen("fp8", M, N, K)
+    elif sys.argv[1:2] == ["--all-fp4"]:
+        for M, N, K in MISSING_FP4:
+            gen("fp4", M, N, K)
     else:
         fmt, M, N, K = sys.argv[1], *map(int, sys.argv[2:5])
         gen(fmt, M, N, K)
