@@ -44,6 +44,49 @@ struct GemmConfig {
         return TILE_N;
     }
     constexpr bool USE_LUT() const { return DATATYPE == GemmDatatype::FP6; }
+
+    // --- C accumulator placement in the scratchpad ---------------------------------
+    //
+    // C lives in the scratchpad, alongside the DOUBLE-BUFFERED A/B operand tiles. Per
+    // calculate_spad_addr() below, the operands occupy (in scratchpad rows):
+    //     A_even [0, A)                      A_odd  [QUARTER, QUARTER + A)
+    //     B_odd  [HALF3 - B, HALF3)          B_even [SMEM - B, SMEM)
+    // ...so C must land in one of the gaps between them.
+    //
+    // This used to be a hardcoded `SPAD_DEST = 256 // TODO: arbitrary`. That value is
+    // correct ONLY for a 64x64 tile with TILE_K <= 64 (A is then exactly 256 rows, so C
+    // abuts it). For ANY larger tile, A grows past row 256 and C is written straight on
+    // top of the A operand -- silently corrupting the result with no error anywhere.
+    // Verified: the shipped 128x128 TILE_K=256 kernel produced 0/16384 correct elements.
+    // (It had no data header, so it had never been buildable, hence never caught.)
+    //
+    // Compute the placement instead, and let SPAD_DEST()==0 mark "C does not fit" so the
+    // static_assert at the use site rejects the config at COMPILE time. Note some configs
+    // are genuinely infeasible with C-in-scratchpad + double buffering: e.g. 128x128 with
+    // TILE_K=256 needs 2048(A)+2048(B) per buffer and 2048 for C, leaving exactly zero
+    // free rows. Use TILE_K <= 128 for a 128x128 tile.
+    constexpr uint32_t SMEM_ROWS() const { return BANK_NUM * BANK_ROWS; }
+    constexpr uint32_t A_SPAD_ROWS() const { return TILE_M * TILE_K / VALUES_PER_BYTE() / DIM; }
+    constexpr uint32_t B_SPAD_ROWS() const { return TILE_K * TILE_N / VALUES_PER_BYTE() / DIM; }
+    constexpr uint32_t C_SPAD_ROWS() const {
+        return TILE_M_QUANT() * TILE_N_QUANT() * OUT_ELEM_SIZE() / DIM;
+    }
+    constexpr uint32_t SPAD_DEST() const {
+        const uint32_t SMEM = SMEM_ROWS();
+        const uint32_t QUARTER = SMEM / 4;
+        const uint32_t A = A_SPAD_ROWS(), B = B_SPAD_ROWS(), C = C_SPAD_ROWS();
+        const uint32_t B_ODD_LO = (SMEM - QUARTER) - B;  // B_odd  grows down from 3/4 mark
+        const uint32_t B_EVEN_LO = SMEM - B;             // B_even grows down from the end
+        // gap 1: after A_even, before A_odd
+        if (A <= QUARTER && QUARTER - A >= C) return A;
+        // gap 2: after A_odd, before B_odd
+        if (QUARTER + A <= B_ODD_LO && B_ODD_LO - (QUARTER + A) >= C) return QUARTER + A;
+        // gap 3: after B_odd, before B_even
+        if ((SMEM - QUARTER) <= B_EVEN_LO && B_EVEN_LO - (SMEM - QUARTER) >= C)
+            return SMEM - QUARTER;
+        return 0;  // does not fit -- rejected by static_assert at the use site
+    }
+    constexpr bool C_FITS_IN_SPAD() const { return SPAD_DEST() != 0; }
 };
 
 // Gemmini constants -----------------------------------------------------------
@@ -69,7 +112,9 @@ constexpr auto GEMMINI_FORMAT_FP4 = 2;
 constexpr auto GEMMINI_FORMAT_FULL = 3;
 constexpr auto QUANT_LUT_UPDATE_GRANULARITY = 1;
 constexpr auto GEMMINI_ACC_ADDR = (1u << (ADDR_LEN - 1));
-constexpr auto SPAD_DEST = 256; // TODO: arbitrary
+// NOTE: SPAD_DEST is no longer a global constant -- it is computed per GemmConfig
+// (C.SPAD_DEST()), because the correct C placement depends on the operand tile footprint.
+// See the comment on GemmConfig::SPAD_DEST().
 
 // Performance benchmark options -----------------------------------------------
 
@@ -548,7 +593,7 @@ static inline void matmul_tile_async(const uint32_t tile_k, const bool acc_move_
         a_spad_addr_start,      // A scratchpad address in rows (grows upward)
         b_spad_addr_end,        // B scratchpad address in rows (grows downward)
         0,                      // D (bias) - none
-        SPAD_DEST,              // C scratchpad address in rows
+        C.SPAD_DEST(),          // C scratchpad address in rows (computed; see GemmConfig)
         false, false,           // A_transpose, B_transpose
         false, false, !first_k, // full_C, low_D, ex_accumulate
                                 // only start in-mem accumulation after first k
@@ -693,6 +738,14 @@ static void
 mxgemm(const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
        uint8_t *C_gmem, const uint32_t tid_in_threadblock,
        const uint32_t threads_per_threadblock, const uint32_t threadblock_id) {
+    // The C accumulator must fit in a scratchpad gap between the double-buffered A/B
+    // operand tiles. If it does not, C would be written over an operand and the result
+    // would be silently wrong (see GemmConfig::SPAD_DEST()). Reject at compile time.
+    static_assert(C.C_FITS_IN_SPAD(),
+                  "C does not fit in the scratchpad alongside the double-buffered A/B "
+                  "tiles for this GemmConfig. Reduce TILE_K (a 128x128 tile needs "
+                  "TILE_K <= 128) or shrink TILE_M/TILE_N.");
+
     mxgemm_single_output_tile<C>(dim_m, dim_n, dim_k, tid_in_threadblock,
                                  threads_per_threadblock);
 
@@ -702,14 +755,14 @@ mxgemm(const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
     // Move-out C from SMEM to GMEM
     if constexpr (!DISABLE_GMEM_MOVE_OUT) {
         auto C_smem =
-            reinterpret_cast<const __shared uint8_t *>(SPAD_DEST * DIM);
+            reinterpret_cast<const __shared uint8_t *>(C.SPAD_DEST() * DIM);
         if constexpr (SIMT_GMEM_MOVE_OUT) {
             copy_smem_to_gmem_simt<C.TILE_M_QUANT(), C.TILE_N_QUANT(),
                                    C.OUT_ELEM_SIZE()>(
                 C_smem, C_gmem, tid_in_threadblock, threads_per_threadblock);
         } else {
             // copy_accmem_to_gmem_dma_sync<C>(C_gmem, dim_n, tid_in_threadblock);
-            copy_C_smem_to_gmem_dma_sync<C>(SPAD_DEST, C_gmem, dim_n,
+            copy_C_smem_to_gmem_dma_sync<C>(C.SPAD_DEST(), C_gmem, dim_n,
                                             tid_in_threadblock);
 
             mu_barrier(2, warps_per_threadblock);
