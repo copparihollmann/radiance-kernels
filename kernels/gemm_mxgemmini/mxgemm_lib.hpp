@@ -48,6 +48,21 @@ struct GemmConfig {
 
 // Gemmini constants -----------------------------------------------------------
 
+// GUARD: the scratchpad geometry must match the silicon we target.
+//
+// The tapeout SMEM is 128 KiB (radiance TapeoutSmemConfig: size = 128<<10, numBanks = 4),
+// so BANK_NUM(4) * BANK_ROWS(2048) * DIM(16) == 128 KiB. The mxgemmini `dev` line bumps
+// BANK_ROWS to 4096 for a *different*, 256 KiB rocket/spike config. Building against that
+// header here is silently catastrophic: `calculate_spad_addr` derives the B-operand base as
+// `BANK_NUM*BANK_ROWS - ...` (below), so a 4096 value places B outside the real scratchpad
+// and corrupts results in BOTH the RTL and the cyclotron co-model -- with no error anywhere.
+// A -DBANK_ROWS override cannot fix this (gemmini_params.h #defines it unconditionally, so
+// the header always wins); the submodule pin is the only lever. Fail loudly if it drifts.
+static_assert(BANK_NUM * BANK_ROWS * DIM == (128 * 1024),
+              "scratchpad geometry != tapeout 128 KiB SMEM. Check the lib/mxgemmini pin: "
+              "the tapeout needs BANK_ROWS=2048 (dev-tip d3b3d10 uses 4096 for a 256 KiB "
+              "rocket/spike config and must NOT be used for radiance).");
+
 constexpr auto GEMMINI_FORMAT_FP8 = 0;
 constexpr auto GEMMINI_FORMAT_FP6 = 1;
 constexpr auto GEMMINI_FORMAT_FP4 = 2;
