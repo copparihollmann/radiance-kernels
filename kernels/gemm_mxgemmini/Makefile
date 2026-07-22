@@ -8,6 +8,9 @@ MU_SRCS = mxgemm.cpp mxgemm_singletile.cpp \
 	  mxgemm.fp8.singletile.tm64tn64tk64.requant.cpp \
 	  mxgemm.fp8.m64n64k128.tm64tn64tk64.fullout.cpp \
 	  mxgemm.fp8.m128n128k512.tm128tn128tk256.fullout.cpp \
+	  mxgemm.fp8.m128n128k512.tm128tn128tk128.fullout.cpp \
+  mxgemm.fp8.m128n128k256.tm128tn128tk128.fullout.cpp \
+  mxgemm.fp8.m128n128k128.tm128tn128tk128.fullout.cpp \
 	  mxgemm.fp6.singletile.tm128tn128tk128.fullout.cpp \
 	  mxgemm.fp6.m128n128k256.tm128tn128tk128.fullout.cpp \
 	  mxgemm.fp6.singletile.tm128tn128tk128.requant.cpp \
@@ -23,6 +26,11 @@ MU_SRCS = mxgemm.cpp mxgemm_singletile.cpp \
 	  mxgemm.fp4.singletile.tm128tn128tk512.fullout.cpp \
 	  mxgemm.fp4.m128n128k1024.tm128tn128tk512.fullout.cpp \
 	  mxgemm.fp4.singletile.tm128tn128tk512.requant.cpp \
+	  mxgemm.fp8.m128n128k2048.tm128tn128tk128.fullout.cpp \
+	  mxgemm.fp8.m128n128k5632.tm128tn128tk128.fullout.cpp \
+	  mxgemm.fp6.m128n128k2048.tm128tn128tk128.fullout.cpp \
+	  mxgemm.fp4.m128n128k2048.tm128tn128tk128.fullout.cpp \
+	  mxgemm.fp4.m128n128k5632.tm128tn128tk128.fullout.cpp \
 	  mxgemm.flash_contention.cpp \
 	  mxgemm.simt_contention.cpp \
 	  mxgemm_smol.cpp \
