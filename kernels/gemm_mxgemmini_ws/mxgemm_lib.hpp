@@ -145,7 +145,7 @@ template <GemmConfig C>
 static inline void configure_mxgemmini(const uint32_t dim_m,
                                        const uint32_t dim_n,
                                        const uint32_t dim_k) {
-    // Non-square tiles (TILE_M != TILE_N) are supported now that the A/B
+    // Non-square tiles (TILE_M != TILE_N) are supported here now that the A/B
     // scale-factor counts are differentiated (SCALE_FACTORS_PER_TILE_A/_B). Only
     // require each tile dim to be a whole number of PE tiles.
     static_assert(C.TILE_M % C.PE_M() == 0 && C.TILE_N % C.PE_N() == 0,

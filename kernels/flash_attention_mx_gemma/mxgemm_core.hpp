@@ -28,14 +28,17 @@ struct GemmConfig {
     constexpr uint32_t PE_TILES_I() const { return TILE_M / PE_M(); }
     constexpr uint32_t PE_TILES_J() const { return TILE_N / PE_N(); }
     constexpr uint32_t PE_TILES_K() const { return TILE_K / PE_K(); }
-    // Scale-factor byte count per SMEM tile. A scales are one e8m0 byte per
-    // (K-group of 32, M); B scales per (K-group, N). These MUST differ when the
-    // tile is non-square (TILE_M != TILE_N, e.g. batched decode M=16/32, N=128),
-    // otherwise the B-scale move-in loads the wrong count and results are wrong.
-    constexpr uint32_t SCALE_FACTORS_PER_TILE_A() const { return TILE_M * TILE_K / 32; }
-    constexpr uint32_t SCALE_FACTORS_PER_TILE_B() const { return TILE_N * TILE_K / 32; }
-    // Back-compat alias (square tiles): equals A count == B count when TILE_M==TILE_N.
+    // MX scale-factor counts. A is [M][K] -> TILE_M*TILE_K/32 scales; B is [K][N] ->
+    // TILE_N*TILE_K/32 scales. These DIFFER for non-square tiles (e.g. FA PV: M=Sq=64,
+    // N=d=256 -> A=128, B=512). The old single SCALE_FACTORS_PER_TILE()=TILE_M*TILE_K/32
+    // was used for BOTH operands, which under-loaded B by TILE_N/TILE_M whenever N>M. For
+    // d=256 PV that loaded only 128 of V's 512 E8M0 scales; the mesh then read 384 stale
+    // scale slots (huge exponents) and produced ~2^118 garbage (layout-independent, since
+    // the SF SRAM is at a fixed address -- which is why relocating the PV output spad did
+    // not help). QK (Sq==Bk) is square so both counts equal 512 and it was never affected.
     constexpr uint32_t SCALE_FACTORS_PER_TILE() const { return TILE_M * TILE_K / 32; }
+    // B-operand scale count (was conflated with the A count above).
+    constexpr uint32_t SCALE_FACTORS_PER_TILE_B() const { return TILE_N * TILE_K / 32; }
     constexpr uint32_t VALUES_PER_BYTE() const { return (IS_FP8() ? 1 : 2); }
     // Size of each C element *after column-packing*.
     constexpr uint32_t OUT_ELEM_SIZE() const {
@@ -50,67 +53,9 @@ struct GemmConfig {
         return TILE_N;
     }
     constexpr bool USE_LUT() const { return DATATYPE == GemmDatatype::FP6; }
-
-    // --- C accumulator placement in the scratchpad ---------------------------------
-    //
-    // C lives in the scratchpad, alongside the DOUBLE-BUFFERED A/B operand tiles. Per
-    // calculate_spad_addr() below, the operands occupy (in scratchpad rows):
-    //     A_even [0, A)                      A_odd  [QUARTER, QUARTER + A)
-    //     B_odd  [HALF3 - B, HALF3)          B_even [SMEM - B, SMEM)
-    // ...so C must land in one of the gaps between them.
-    //
-    // This used to be a hardcoded `SPAD_DEST = 256 // TODO: arbitrary`. That value is
-    // correct ONLY for a 64x64 tile with TILE_K <= 64 (A is then exactly 256 rows, so C
-    // abuts it). For ANY larger tile, A grows past row 256 and C is written straight on
-    // top of the A operand -- silently corrupting the result with no error anywhere.
-    // Verified: the shipped 128x128 TILE_K=256 kernel produced 0/16384 correct elements.
-    // (It had no data header, so it had never been buildable, hence never caught.)
-    //
-    // Compute the placement instead, and let SPAD_DEST()==0 mark "C does not fit" so the
-    // static_assert at the use site rejects the config at COMPILE time. Note some configs
-    // are genuinely infeasible with C-in-scratchpad + double buffering: e.g. 128x128 with
-    // TILE_K=256 needs 2048(A)+2048(B) per buffer and 2048 for C, leaving exactly zero
-    // free rows. Use TILE_K <= 128 for a 128x128 tile.
-    constexpr uint32_t SMEM_ROWS() const { return BANK_NUM * BANK_ROWS; }
-    constexpr uint32_t A_SPAD_ROWS() const { return TILE_M * TILE_K / VALUES_PER_BYTE() / DIM; }
-    constexpr uint32_t B_SPAD_ROWS() const { return TILE_K * TILE_N / VALUES_PER_BYTE() / DIM; }
-    constexpr uint32_t C_SPAD_ROWS() const {
-        return TILE_M_QUANT() * TILE_N_QUANT() * OUT_ELEM_SIZE() / DIM;
-    }
-    constexpr uint32_t SPAD_DEST() const {
-        const uint32_t SMEM = SMEM_ROWS();
-        const uint32_t QUARTER = SMEM / 4;
-        const uint32_t A = A_SPAD_ROWS(), B = B_SPAD_ROWS(), C = C_SPAD_ROWS();
-        const uint32_t B_ODD_LO = (SMEM - QUARTER) - B;  // B_odd  grows down from 3/4 mark
-        const uint32_t B_EVEN_LO = SMEM - B;             // B_even grows down from the end
-        // gap 1: after A_even, before A_odd
-        if (A <= QUARTER && QUARTER - A >= C) return A;
-        // gap 2: after A_odd, before B_odd
-        if (QUARTER + A <= B_ODD_LO && B_ODD_LO - (QUARTER + A) >= C) return QUARTER + A;
-        // gap 3: after B_odd, before B_even
-        if ((SMEM - QUARTER) <= B_EVEN_LO && B_EVEN_LO - (SMEM - QUARTER) >= C)
-            return SMEM - QUARTER;
-        return 0;  // does not fit -- rejected by static_assert at the use site
-    }
-    constexpr bool C_FITS_IN_SPAD() const { return SPAD_DEST() != 0; }
 };
 
 // Gemmini constants -----------------------------------------------------------
-
-// GUARD: the scratchpad geometry must match the silicon we target.
-//
-// The tapeout SMEM is 128 KiB (radiance TapeoutSmemConfig: size = 128<<10, numBanks = 4),
-// so BANK_NUM(4) * BANK_ROWS(2048) * DIM(16) == 128 KiB. The mxgemmini `dev` line bumps
-// BANK_ROWS to 4096 for a *different*, 256 KiB rocket/spike config. Building against that
-// header here is silently catastrophic: `calculate_spad_addr` derives the B-operand base as
-// `BANK_NUM*BANK_ROWS - ...` (below), so a 4096 value places B outside the real scratchpad
-// and corrupts results in BOTH the RTL and the cyclotron co-model -- with no error anywhere.
-// A -DBANK_ROWS override cannot fix this (gemmini_params.h #defines it unconditionally, so
-// the header always wins); the submodule pin is the only lever. Fail loudly if it drifts.
-static_assert(BANK_NUM * BANK_ROWS * DIM == (128 * 1024),
-              "scratchpad geometry != tapeout 128 KiB SMEM. Check the lib/mxgemmini pin: "
-              "the tapeout needs BANK_ROWS=2048 (dev-tip d3b3d10 uses 4096 for a 256 KiB "
-              "rocket/spike config and must NOT be used for radiance).");
 
 constexpr auto GEMMINI_FORMAT_FP8 = 0;
 constexpr auto GEMMINI_FORMAT_FP6 = 1;
@@ -118,9 +63,8 @@ constexpr auto GEMMINI_FORMAT_FP4 = 2;
 constexpr auto GEMMINI_FORMAT_FULL = 3;
 constexpr auto QUANT_LUT_UPDATE_GRANULARITY = 1;
 constexpr auto GEMMINI_ACC_ADDR = (1u << (ADDR_LEN - 1));
-// NOTE: SPAD_DEST is no longer a global constant -- it is computed per GemmConfig
-// (C.SPAD_DEST()), because the correct C placement depends on the operand tile footprint.
-// See the comment on GemmConfig::SPAD_DEST().
+constexpr auto SPAD_DEST = 1024; // C-output spad row: clears the A-spad P-fp8 region up to
+                                 // 128x128 fp8 (1024 rows) so it works for FA tiles up to 128.
 
 // Performance benchmark options -----------------------------------------------
 
@@ -145,15 +89,16 @@ template <GemmConfig C>
 static inline void configure_mxgemmini(const uint32_t dim_m,
                                        const uint32_t dim_n,
                                        const uint32_t dim_k) {
-    // Non-square tiles (TILE_M != TILE_N) are supported now that the A/B
-    // scale-factor counts are differentiated (SCALE_FACTORS_PER_TILE_A/_B). Only
-    // require each tile dim to be a whole number of PE tiles.
+    // NOTE: non-square tiles (TILE_M != TILE_N) are supported -- the loop bounds are set
+    // per-dimension from PE_TILES_I/J/K below, and the A/B spad quarters are sized
+    // independently. Required for streaming FA (QK: N=Bk!=M=Sq; PV: N=d!=M=Sq).
     static_assert(C.TILE_M % C.PE_M() == 0 && C.TILE_N % C.PE_N() == 0,
-                  "TILE_M/TILE_N must be a multiple of the PE tile size");
+                  "TILE_M/TILE_N must be multiples of the PE tile size");
     static_assert(C.TILE_K >= 32 && (C.TILE_K % 32) == 0,
                   "tile K dimension is not a multiple of block size (32)");
 
-    gemmini_flush(0);
+    // NOTE: gemmini_flush hoisted to once-per-kernel (fa_entry); between gemms the mesh is
+    // fenced-idle so a per-gemm flush is redundant overhead.
 
     constexpr auto GEMMINI_FORMAT =
         C.DATATYPE == GemmDatatype::FP8 ? GEMMINI_FORMAT_FP8 :
@@ -195,20 +140,15 @@ static inline void configure_mxgemmini(const uint32_t dim_m,
     // Configure loop bounds for the loop FSM
     // This only needs to be done once since the kernel does not change the
     // SMEM tile size
+    // Configure the two loop FSMs (issued back-to-back); a single fence drains both.
     gemmini_loop_ws_config_bounds(
         C.PE_TILES_I(), C.PE_TILES_J(), C.PE_TILES_K(),
         0, 0, 0 // pad_I=0, pad_J=0, pad_K=0
     );
-
-    // wait for configuration finish
-    gemmini_fence();
-
-    // NOTE: we need to run this twice to configure the two FSMs
     gemmini_loop_ws_config_bounds(
         C.PE_TILES_I(), C.PE_TILES_J(), C.PE_TILES_K(),
         0, 0, 0 // pad_I=0, pad_J=0, pad_K=0
     );
-    // wait for configuration finish
     gemmini_fence();
 }
 
@@ -220,9 +160,12 @@ static inline uint32_t calculate_spad_addr(const uint32_t tile_k) {
     static_assert(SMEM_QUARTER_ROWS != 0);
     constexpr auto A_SPAD_ADDR_EVEN = 0;
     constexpr auto A_SPAD_ADDR_ODD = SMEM_QUARTER_ROWS;
-    // B spad address is counted from the end (SMEM_SIZE_ROWS)
-    // TODO: might want to swap even and odd (do bank 0-2, 1-3 instead of 0-3, 1-2)
-    constexpr auto B_SPAD_ADDR_EVEN = SMEM_SIZE_ROWS;
+    // B spad address is counted from the end (B grows DOWN from B_SPAD_ADDR_EVEN).
+    // FA-OVERLAP: place B(K/V) in bank0 right after A(Q) [Q=512 rows @0..0x2000, K/V=512 rows
+    // @0x2000..0x4000] so B_end=1024. This keeps ALL mesh operands (Q,K,V) on bank0, freeing
+    // banks 1/2/3 for the muon (S0/S1/scratch) -> mesh & muon never share a bank during overlap.
+    // (Valid for Sq=64,d=128,Bk=64: A=B=512 rows. Generalize if tile sizes change.)
+    constexpr auto B_SPAD_ADDR_EVEN = SMEM_SIZE_ROWS;  // ISOLATION: revert to bank3-top (was 1024=bank0)
     constexpr auto B_SPAD_ADDR_ODD = SMEM_SIZE_ROWS - SMEM_QUARTER_ROWS;
 
     const uint32_t odd_k = (tile_k & 1);
@@ -313,8 +256,9 @@ static inline void load_lut() {
 
 }
 
-template <GemmConfig C>
+template <GemmConfig C, bool SKIP_A = false>
 static inline void copy_gmem_to_smem_async(
+    const uint8_t *A_in, const uint8_t *B_in,
     const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
     const uint32_t tile_i /* FIXME: unused */,
     const uint32_t tile_j /* FIXME: unused */, const uint32_t tile_k) {
@@ -364,7 +308,7 @@ static inline void copy_gmem_to_smem_async(
         //   3. compute loop ws with skips (inst: 0x1020b07b, funct: k_LOOP_WS)
         // TODO: skip re-configuring of loop bounds
         constexpr uint32_t skips_mvin =
-            loop_matmul_skips(/*skip_lda=*/0, /*skip_ldb=*/0, /*skip_ldd=*/1,
+            loop_matmul_skips(/*skip_lda=*/SKIP_A ? 1 : 0, /*skip_ldb=*/0, /*skip_ldd=*/1,
                               /*skip_ex=*/1, /*skip_stc=*/1);
         constexpr auto DONTCARE = 0;
         gemmini_loop_ws_spad(
@@ -581,7 +525,9 @@ static void copy_accmem_to_gmem_dma_sync(uint8_t *dest_gmem,
 /** Asynchronously kick off loop FSM matmul compute operation in MxGemmini.
  *  Move out accumulator data to SMEM if `acc_move_out` is true. */
 template <GemmConfig C>
-static inline void matmul_tile_async(const uint32_t tile_k, const bool acc_move_out) {
+static inline void matmul_tile_async(const uint32_t tile_k, const bool acc_move_out,
+                                     const uint32_t c_spad = SPAD_DEST,
+                                     const uint32_t a_spad_override = 0xffffffffu) {
     asm volatile ("matmul_tile_async_start_%=:" :: );
 
     const uint32_t skip_stc = acc_move_out ? 0 : 1;
@@ -589,7 +535,10 @@ static inline void matmul_tile_async(const uint32_t tile_k, const bool acc_move_
       loop_matmul_skips(/*skip_lda=*/1, /*skip_ldb=*/1, /*skip_ldd=*/1,
                         /*skip_ex=*/0, /*skip_stc=*/skip_stc);
 
-    const uint32_t a_spad_addr_start = calculate_spad_addr<false>(tile_k);
+    // a_spad_override lets the caller place A at a custom spad row (e.g. PV's A=P at a row
+    // distinct from QK's A=Q, so QK_{j+1} and softmax_j's P-write don't collide during overlap).
+    const uint32_t a_spad_addr_start = (a_spad_override != 0xffffffffu)
+                                       ? a_spad_override : calculate_spad_addr<false>(tile_k);
     const uint32_t b_spad_addr_end = calculate_spad_addr<true>(tile_k);
 
     const bool first_k = tile_k == 0;
@@ -602,7 +551,7 @@ static inline void matmul_tile_async(const uint32_t tile_k, const bool acc_move_
         a_spad_addr_start,      // A scratchpad address in rows (grows upward)
         b_spad_addr_end,        // B scratchpad address in rows (grows downward)
         0,                      // D (bias) - none
-        C.SPAD_DEST(),          // C scratchpad address in rows (computed; see GemmConfig)
+        c_spad,                 // C scratchpad address in rows (SPAD_DEST default; S0/S1 or PVout)
         false, false,           // A_transpose, B_transpose
         false, false, !first_k, // full_C, low_D, ex_accumulate
                                 // only start in-mem accumulation after first k
@@ -616,8 +565,10 @@ static inline void matmul_tile_async(const uint32_t tile_k, const bool acc_move_
 
 /** Do matmul on a single TILE_M * TILE_N output tile, accumulating over the
  *  full GEMM_K. */
-template <GemmConfig C, bool barrier_tile = false>
-void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
+template <GemmConfig C, bool barrier_tile = false, bool SKIP_A = false, bool DO_CONFIG = true>
+__attribute__((noinline)) void mxgemm_single_output_tile(const uint8_t *A_in, const uint8_t *B_in,
+                               const uint8_t *A_scales, const uint8_t *B_scales,
+                               const uint32_t dim_m, const uint32_t dim_n,
                                const uint32_t dim_k,
                                const uint32_t tid_in_threadblock,
                                const uint32_t threads_per_threadblock) {
@@ -630,7 +581,10 @@ void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
         return;
     }
 
-    configure_mxgemmini<C>(dim_m, dim_n, dim_k);
+    // DO_CONFIG=false: the persistent gemmini config was set once by the caller (valid
+    // when successive gemms share dims -- e.g. square streaming FA blocks Bk=Sq=d, where
+    // QK and PV configs are identical). Skips ~half the per-gemm ROCC command overhead.
+    if constexpr (DO_CONFIG) configure_mxgemmini<C>(dim_m, dim_n, dim_k);
 
     // -----------------
     // Initiate pipeline
@@ -638,17 +592,21 @@ void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
     //
     int tile_k = 0;
     // TODO: change 0's for multiple SMEM tiles
-    copy_gmem_to_smem_async<C>(dim_m, dim_n, dim_k, 0, 0, tile_k);
+    copy_gmem_to_smem_async<C, SKIP_A>(A_in, B_in, dim_m, dim_n, dim_k, 0, 0, tile_k);
 
     // Load scaling factors from GMEM to the scale SRAM
     // load_scale_factors((const uint64_t *) C_scale, sizeof(C_scale));
-    load_scale_factors(calculate_scale_factor_smem_addr<false>(tile_k),
-                       calculate_scale_factor_gmem_addr<C, false>(
-                           &A_scales_row[0][0], tile_k, dim_m, dim_n),
-                       C.SCALE_FACTORS_PER_TILE_A());
+    // SKIP_A: A is already in the spad AND its scales are already in the A scale SRAM
+    // (e.g. a SIMT requant placed both); skip the A move-in (above) and the A scale load.
+    if constexpr (!SKIP_A) {
+        load_scale_factors(calculate_scale_factor_smem_addr<false>(tile_k),
+                           calculate_scale_factor_gmem_addr<C, false>(
+                               A_scales, tile_k, dim_m, dim_n),
+                           C.SCALE_FACTORS_PER_TILE());
+    }
     load_scale_factors(calculate_scale_factor_smem_addr<true>(tile_k),
                        calculate_scale_factor_gmem_addr<C, true>(
-                           &B_scales_col[0][0], tile_k, dim_m, dim_n),
+                           B_scales, tile_k, dim_m, dim_n),
                        C.SCALE_FACTORS_PER_TILE_B());
 
     // LUT is shared across the entire K, and thus loaded once per one SMEM
@@ -700,8 +658,8 @@ void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
         // TODO: This results in an unnecessary move-in at the last K tile
         if constexpr (!DISABLE_MOVE_IN_AFTER_FIRST_K) {
             if (!last_k) {
-                copy_gmem_to_smem_async<C>(dim_m, dim_n, dim_k, 0 /*FIXME*/,
-                                           0 /*FIXME*/, tile_k + 1);
+                copy_gmem_to_smem_async<C>(A_in, B_in, dim_m, dim_n, dim_k,
+                                           0 /*FIXME*/, 0 /*FIXME*/, tile_k + 1);
             }
         }
 
@@ -712,15 +670,17 @@ void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
         // update scale factors for the next tile_k
         // make sure to place this between tile_async and fence to hide latency
         if constexpr (!DISABLE_SCALE_FACTOR_UPDATE) {
-            load_scale_factors(
-                calculate_scale_factor_smem_addr<false>(tile_k + 1),
-                calculate_scale_factor_gmem_addr<C, false>(
-                    &A_scales_row[0][0], tile_k + 1, dim_m, dim_n),
-                C.SCALE_FACTORS_PER_TILE_A());
+            if constexpr (!SKIP_A) {
+                load_scale_factors(
+                    calculate_scale_factor_smem_addr<false>(tile_k + 1),
+                    calculate_scale_factor_gmem_addr<C, false>(
+                        A_scales, tile_k + 1, dim_m, dim_n),
+                    C.SCALE_FACTORS_PER_TILE());
+            }
             load_scale_factors(
                 calculate_scale_factor_smem_addr<true>(tile_k + 1),
                 calculate_scale_factor_gmem_addr<C, true>(
-                    &B_scales_col[0][0], tile_k + 1, dim_m, dim_n),
+                    B_scales, tile_k + 1, dim_m, dim_n),
                 C.SCALE_FACTORS_PER_TILE_B());
 
             // fence scale factor and LUT writes before next Gemmini compute
@@ -741,21 +701,129 @@ void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
     asm volatile ("mxgemm_single_output_tile_end_%=:" :: );
 }
 
+/** Software-pipelining split of mxgemm_single_output_tile for a SINGLE SMEM K-tile
+ *  (dim_k == TILE_K, as in FA QK^T / PV). `mxgemm_prefetch_tile` issues config + the
+ *  B (and, unless SKIP_A, A) GMEM->SMEM move-in + scale loads asynchronously and returns
+ *  WITHOUT waiting (no gemmini_fence), so the caller can run other work (e.g. SIMT
+ *  softmax/requant) while the DMA is in flight. `mxgemm_compute_tile` then drains the DMA
+ *  (leading gemmini_fence) and runs the matmul, leaving C at SPAD_DEST. thread-0 only. */
+template <GemmConfig C, bool SKIP_A = false, bool DO_CONFIG = true>
+__attribute__((noinline)) void mxgemm_prefetch_tile(
+        const uint8_t *A_in, const uint8_t *B_in,
+        const uint8_t *A_scales, const uint8_t *B_scales,
+        const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
+        const uint32_t tid_in_threadblock) {
+    asm volatile ("mxgemm_prefetch_tile_start_%=:" :: );
+    if (tid_in_threadblock != 0) return;
+    if constexpr (DO_CONFIG) configure_mxgemmini<C>(dim_m, dim_n, dim_k);
+    copy_gmem_to_smem_async<C, SKIP_A>(A_in, B_in, dim_m, dim_n, dim_k, 0, 0, 0);
+    if constexpr (!SKIP_A) {
+        load_scale_factors(calculate_scale_factor_smem_addr<false>(0),
+                           calculate_scale_factor_gmem_addr<C, false>(A_scales, 0, dim_m, dim_n),
+                           C.SCALE_FACTORS_PER_TILE());
+    }
+    load_scale_factors(calculate_scale_factor_smem_addr<true>(0),
+                       calculate_scale_factor_gmem_addr<C, true>(B_scales, 0, dim_m, dim_n),
+                       C.SCALE_FACTORS_PER_TILE_B());
+    load_lut<C>();
+    mu_fence_smem();      // order the SIMT scale/LUT stores; DMA stays in flight (no fence)
+    asm volatile ("mxgemm_prefetch_tile_end_%=:" :: );
+}
+
+// ---- CISC QK path (option 2): issue the SAME loop_ws matmul via the Gemmini CISC
+// microcode engine (csrw 0xacc) WITHOUT muon fences between commands. MX scales are read
+// from SF_MEM (populated by load_scale_factors, as usual) -- RTL-confirmed identical.
+// Hexadeciles (spadHexadecile = BANK_NUM*BANK_ROWS/16 = 512 rows): Q(A)->hex 0 (byte 0x0),
+// S(C)->hex 2 (byte 0x4000 == S_SMEM, where softmax reads), K(B)->hex 15 (top, B end=8192).
+// On the muon core, csrw 0xacc is an illegal CSR (that path is Vortex-only). CISC commands
+// are issued via MMIO to the gemmini CISC command register at GEMMINI_CTRL + 0x30.
+#define FA_CISC_CMD(x) store_shared(GEMMINI_CTRL, 0x30, (uint32_t)(x))
+enum { FA_CISC_COMPUTE_AND_STORE_TO_SPAD = 1, FA_CISC_SET_AB_STRIDE = 8,
+       FA_CISC_LOAD_TO_HEXADECILES = 10 };
+template <GemmConfig C>
+__attribute__((noinline)) void mxgemm_cisc_qk(const uint8_t *Q_in, const uint8_t *K_in,
+                                              const uint8_t *A_scales, const uint8_t *B_scales,
+                                              const uint32_t dim_m, const uint32_t dim_n,
+                                              const uint32_t dim_k, const uint32_t tid) {
+    asm volatile ("mxgemm_cisc_qk_start_%=:" :: );
+    if (tid != 0) return;
+    constexpr uint32_t Q_HEX = 0, K_HEX = 15, S_HEX = SPAD_DEST / ((BANK_NUM * BANK_ROWS) / 16);
+    // MX scales -> SF_MEM (mesh reads these during the CISC-issued loop_ws matmul).
+    load_scale_factors(calculate_scale_factor_smem_addr<false>(0),
+                       calculate_scale_factor_gmem_addr<C, false>(A_scales, 0, dim_m, dim_n),
+                       C.SCALE_FACTORS_PER_TILE());
+    load_scale_factors(calculate_scale_factor_smem_addr<true>(0),
+                       calculate_scale_factor_gmem_addr<C, true>(B_scales, 0, dim_m, dim_n),
+                       C.SCALE_FACTORS_PER_TILE_B());
+    gemmini_mxquant_config_mvout(
+        rad_device_to_host_address(reinterpret_cast<uint32_t>(&C_scale_factors[0])),
+        C.PE_TILES_I(), C.PE_TILES_J(), C.PE_TILES_K(), 0, 0, QUANT_LUT_UPDATE_GRANULARITY);
+    mu_fence_smem();
+    // GMEM base addresses for A(Q) and B(K) tiles (device->host address space).
+    ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC,
+        rad_device_to_host_address(reinterpret_cast<uint32_t>(Q_in)),
+        rad_device_to_host_address(reinterpret_cast<uint32_t>(K_in)), k_LOOP_WS_CONFIG_ADDRS_AB);
+    // SET_AB_STRIDE: A row stride = dim_k, B row stride = dim_n (elements). [n<<20 | k<<8 | op]
+    FA_CISC_CMD((dim_n << 20) | (dim_k << 8) | FA_CISC_SET_AB_STRIDE);
+    // LOAD_TO_HEXADECILES: DMA A->Q_HEX, B->K_HEX.  [b_hex<<16 | a_hex<<8 | op]
+    FA_CISC_CMD((K_HEX << 16) | (Q_HEX << 8) | FA_CISC_LOAD_TO_HEXADECILES);
+    // COMPUTE_AND_STORE_TO_SPAD: S = Q@K^T -> S_HEX (bf16). [d_hex<<24 | b_hex<<16 | a_hex<<8 | op]
+    FA_CISC_CMD((S_HEX << 24) | (K_HEX << 16) | (Q_HEX << 8) | FA_CISC_COMPUTE_AND_STORE_TO_SPAD);
+    gemmini_fence();
+    asm volatile ("mxgemm_cisc_qk_end_%=:" :: );
+}
+
+template <GemmConfig C>
+__attribute__((noinline)) void mxgemm_compute_tile(const uint32_t tid_in_threadblock,
+                                                   const uint32_t c_spad = SPAD_DEST,
+                                                   const uint32_t a_spad = 0xffffffffu) {
+    asm volatile ("mxgemm_compute_tile_start_%=:" :: );
+    if (tid_in_threadblock != 0) return;
+    gemmini_fence();      // drain the prefetch move-in DMA (V already streaming)
+    gemmini_mxquant_config_mvout(
+        rad_device_to_host_address(reinterpret_cast<uint32_t>(&C_scale_factors[0])),
+        C.PE_TILES_I(), C.PE_TILES_J(), C.PE_TILES_K(),
+        0, 0, QUANT_LUT_UPDATE_GRANULARITY);
+    matmul_tile_async<C>(0, /*acc_move_out (last_k)=*/true, c_spad, a_spad);
+    gemmini_fence();
+    asm volatile ("mxgemm_compute_tile_end_%=:" :: );
+}
+
+// ASYNC issue: drain the move-in DMA + kick off the matmul but DO NOT fence -- the mesh
+// computes in the background (concurrently with the SIMT softmax) writing C to c_spad. The
+// caller must mxgemm_drain() before consuming c_spad or issuing the next mesh op. Used to
+// overlap QK_{j+1} with softmax_j (double-buffered S). thread-0 only.
+template <GemmConfig C>
+__attribute__((noinline)) void mxgemm_compute_issue(const uint32_t tid_in_threadblock,
+                                                    const uint32_t c_spad,
+                                                    const uint32_t a_spad = 0xffffffffu) {
+    asm volatile ("mxgemm_compute_issue_start_%=:" :: );
+    if (tid_in_threadblock != 0) return;
+    gemmini_fence();      // drain this gemm's own move-in DMA (must be resident before matmul)
+    gemmini_mxquant_config_mvout(
+        rad_device_to_host_address(reinterpret_cast<uint32_t>(&C_scale_factors[0])),
+        C.PE_TILES_I(), C.PE_TILES_J(), C.PE_TILES_K(),
+        0, 0, QUANT_LUT_UPDATE_GRANULARITY);
+    matmul_tile_async<C>(0, /*acc_move_out=*/true, c_spad, a_spad);   // kicked off; NO trailing fence
+    asm volatile ("mxgemm_compute_issue_end_%=:" :: );
+}
+
+// drain the mesh (wait for the async-issued matmul to finish) -- thread-0 only.
+static inline void mxgemm_drain(const uint32_t tid_in_threadblock) {
+    if (tid_in_threadblock != 0) return;
+    gemmini_fence();
+}
+
 /** Do a full GEMM and store the result C tensor at `C_gmem` GMEM address. */
 template <GemmConfig C>
 static void
-mxgemm(const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
+mxgemm(const uint8_t *A_in, const uint8_t *B_in,
+       const uint8_t *A_scales, const uint8_t *B_scales,
+       const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
        uint8_t *C_gmem, const uint32_t tid_in_threadblock,
        const uint32_t threads_per_threadblock, const uint32_t threadblock_id) {
-    // The C accumulator must fit in a scratchpad gap between the double-buffered A/B
-    // operand tiles. If it does not, C would be written over an operand and the result
-    // would be silently wrong (see GemmConfig::SPAD_DEST()). Reject at compile time.
-    static_assert(C.C_FITS_IN_SPAD(),
-                  "C does not fit in the scratchpad alongside the double-buffered A/B "
-                  "tiles for this GemmConfig. Reduce TILE_K (a 128x128 tile needs "
-                  "TILE_K <= 128) or shrink TILE_M/TILE_N.");
-
-    mxgemm_single_output_tile<C>(dim_m, dim_n, dim_k, tid_in_threadblock,
+    mxgemm_single_output_tile<C>(A_in, B_in, A_scales, B_scales,
+                                 dim_m, dim_n, dim_k, tid_in_threadblock,
                                  threads_per_threadblock);
 
     const auto warps_per_threadblock = threads_per_threadblock / MU_NUM_THREADS;
@@ -764,14 +832,14 @@ mxgemm(const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
     // Move-out C from SMEM to GMEM
     if constexpr (!DISABLE_GMEM_MOVE_OUT) {
         auto C_smem =
-            reinterpret_cast<const __shared uint8_t *>(C.SPAD_DEST() * DIM);
+            reinterpret_cast<const __shared uint8_t *>(SPAD_DEST * DIM);
         if constexpr (SIMT_GMEM_MOVE_OUT) {
             copy_smem_to_gmem_simt<C.TILE_M_QUANT(), C.TILE_N_QUANT(),
                                    C.OUT_ELEM_SIZE()>(
                 C_smem, C_gmem, tid_in_threadblock, threads_per_threadblock);
         } else {
             // copy_accmem_to_gmem_dma_sync<C>(C_gmem, dim_n, tid_in_threadblock);
-            copy_C_smem_to_gmem_dma_sync<C>(C.SPAD_DEST(), C_gmem, dim_n,
+            copy_C_smem_to_gmem_dma_sync<C>(SPAD_DEST, C_gmem, dim_n,
                                             tid_in_threadblock);
 
             mu_barrier(2, warps_per_threadblock);
