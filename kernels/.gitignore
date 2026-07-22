@@ -4,6 +4,15 @@
 **/*.o
 **/*.s
 
+# simulation / benchmark artifacts
+**/*.sqlite
+**/*.log
+**/*.runlog
+**/*.trace
+**/*.npy
+**/*.bak
+**/performance_logs/
+
 # clangd
 **/compile_commands.json
 **/.cache/

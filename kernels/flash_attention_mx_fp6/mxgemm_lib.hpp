@@ -28,13 +28,7 @@ struct GemmConfig {
     constexpr uint32_t PE_TILES_I() const { return TILE_M / PE_M(); }
     constexpr uint32_t PE_TILES_J() const { return TILE_N / PE_N(); }
     constexpr uint32_t PE_TILES_K() const { return TILE_K / PE_K(); }
-    // Scale-factor byte count per SMEM tile. A scales are one e8m0 byte per
-    // (K-group of 32, M); B scales per (K-group, N). These MUST differ when the
-    // tile is non-square (TILE_M != TILE_N, e.g. batched decode M=16/32, N=128),
-    // otherwise the B-scale move-in loads the wrong count and results are wrong.
-    constexpr uint32_t SCALE_FACTORS_PER_TILE_A() const { return TILE_M * TILE_K / 32; }
-    constexpr uint32_t SCALE_FACTORS_PER_TILE_B() const { return TILE_N * TILE_K / 32; }
-    // Back-compat alias (square tiles): equals A count == B count when TILE_M==TILE_N.
+    // TODO: TILE_N not differentiated
     constexpr uint32_t SCALE_FACTORS_PER_TILE() const { return TILE_M * TILE_K / 32; }
     constexpr uint32_t VALUES_PER_BYTE() const { return (IS_FP8() ? 1 : 2); }
     // Size of each C element *after column-packing*.
@@ -145,11 +139,8 @@ template <GemmConfig C>
 static inline void configure_mxgemmini(const uint32_t dim_m,
                                        const uint32_t dim_n,
                                        const uint32_t dim_k) {
-    // Non-square tiles (TILE_M != TILE_N) are supported now that the A/B
-    // scale-factor counts are differentiated (SCALE_FACTORS_PER_TILE_A/_B). Only
-    // require each tile dim to be a whole number of PE tiles.
-    static_assert(C.TILE_M % C.PE_M() == 0 && C.TILE_N % C.PE_N() == 0,
-                  "TILE_M/TILE_N must be a multiple of the PE tile size");
+    static_assert(C.TILE_M == C.TILE_N,
+                  "currently only supports square SMEM tile dimensions");
     static_assert(C.TILE_K >= 32 && (C.TILE_K % 32) == 0,
                   "tile K dimension is not a multiple of block size (32)");
 
@@ -645,11 +636,11 @@ void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
     load_scale_factors(calculate_scale_factor_smem_addr<false>(tile_k),
                        calculate_scale_factor_gmem_addr<C, false>(
                            &A_scales_row[0][0], tile_k, dim_m, dim_n),
-                       C.SCALE_FACTORS_PER_TILE_A());
+                       C.SCALE_FACTORS_PER_TILE());
     load_scale_factors(calculate_scale_factor_smem_addr<true>(tile_k),
                        calculate_scale_factor_gmem_addr<C, true>(
                            &B_scales_col[0][0], tile_k, dim_m, dim_n),
-                       C.SCALE_FACTORS_PER_TILE_B());
+                       C.SCALE_FACTORS_PER_TILE());
 
     // LUT is shared across the entire K, and thus loaded once per one SMEM
     // output tile
@@ -716,12 +707,12 @@ void mxgemm_single_output_tile(const uint32_t dim_m, const uint32_t dim_n,
                 calculate_scale_factor_smem_addr<false>(tile_k + 1),
                 calculate_scale_factor_gmem_addr<C, false>(
                     &A_scales_row[0][0], tile_k + 1, dim_m, dim_n),
-                C.SCALE_FACTORS_PER_TILE_A());
+                C.SCALE_FACTORS_PER_TILE());
             load_scale_factors(
                 calculate_scale_factor_smem_addr<true>(tile_k + 1),
                 calculate_scale_factor_gmem_addr<C, true>(
                     &B_scales_col[0][0], tile_k + 1, dim_m, dim_n),
-                C.SCALE_FACTORS_PER_TILE_B());
+                C.SCALE_FACTORS_PER_TILE());
 
             // fence scale factor and LUT writes before next Gemmini compute
             mu_fence_smem();
