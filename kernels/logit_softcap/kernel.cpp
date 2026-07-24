@@ -8,6 +8,7 @@
 #include <mu_intrinsics.h>
 #include <mu_schedule.h>
 #include <stdint.h>
+#include "kernel_verify.h"
 
 #ifndef NUM_WARPS
 #define NUM_WARPS 4
@@ -71,7 +72,7 @@ static void kernel_body(void *raw_arg, uint32_t tid_in_threadblock,
   KernelArgs *a = reinterpret_cast<KernelArgs *>(raw_arg);
   const float cap = a->cap;
   // Grid-stride over the flat tile; both cores redundantly cover the whole tile (idempotent
-  // elementwise op), matching the autocomp baseline idiom -- avoids a core-partition bug.
+  // elementwise op), matching the baseline idiom -- avoids a core-partition bug.
   for (uint32_t i = tid_in_threadblock; i < a->n; i += threads_per_threadblock)
     a->out[i] = softcap(a->in[i], cap);
 }
@@ -79,15 +80,6 @@ static void kernel_body(void *raw_arg, uint32_t tid_in_threadblock,
 
 static KernelArgs kernel_args;
 
-static inline float fabsf_(float x) { return x < 0.0f ? -x : x; }
-static inline bool close_enough(float c, float g) {
-  return fabsf_(c - g) <= TOLERANCE_REL * fabsf_(g) + TOLERANCE_ABS;
-}
-static inline uint32_t hart_id() {
-  uint32_t id;
-  asm volatile("csrr %0, mhartid" : "=r"(id)::"memory");
-  return id;
-}
 
 int main() {
   kernel_args = {x_raw, out_raw, VERIFY_COUNT, FINAL_SOFTCAP};
@@ -96,15 +88,6 @@ int main() {
   mu_barrier(0, MU_NUM_CORES);
 
   asm volatile("vx_tmc %0" ::"r"(1) : "memory");
-  if (hart_id() != 0) {
-    for (;;) {}
-  }
-
-  uint32_t errors = 0;
-  for (uint32_t i = 0; i < VERIFY_COUNT; i++) {
-    if (!close_enough(out_raw[i], gold_raw[i])) errors++;
-  }
-  uint32_t code = errors ? ((errors << 1) | 1u) : 0u;
-  asm volatile(".insn i 0x73, 0, x0, %0, 0" ::"r"(code) : "memory");
+  mu_verify_f32(out_raw, gold_raw, VERIFY_COUNT, TOLERANCE_REL, TOLERANCE_ABS);
   return 0;
 }

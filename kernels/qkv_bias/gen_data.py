@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate `data` for autocomp_qkv_bias_qwen -- Qwen2 QKV bias-add EPILOGUE.
+"""Generate `data` for Qwen2 QKV bias-add EPILOGUE.
 
 The one op DeepSeek-R1-Distill-Qwen-1.5B (Qwen2 arch) has that TinyLlama/Llama-2 do NOT:
 a learned bias added to the Q, K, V projection outputs (confirmed from the weight manifest:
@@ -28,7 +28,7 @@ import subprocess
 import numpy as np
 
 HERE = pathlib.Path(__file__).resolve().parent
-MX_GOLDEN = pathlib.Path("/scratch/agustin/projects/autocomp/scripts/muon/mx_golden/mx_golden")
+MX_GOLDEN = pathlib.Path(__file__).resolve().parents[2] / "lib" / "golden" / "mx_golden"
 GROUP = 32
 FP8_CODE = 0
 

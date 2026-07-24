@@ -6,6 +6,7 @@
 #include <mu_intrinsics.h>
 #include <mu_schedule.h>
 #include <stdint.h>
+#include "kernel_verify.h"
 #ifndef NUM_WARPS
 #define NUM_WARPS 4
 #endif
@@ -62,18 +63,11 @@ void kernel_body(void* raw, uint32_t tid, uint32_t tpb, uint32_t) {
 
 static KernelArgs kernel_args;
 __global float C_raw[VERIFY_COUNT] = {0};
-static inline float fabsf_(float x){ return x<0.0f?-x:x; }
-static inline bool close_enough(float c,float g){ return fabsf_(c-g) <= TOLERANCE_REL*fabsf_(g)+TOLERANCE_ABS; }
-static inline uint32_t hart_id(){uint32_t i;asm volatile("csrr %0, mhartid":"=r"(i)::"memory");return i;}
 int main() {
   kernel_args = {A_raw, B_raw, C_raw, M, N};
   mu_schedule(kernel_body, &kernel_args, KERNEL_OCCUPANCY);
   mu_barrier(0, MU_NUM_CORES);
   asm volatile("vx_tmc %0" ::"r"(1) : "memory");
-  if (hart_id() != 0) { for (;;) {} }
-  uint32_t errors = 0;
-  for (uint32_t i = 0; i < VERIFY_COUNT; i++) if (!close_enough(C_raw[i], gold_raw[i])) errors++;
-  uint32_t code = errors ? ((errors << 1) | 1u) : 0u;
-  asm volatile(".insn i 0x73, 0, x0, %0, 0" ::"r"(code) : "memory");
+  mu_verify_f32(C_raw, gold_raw, VERIFY_COUNT, TOLERANCE_REL, TOLERANCE_ABS);
   return 0;
 }
