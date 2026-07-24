@@ -28,7 +28,7 @@ import subprocess
 import numpy as np
 
 HERE = pathlib.Path(__file__).resolve().parent
-MX_GOLDEN = pathlib.Path("/scratch/agustin/projects/autocomp/scripts/muon/mx_golden/mx_golden")
+MX_GOLDEN = pathlib.Path(__file__).resolve().parents[2] / "lib" / "golden" / "mx_golden"
 GROUP = 32
 FP8_CODE = 0
 

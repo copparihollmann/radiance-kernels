@@ -20,16 +20,22 @@ Usage:
   ./gen_mxgemm_data.py fp8 64 64 128      # one shape
   ./gen_mxgemm_data.py --all-fp8          # every missing fp8 header
 """
+import hashlib
 import pathlib
 import subprocess
 import sys
 
 import numpy as np
 
+
+def _seed(fmt, M, N, K):
+    """Deterministic per-shape seed. (Python's built-in hash() is salted per process,
+    so it is not reproducible across runs; this is.)"""
+    h = hashlib.sha256(f"{fmt}_{M}_{N}_{K}".encode()).digest()
+    return int.from_bytes(h[:4], "little")
+
 HERE = pathlib.Path(__file__).resolve().parent
-MX_GOLDEN = pathlib.Path(
-    "/scratch/agustin/projects/autocomp/scripts/muon/mx_golden/mx_golden"
-)
+MX_GOLDEN = pathlib.Path(__file__).resolve().parents[2] / "lib" / "golden" / "mx_golden"
 GROUP = 32
 FMT_CODE = {"fp8": 0, "fp6": 1, "fp4": 2}
 
@@ -85,7 +91,7 @@ def pack_nibbles_along_axis1(x):
 def gen(fmt, M, N, K):
     assert fmt in ("fp8", "fp4"), "fp6 (LUT-indexed) not supported here yet"
     GK, GN = K // GROUP, N // GROUP
-    rng = np.random.default_rng(hash((fmt, M, N, K)) & 0xFFFFFFFF)
+    rng = np.random.default_rng(_seed(fmt, M, N, K))
 
     if fmt == "fp8":
         A = rand_fp8(rng, M * K).reshape(M, K)

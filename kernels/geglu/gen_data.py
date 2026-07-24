@@ -6,7 +6,14 @@
 # real HuggingFace model. The kernel evaluates the algebraically-identical
 # sigmoid rearrangement gelu(x) = x / (1 + exp(-2*C*(x + 0.044715 x^3))); the two
 # agree to ~1e-7, well within TOLERANCE_REL=1e-3 / TOLERANCE_ABS=2e-4.
+# gelu_pytorch_tanh reference and emit come from the shared golden module (lib/golden).
+import pathlib
+import sys
+
 import numpy as np
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "lib" / "golden"))
+import golden as G
 
 # Gemma-2-2B FFN: intermediate_size (FFN width) = 9216, hidden_size = 2304.
 # GeGLU activation is elementwise over the 9216-wide FFN intermediate.
@@ -21,27 +28,16 @@ rng = np.random.default_rng(0)
 A = (rng.standard_normal(total) * 2.0).astype(np.float32)   # gate pre-activation
 B = (rng.standard_normal(total) * 1.0).astype(np.float32)   # up_proj output
 
-# gelu_pytorch_tanh: 0.5*x*(1 + tanh(sqrt(2/pi)*(x + 0.044715*x^3)))
-C = np.float32(0.7978845608028654)  # sqrt(2/pi)
-Af = A.astype(np.float64)
-inner = 0.7978845608028654 * (Af + 0.044715 * Af**3)
-gelu = 0.5 * Af * (1.0 + np.tanh(inner))
-gold = (gelu * B.astype(np.float64)).astype(np.float32)
-
-def emit(name, arr):
-    lines = [f"__global float {name}[{total}] = {{"]
-    lines += [f"{v:.9e}f," for v in arr]
-    lines.append("};")
-    return "\n".join(lines)
+gold = (G.gelu_tanh(A) * B.astype(np.float64)).astype(np.float32)
 
 with open("data", "w") as f:
     f.write("// generated - GeGLU gelu(A)*B at Gemma-2-2B FFN dims (gelu_pytorch_tanh golden)\n")
     f.write(f"#define VERIFY_COUNT {total}\n")
     f.write(f"static const uint32_t M = {M};\n")
     f.write(f"static const uint32_t N = {N};\n")
-    f.write(emit("A_raw", A) + "\n")
-    f.write(emit("B_raw", B) + "\n")
-    f.write(emit("gold_raw", gold) + "\n")
+    G.emit_f32(f, "A_raw", A, dims=f"[{total}]", trailing_comma=True)
+    G.emit_f32(f, "B_raw", B, dims=f"[{total}]", trailing_comma=True)
+    G.emit_f32(f, "gold_raw", gold, dims=f"[{total}]", trailing_comma=True)
 
 print(f"wrote data: M={M} N={N} total={total}")
 print("A range", float(A.min()), float(A.max()))

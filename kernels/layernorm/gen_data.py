@@ -23,25 +23,22 @@ rsqrt / reassociation rounding, still catches a missing mean-sub or beta).
 The device kernel computes the stats in ONE pass (Sx = sum x, Sxx = sum x^2 ->
 mean = Sx/D, var = Sxx/D - mean^2), which is the same value as the two-pass form
 up to fp32 reassociation (values are O(1), mild cancellation, well within tol).
+
+Emit helpers come from the shared golden module (lib/golden).
 """
 import pathlib
+import sys
 
 import numpy as np
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "lib" / "golden"))
+import golden as G
 
 HERE = pathlib.Path(__file__).resolve().parent
 
 D = 768           # SigLIP vision hidden size
 M = 32            # token tile (of 1024 patch tokens)
 EPS = 1.0e-6       # SiglipVisionConfig layer_norm_eps
-
-
-def emit_f32(f, name, dims, arr):
-    flat = arr.astype(np.float32).reshape(-1)
-    rows = ["    " + ", ".join(f"{v:.9e}f" for v in flat[i:i + 8])
-            for i in range(0, flat.size, 8)]
-    f.write(f"__global float {name}{dims} = {{\n")
-    f.write(",\n".join(rows))
-    f.write("\n};\n")
 
 
 def main():
@@ -63,11 +60,11 @@ def main():
         f.write(f"#define LN_M {M}\n#define LN_D {D}\n")
         f.write(f"#define VERIFY_COUNT {M * D}\n")
         f.write(f"static const float LN_EPS = {EPS:.9e}f;\n")
-        emit_f32(f, "x_raw", "[LN_M * LN_D]", x)
-        emit_f32(f, "gamma_raw", "[LN_D]", gamma)
-        emit_f32(f, "beta_raw", "[LN_D]", beta)
-        emit_f32(f, "out_raw", "[LN_M * LN_D]", np.zeros(M * D, dtype=np.float32))
-        emit_f32(f, "gold_raw", "[LN_M * LN_D]", out)
+        G.emit_f32(f, "x_raw", x, dims="[LN_M * LN_D]", ncol=8)
+        G.emit_f32(f, "gamma_raw", gamma, dims="[LN_D]", ncol=8)
+        G.emit_f32(f, "beta_raw", beta, dims="[LN_D]", ncol=8)
+        G.emit_f32(f, "out_raw", np.zeros(M * D, dtype=np.float32), dims="[LN_M * LN_D]", ncol=8)
+        G.emit_f32(f, "gold_raw", out, dims="[LN_M * LN_D]", ncol=8)
 
     # sanity: a mean-sub-free (RMSNorm-style) result must differ substantially
     rms = (x / np.sqrt((x ** 2).mean(axis=1, keepdims=True) + EPS)) * gamma[None, :] + beta[None, :]
