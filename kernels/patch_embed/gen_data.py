@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate `data` for autocomp_patch_embed_vision -- SigLIP patch/conv embedding.
+"""Generate `data` for SigLIP patch/conv embedding.
 
 The SmolVLA vision tower (SmolVLM2-500M SigLIP) turns an image into patch tokens
 with a Conv2d(3 -> 768, kernel=16, stride=16) + bias, then adds a learned
@@ -21,10 +21,15 @@ image 3x64x64 -> 4x4 = 16 patches, K = 768 (the real 16x16x3 patch), OC = 64
 (a representative tile of the real 768 embedding channels). All fp32.
 
 Golden = numpy fp32 with identical arithmetic (a strided im2col + matmul).
+Emit helpers come from the shared golden module (lib/golden).
 """
 import pathlib
+import sys
 
 import numpy as np
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "lib" / "golden"))
+import golden as G
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -35,15 +40,6 @@ GRID = IMG // PATCH          # 4  -> GRID*GRID = 16 patches
 NP = GRID * GRID             # 16 patch tokens
 K = C * PATCH * PATCH        # 768  (the real per-patch flattened dim)
 OC = 64            # output-channel tile (of the real 768 embed dim)
-
-
-def emit_f32(f, name, dims, arr):
-    flat = arr.astype(np.float32).reshape(-1)
-    rows = ["    " + ", ".join(f"{v:.9e}f" for v in flat[i:i + 8])
-            for i in range(0, flat.size, 8)]
-    f.write(f"__global float {name}{dims} = {{\n")
-    f.write(",\n".join(rows))
-    f.write("\n};\n")
 
 
 def main():
@@ -69,12 +65,12 @@ def main():
         f.write(f"#define PE_C {C}\n#define PE_PATCH {PATCH}\n#define PE_IMG {IMG}\n")
         f.write(f"#define PE_GRID {GRID}\n#define PE_NP {NP}\n#define PE_K {K}\n#define PE_OC {OC}\n")
         f.write(f"#define VERIFY_COUNT {NP * OC}\n")
-        emit_f32(f, "image_raw", "[PE_C * PE_IMG * PE_IMG]", image)
-        emit_f32(f, "weight_raw", "[PE_OC * PE_K]", W)          # W[oc,(c,ky,kx)] flattened
-        emit_f32(f, "bias_raw", "[PE_OC]", bias)
-        emit_f32(f, "pos_raw", "[PE_NP * PE_OC]", pos)
-        emit_f32(f, "out_raw", "[PE_NP * PE_OC]", np.zeros(NP * OC, dtype=np.float32))
-        emit_f32(f, "gold_raw", "[PE_NP * PE_OC]", out)
+        G.emit_f32(f, "image_raw", image, dims="[PE_C * PE_IMG * PE_IMG]", ncol=8)
+        G.emit_f32(f, "weight_raw", W, dims="[PE_OC * PE_K]", ncol=8)          # W[oc,(c,ky,kx)] flattened
+        G.emit_f32(f, "bias_raw", bias, dims="[PE_OC]", ncol=8)
+        G.emit_f32(f, "pos_raw", pos, dims="[PE_NP * PE_OC]", ncol=8)
+        G.emit_f32(f, "out_raw", np.zeros(NP * OC, dtype=np.float32), dims="[PE_NP * PE_OC]", ncol=8)
+        G.emit_f32(f, "gold_raw", out, dims="[PE_NP * PE_OC]", ncol=8)
     print(f"wrote data patches={NP} K={K} OC={OC} img={C}x{IMG}x{IMG}")
 
 

@@ -16,3 +16,5 @@
 # clangd
 **/compile_commands.json
 **/.cache/
+# data-generator scratch
+**/_gen/
