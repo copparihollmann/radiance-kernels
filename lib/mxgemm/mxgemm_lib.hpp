@@ -814,6 +814,10 @@ mxgemm(const uint32_t dim_m, const uint32_t dim_n, const uint32_t dim_k,
     const auto warps_per_threadblock = threads_per_threadblock / MU_NUM_THREADS;
     mu_barrier(1, warps_per_threadblock);
 
+    // RTL visibility fence: make the mesh's Acc->SMEM result stores visible to the
+    // SIMT move-out loads on all warps (the two ports are not implicitly ordered).
+    mu_fence_smem();
+
     // Move-out C: Acc->GMEM directly when C never entered the scratchpad, else SMEM->GMEM.
     if constexpr (C.ACC_TO_GMEM) {
         if constexpr (!DISABLE_GMEM_MOVE_OUT) {
