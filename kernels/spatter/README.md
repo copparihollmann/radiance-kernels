@@ -113,8 +113,11 @@ and serializes conflicts. Its cycles describe that mapping, not the upstream
 CUDA `atomicExch` implementation. The default parallel path retains its
 exploratory status when destinations overlap.
 
-For the five standard GPU STREAM cases, pass
-`standard-suite/basic-tests/gpu-stream.json` and case indices 0 through 4.
+For the five standard GPU STREAM cases, pass the tracked
+`inputs/standard-suite/basic-tests/gpu-stream.json` and case indices 0 through
+4. The tracked `inputs/standard-suite/app-traces/lulesh.json` and
+`inputs/standard-suite/app-traces/amg_gpu.json` preserve the other small
+upstream decks used in this evaluation.
 For LANL `datafiles/xrage/asteroid/spatter.json`, pattern 5 is case 4 and
 pattern 9 is case 8. Original-size xRAGE5 has 8,368,968 gather addresses;
 xRAGE9 has 6,664,304 scatter addresses. The input JSON used for the evaluation

@@ -7,6 +7,8 @@ digest, and cycle count. `artifacts.csv` indexes every file in the run roots
 with its size and SHA-256. `raw-metadata.tar.gz` contains the indexed JSON,
 logs, and model counter summaries, along with both CSV inventories.
 `elf-snapshot.csv` indexes a second local path for every ELF.
+`dependency-snapshot.csv` indexes local copies of the input JSON decks and
+simulator binaries named by the run records.
 
 The current snapshot indexes 127 run records and 535 files across seven
 roots. It preserves 408 non-ELF files in the metadata archive. The 127 ELFs
@@ -19,6 +21,13 @@ matched when this snapshot was generated. The archive's contents were checked
 against all 408 recorded file hashes.
 The generator also checked 66 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
+The dependency snapshot covers 17 input/simulator path records (14 distinct
+contents). It includes the 517,377,170-byte xRAGE input deck and the four
+referenced simulator binaries. Hardlinks avoid copying data where permitted;
+the sandbox required a verified local copy of the xRAGE deck. These snapshots
+are ignored by Git. The three small upstream standard-suite decks used for
+GPU STREAM, LULESH, and AMG are also tracked directly in
+[`spatter/inputs`](../spatter/inputs/README.md).
 
 | Root ID | Location |
 | --- | --- |
@@ -40,11 +49,13 @@ complete:
 ```sh
 python3 kernels/evaluation/make_inventory.py --workspace /path/to/chipyard
 python3 kernels/evaluation/snapshot_elfs.py --workspace /path/to/chipyard
+python3 kernels/evaluation/snapshot_dependencies.py
 ```
 
 The archive is a compact raw-record snapshot, not a replacement for the
-1.5 GB of local ELF binaries or upstream input decks. The hardlink snapshot
-is local and is not committed to Git; its CSV index is committed. The run index records
+1.5 GB of local ELF binaries, input decks, or simulator binaries. The binary
+snapshots are local and are not committed to Git; their CSV indexes are
+committed. The run index records
 each ELF hash, input path and hash, source hash, simulator path and hash, and
 the checker and timing-config hashes where available. These let a later
 report distinguish current-branch measurements, older builds, complete
