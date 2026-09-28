@@ -58,6 +58,10 @@ overlapping Scatter, and a two-stage materialized Gather→Scatter chain. Their
 paired hashes, correctness checks, and GPU cycles are in the
 [STREAM smoke table](stream/evaluation/current-build-smoke-results.csv) and
 [Spatter smoke table](spatter/evaluation/current-build-smoke-results.csv).
+The [LULESH pattern smoke table](spatter/evaluation/app-trace-smoke-results.csv)
+adds paired RTL/model checks at 32 repetitions for Gather and ordered Scatter;
+both passed full digests. These scaled cycles are separate from the original
+LULESH counts above.
 An [earlier-build RTL table](spatter/evaluation/prior-build-results.csv) has
 original-size GPU STREAM cycles, but its embedded device segments differ from
 the current branch. A current-branch original-size Verilator run is still in
