@@ -55,8 +55,8 @@ full transfer and validates the dense output. Their payload definitions and
 throughputs therefore also differ.
 
 The five current-build GPU STREAM cases, original-size xRAGE5, ordered
-xRAGE9, and original-size LULESH Gather case 1 have passed complete-output
-Cyclotron timing checks. The default
+xRAGE9, and original-size LULESH Gather case 1 and ordered Scatter case 3
+have passed complete-output Cyclotron timing checks. The default
 parallel xRAGE9 mapping checks guards and a nonzero output, but its duplicate
 destinations make that result exploratory. Their cycles are in
 [current-build model results](current-build-model-results.csv). xRAGE5's full
@@ -74,6 +74,11 @@ LULESH Gather uses all 231,198 repetitions and 3,699,168 transfers from
 Its full output digest `c355a1efb460db72` passed in both functional and
 timing modes on identical ELF hashes. The timing model recorded 74,419,767
 cycles and 532,704,064 issued global-memory bytes.
+LULESH Scatter uses all 128,002 repetitions and 2,048,032 transfers. Its
+repeated destinations use the generated ordered schedule. Both models passed
+full output digest `b27b51a43dc716b5` on identical ELF hashes; the timing
+model recorded 74,611,507 cycles and 536,606,144 issued global-memory bytes.
+This is a deterministic mapping result, not atomic-Scatter throughput.
 [Ten paired current-build smoke results](current-build-smoke-results.csv)
 cover all Spatter operation families, an overlapping Scatter probe, the
 generated Gather→Scatter fusion both with and without dense-slot reuse, and
@@ -106,7 +111,7 @@ not measured HBM traffic. Regenerate them with:
 ```sh
 python3 tools/spatter-memory-summary.py runs/model/gpu-stream-{0,1,2,3,4} \
   runs/model/xrage5 runs/model/xrage9 runs/model/xrage9-ordered \
-  runs/model/lulesh-gather \
+  runs/model/lulesh-gather runs/model/lulesh-scatter-ordered \
   > evaluation/current-build-memory.csv
 ```
 

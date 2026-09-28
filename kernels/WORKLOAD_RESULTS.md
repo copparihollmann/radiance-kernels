@@ -28,15 +28,18 @@ GPU frequency is assumed.
 | xRAGE asteroid pattern 9, parallel Scatter | 6,664,304 | 99,547,352 | 106,628,864 | 389,316,672 |
 | xRAGE asteroid pattern 9, ordered Scatter | 6,664,304 | 96,235,005 | 106,628,864 | 581,683,520 |
 | LULESH app trace case 1, Gather | 3,699,168 | 74,419,767 | 59,186,688 | 532,704,064 |
+| LULESH app trace case 3, ordered Scatter | 2,048,032 | 74,611,507 | 32,768,512 | 536,606,144 |
 
 The xRAGE9 parallel Scatter row is exploratory: repeated destinations race,
 so its output check covers guards and a nonzero probe. Ordered Scatter
 executes every transfer without racing and passed the full serial-order digest
 `215de6e81154b9c5` over 6,664,304 transfers. Its cycle and memory counts
 describe the generated conflict schedule, not upstream CUDA atomic exchange.
-The LULESH Gather row uses the original `standard-suite/app-traces/lulesh.json`
-count of 231,198 and passed both functional and timing-model full-output
-digests on the same ELF. Its input JSON SHA-256 is
+The LULESH rows use the original `standard-suite/app-traces/lulesh.json`
+counts of 231,198 for Gather and 128,002 for Scatter. Both passed functional
+and timing-model full-output digests on identical per-case ELFs. The Scatter
+row serializes repeated destinations and is not an atomic Scatter measurement.
+The input JSON SHA-256 is
 `9073035ecf77e7fde65262f782286207e76cca24312b2e01688b038901d021ee`.
 
 See the exact [STREAM cycle](stream/evaluation/current-build-model-results.csv),
