@@ -4,6 +4,8 @@ The kernels, generators, simulation commands, and result records are in
 [`stream`](stream/README.md) and [`spatter`](spatter/README.md). All results
 below are from the local `spatter-workloads` branch of `radiance-kernels`.
 The branch has not been pushed.
+The [artifact inventory](evaluation/README.md) indexes run status, provenance,
+ELF and input hashes, raw logs, and simulator files for later reporting.
 
 ## Timing-model results at the stated input sizes
 
