@@ -1,0 +1,18 @@
+diff --git a/src/dpi/mod.rs b/src/dpi/mod.rs
+index b946764..19cbee0 100644
+--- a/src/dpi/mod.rs
++++ b/src/dpi/mod.rs
+@@ -20,3 +20,3 @@ use std::path::PathBuf;
+ use std::slice::from_raw_parts;
+-use std::sync::RwLock;
++use std::sync::{OnceLock, RwLock};
+ 
+@@ -799,2 +799,8 @@ pub unsafe extern "C" fn cyclotron_trace_rs(
+ 
++    // Full Spatter traces can contain millions of vector memory operations.
++    // Skip only SQLite recording when requested; the RTL and diff test still run.
++    static TRACE_DISABLED: OnceLock<bool> = OnceLock::new();
++    if *TRACE_DISABLED.get_or_init(|| std::env::var_os("RADIANCE_DISABLE_CYCLOTRON_TRACE").is_some()) {
++        return;
++    }
+     TRACE_CONN.with(|t| {

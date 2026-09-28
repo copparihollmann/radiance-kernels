@@ -1,0 +1,2 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+amg-gpu-scaled,Cyclotron timing model,passed,digest-checked,gather,256,1024,4194304,1175761,,,3.56731,1.783655,,
