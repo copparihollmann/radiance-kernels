@@ -12,6 +12,11 @@ for the deterministic cases below. It uses a generic DRAM timing node (200
 cycle base latency, 32 bytes/cycle service rate), not a calibrated HBM model.
 The reported cycle and memory-transaction counts are simulator results; no
 GPU frequency is assumed.
+Small paired checks show substantial workload-dependent differences between
+the model and RTL: 256-element STREAM Copy took 3,206 model versus 9,085 RTL
+GPU cycles, while 32-repetition LULESH ordered Scatter took 20,565 model
+versus 13,556 RTL GPU cycles. Use the full-size model counts as model results
+until corresponding RTL measurements or calibration are available.
 
 | Workload | Elements or transfers | Model cycles | Logical payload bytes | Model global-memory bytes issued |
 | --- | ---: | ---: | ---: | ---: |
