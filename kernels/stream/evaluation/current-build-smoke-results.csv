@@ -1,0 +1,9 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+copy-256,Verilator 5.022,passed,digest-checked,stream-copy,256,1,2048,9085,0.0:457;0.1:457,0.0:0.052;0.1:0.050,0.225427,,,
+copy-256,Cyclotron timing model,passed,digest-checked,stream-copy,256,1,2048,3206,,,0.638802,,,
+scale-256,Verilator 5.022,passed,digest-checked,stream-scale,256,1,2048,8434,0.0:465;0.1:465,0.0:0.055;0.1:0.056,0.242827,,,
+scale-256,Cyclotron timing model,passed,digest-checked,stream-scale,256,1,2048,3208,,,0.638404,,,
+add-256,Verilator 5.022,passed,digest-checked,stream-add,256,1,3072,8793,0.0:493;0.1:493,0.0:0.056;0.1:0.056,0.349369,,,
+add-256,Cyclotron timing model,passed,digest-checked,stream-add,256,1,3072,3673,,,0.836374,,,
+triad-256,Verilator 5.022,passed,digest-checked,stream-triad,256,1,3072,9045,0.0:497;0.1:497,0.0:0.056;0.1:0.055,0.339635,,,
+triad-256,Cyclotron timing model,passed,digest-checked,stream-triad,256,1,3072,3707,,,0.828702,,,

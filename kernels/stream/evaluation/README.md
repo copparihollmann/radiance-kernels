@@ -20,6 +20,8 @@ payload counts source reads and destination writes. Model memory bytes include
 cache-line and transaction effects. These results are for four independent
 ELFs; they are not a measurement of a sequential Copy→Scale→Add→Triad run.
 
-The small 256-element cases validate the same four kernel paths on the full
-SoC RTL simulator and on Cyclotron. Their paired cycle and correctness results
-will be recorded in `current-build-smoke-results.csv` after all four finish.
+The 256-element Copy, Scale, Add, and Triad cases all passed full-output checks
+on both the full SoC RTL simulator and Cyclotron using identical ELFs. Their
+RTL GPU cycles were 9,085, 8,434, 8,793, and 9,045 respectively. The paired
+ELF hashes, checks, and exact cycle values are in
+[smoke results](current-build-smoke-results.csv).

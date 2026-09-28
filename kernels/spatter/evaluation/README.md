@@ -62,10 +62,11 @@ xRAGE5's full
 8,368,968-address input produced the expected digest `2260887d7f6bc955` in
 100,529,234 modeled cycles. xRAGE9 used all 6,664,304 addresses and reported
 99,547,352 modeled cycles.
-[Nine paired current-build smoke results](current-build-smoke-results.csv)
+[Ten paired current-build smoke results](current-build-smoke-results.csv)
 cover all Spatter operation families, an overlapping Scatter probe, the
 generated Gather→Scatter fusion both with and without dense-slot reuse, and
-an ordered Scatter variant for duplicate destinations. Eight cases passed
+an ordered Scatter variant for duplicate destinations, plus a materialized
+Gather→Scatter chain with different stage counts. Nine cases passed
 complete output checks on both the full Verilator SoC and Cyclotron model
 using the same fused ELF. The default parallel overlapping case passed its
 guard and nonzero probe checks and is labeled exploratory. Ordered Scatter
@@ -79,7 +80,7 @@ model reports 4,839 cycles and 48,704 issued global-memory bytes for the
 materialized chain, versus 3,189 cycles and 24,448 bytes for the fused case.
 These are tiny correctness probes, not a scalable throughput comparison.
 Cases 2→1 also execute as a materialized chain even though their stage counts
-differ; that model run passes in 4,769 cycles.
+differ; that run passes in 4,769 model cycles and 13,716 full SoC RTL cycles.
 [Composition cycles](composition-model-results.csv) and
 [memory counters](composition-memory.csv) retain the exact measurements.
 
