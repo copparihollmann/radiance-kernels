@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize Cyclotron memory transactions for completed Spatter runs."""
+"""Summarize Cyclotron memory transactions for completed Radiance kernel runs."""
 
 from __future__ import annotations
 
@@ -48,7 +48,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("runs", nargs="+", type=Path)
     args = parser.parse_args()
-    writer = csv.DictWriter(sys.stdout, fieldnames=FIELDS)
+    writer = csv.DictWriter(sys.stdout, fieldnames=FIELDS,
+                            lineterminator="\n")
     writer.writeheader()
     for path in args.runs:
         writer.writerow(row_for(path))

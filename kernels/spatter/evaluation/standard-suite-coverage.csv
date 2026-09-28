@@ -1,4 +1,4 @@
-suite,case,kind,original_count,native,native_reason,fitting_prefix_count,source_elements,output_elements
+suite,case,kind,original_count,native,native_reason,fitting_prefix_count,prefix_source_elements,prefix_output_elements
 app-traces/amg.json,0,gather,1454647,True,,1024,2392,16
 app-traces/amg.json,1,gather,1454647,True,,1024,3653,16
 app-traces/amg_gpu.json,0,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,17752,256
@@ -35,21 +35,21 @@ app-traces/nekbone_gpu.json,1,gather,14705882,False,array exceeds the current GP
 app-traces/nekbone_gpu.json,2,gather,3086419,False,array exceeds the current GPU DRAM address window,1024,82006,256
 app-traces/pennant.json,0,gather,83333333,True,,1024,2107,16
 app-traces/pennant.json,1,gather,83333333,True,,1024,2107,16
-app-traces/pennant.json,2,gather,482,False,array exceeds the current GPU DRAM address window,454,234838855,16
+app-traces/pennant.json,2,gather,482,False,array exceeds the current GPU DRAM address window,453,234320447,16
 app-traces/pennant.json,3,gather,83333333,True,,1024,2537,16
 app-traces/pennant.json,4,gather,83333333,True,,1024,2537,16
 app-traces/pennant.json,5,gather,517598,False,array exceeds the current GPU DRAM address window,1024,493577,16
 app-traces/pennant.json,6,scatter,125000000,True,,1024,16,1084
-app-traces/pennant.json,7,gather,642,False,array exceeds the current GPU DRAM address window,605,234864196,16
-app-traces/pennant.json,8,gather,642,False,array exceeds the current GPU DRAM address window,605,234864196,16
+app-traces/pennant.json,7,gather,642,False,array exceeds the current GPU DRAM address window,604,234475348,16
+app-traces/pennant.json,8,gather,642,False,array exceeds the current GPU DRAM address window,604,234475348,16
 app-traces/pennant.json,9,gather,50000000,True,,1024,4153,16
 app-traces/pennant.json,10,gather,132,False,array exceeds the current GPU DRAM address window,125,233415620,16
-app-traces/pennant.json,11,gather,482,False,array exceeds the current GPU DRAM address window,454,234838855,16
+app-traces/pennant.json,11,gather,482,False,array exceeds the current GPU DRAM address window,453,234320447,16
 app-traces/pennant.json,12,gather,241,False,array exceeds the current GPU DRAM address window,227,234320447,16
 app-traces/pennant.json,13,gather,519750,False,array exceeds the current GPU DRAM address window,1024,491531,16
 app-traces/pennant.json,14,gather,1928,False,array exceeds the current GPU DRAM address window,1024,132588987,16
 app-traces/pennant.json,15,gather,50000000,True,,1024,4096,16
-app-traces/pennant.json,16,gather,642,False,array exceeds the current GPU DRAM address window,605,234866612,16
+app-traces/pennant.json,16,gather,642,False,array exceeds the current GPU DRAM address window,604,234477760,16
 app-traces/pennant_gpu.json,0,gather,7575757,False,array exceeds the current GPU DRAM address window,1024,32827,256
 app-traces/pennant_gpu.json,1,gather,7575757,False,array exceeds the current GPU DRAM address window,1024,32827,256
 app-traces/pennant_gpu.json,2,gather,30,False,array exceeds the current GPU DRAM address window,28,231728407,256

@@ -84,10 +84,12 @@ def row_for(path: Path, gpu_mhz: float | None) -> dict:
         f"{cluster}.{core}:{ipc:.3f}" for cluster, core, _, _, ipc in reports
     )
     row["payload_bytes_per_cycle"] = round(payload / gpu_cycles, 6)
-    row["spatter_one_sided_bytes_per_cycle"] = round(payload / (2 * gpu_cycles), 6)
+    if not result["kind"].startswith("stream-"):
+        row["spatter_one_sided_bytes_per_cycle"] = round(payload / (2 * gpu_cycles), 6)
     if gpu_mhz is not None:
         row["payload_gbps"] = round(payload * gpu_mhz / (1000 * gpu_cycles), 6)
-        row["spatter_one_sided_gbps"] = round(payload * gpu_mhz / (2000 * gpu_cycles), 6)
+        if not result["kind"].startswith("stream-"):
+            row["spatter_one_sided_gbps"] = round(payload * gpu_mhz / (2000 * gpu_cycles), 6)
     return row
 
 
@@ -99,7 +101,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.gpu_mhz is not None and args.gpu_mhz <= 0:
         parser.error("--gpu-mhz must be positive")
-    writer = csv.DictWriter(sys.stdout, fieldnames=FIELDS)
+    writer = csv.DictWriter(sys.stdout, fieldnames=FIELDS,
+                            lineterminator="\n")
     writer.writeheader()
     for path in args.runs:
         writer.writerow(row_for(path, args.gpu_mhz))

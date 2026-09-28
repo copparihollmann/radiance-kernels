@@ -7,6 +7,8 @@ Scatter, GatherScatter (`GS`), MultiGather, and MultiScatter. The source JSON
 may come from Spatter's standard suite or the [LANL xRAGE traces](https://github.com/lanl/spatter).
 No FPGA bitstream is required; the fused ELF runs on the Radiance SoC RTL
 simulator or Cyclotron model.
+Spatter's `gpu-stream.json` contains five Spatter address-transfer families;
+the four standalone STREAM operations live in [../stream](../stream/README.md).
 
 ## Address decomposition and composition
 

@@ -50,9 +50,9 @@ def main() -> None:
         parser.error("--max-count must be positive")
     mapper = load_mapper()
     files = sorted(args.suite.rglob("*.json")) if args.suite.is_dir() else [args.suite]
-    writer = csv.writer(sys.stdout)
+    writer = csv.writer(sys.stdout, lineterminator="\n")
     writer.writerow(("suite", "case", "kind", "original_count", "native", "native_reason",
-                     "fitting_prefix_count", "source_elements", "output_elements"))
+                     "fitting_prefix_count", "prefix_source_elements", "prefix_output_elements"))
     for file in files:
         cases = json.loads(file.read_text())
         for index, raw in enumerate(cases):
