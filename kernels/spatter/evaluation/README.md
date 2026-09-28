@@ -79,6 +79,10 @@ repeated destinations use the generated ordered schedule. Both models passed
 full output digest `b27b51a43dc716b5` on identical ELF hashes; the timing
 model recorded 74,611,507 cycles and 536,606,144 issued global-memory bytes.
 This is a deterministic mapping result, not atomic-Scatter throughput.
+[The LULESH app-trace smoke table](app-trace-smoke-results.csv) pairs a
+32-repetition Gather case with full SoC Verilator and Cyclotron on the same
+ELF. It checks the original pattern with a reduced count; its cycles are a
+mapping check, not the original-size result above.
 [Ten paired current-build smoke results](current-build-smoke-results.csv)
 cover all Spatter operation families, an overlapping Scatter probe, the
 generated Gather→Scatter fusion both with and without dense-slot reuse, and
