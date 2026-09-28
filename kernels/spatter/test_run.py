@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run import (destination, fnv, normalize, parse_pattern, payload, reference,
                  sample_digest, source_index, source_tag)
 from plan import execute_reference, fuse_gather_scatter, stitch_reference
+from run_chain import expected_output
 
 
 class SpatterMappingTest(unittest.TestCase):
@@ -94,6 +95,16 @@ class SpatterMappingTest(unittest.TestCase):
                                      "count": 3, "delta": 5, "wrap": 1})
         with self.assertRaisesRegex(ValueError, "matching wrap"):
             fuse_gather_scatter(mismatched_wrap, wrapped_scatter)
+
+    def test_materialized_chain_with_different_stage_counts(self):
+        gather = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
+                            "count": 3, "wrap": 2, "delta": 5})
+        scatter = normalize({"kernel": "Scatter", "pattern": [2, 0, 1],
+                             "count": 2, "wrap": 2, "delta": 5})
+        source = [payload(gather["payload_tag"], i)
+                  for i in range(gather["src_length"])]
+        self.assertEqual(list(expected_output(gather, scatter)),
+                         stitch_reference([gather, scatter], source))
 
     def test_pattern_generators(self):
         self.assertEqual(parse_pattern("UNIFORM:4:3:NR", 8), ([0, 3, 6, 9], 12))

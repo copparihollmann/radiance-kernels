@@ -1,0 +1,4 @@
+run,kind,gpu_cycles,logical_payload_bytes,model_gmem_bytes_issued,model_gmem_transactions,model_gmem_bytes_per_cycle,l0_accesses,l0_hits,gmem_queue_full_rejects
+composed-wrap,gs,3189,144,24448,130,7.666353,126,30,6201
+materialized-chain-equal,gather-scatter-chain,4839,288,48704,257,10.064889,249,80,6201
+materialized-chain,gather-scatter-chain,4769,240,48512,254,10.172363,246,82,6136

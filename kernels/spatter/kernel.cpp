@@ -20,6 +20,57 @@ extern __global uint32_t spatter_group_offsets[];
 extern __global uint32_t spatter_group_tasks[];
 }
 
+#if SPATTER_CHAIN
+static void gather_stage(void*, uint32_t tid, uint32_t threads_per_block,
+                         uint32_t block_id) {
+  const uint32_t global_tid = block_id * threads_per_block + tid;
+  const uint32_t global_threads = MU_NUM_CLUSTERS * threads_per_block;
+  constexpr uint32_t length = SPATTER_GATHER_LENGTH;
+  const uint32_t owners = length * SPATTER_GATHER_WRAP;
+  for (uint32_t owner = global_tid; owner < owners;) {
+    const uint32_t r = owner / length;
+    const uint32_t j = owner - r * length;
+    for (uint32_t i = r; i < SPATTER_GATHER_COUNT; i += SPATTER_GATHER_WRAP) {
+      const uint32_t src = spatter::affine_index(
+          spatter::pattern_index(spatter_pattern_gather, j),
+          SPATTER_GATHER_DELTA, i);
+      spatter::copy_value(spatter_dense, owner, spatter_sparse_gather, src);
+    }
+    if (owners - owner <= global_threads) break;
+    owner += global_threads;
+  }
+}
+
+static void scatter_stage(void*, uint32_t tid, uint32_t threads_per_block,
+                          uint32_t block_id) {
+  const uint32_t global_tid = block_id * threads_per_block + tid;
+  const uint32_t global_threads = MU_NUM_CLUSTERS * threads_per_block;
+  constexpr uint32_t length = SPATTER_SCATTER_LENGTH;
+  constexpr uint32_t tasks = length * SPATTER_SCATTER_COUNT;
+  for (uint32_t task = global_tid; task < tasks;) {
+    const uint32_t i = task / length;
+    const uint32_t j = task - i * length;
+    const uint32_t dst = spatter::affine_index(
+        spatter::pattern_index(spatter_pattern_scatter, j),
+        SPATTER_SCATTER_DELTA, i);
+    const uint32_t src = spatter::dense_index(
+        j, length, i, SPATTER_SCATTER_WRAP);
+    spatter::copy_value(spatter_sparse_scatter, dst, spatter_dense, src);
+    if (tasks - task <= global_threads) break;
+    task += global_threads;
+  }
+}
+
+int main() {
+  mu_schedule(gather_stage, nullptr, SPATTER_NUM_WARPS);
+  mu_fence();
+  mu_barrier(0, MU_NUM_CORES);
+  mu_schedule(scatter_stage, nullptr, SPATTER_NUM_WARPS);
+  mu_fence();
+  return 0;
+}
+
+#else
 #if SPATTER_KIND == 1 || SPATTER_KIND == 2 || SPATTER_KIND == 4
 static inline void scatter_task(uint32_t task, uint32_t owned_destination) {
   constexpr uint32_t length = SPATTER_PATTERN_LENGTH;
@@ -122,3 +173,4 @@ int main() {
   mu_fence();
   return 0;
 }
+#endif

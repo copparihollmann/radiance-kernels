@@ -309,6 +309,7 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
     lines = [
         "#pragma once",
         f"#define SPATTER_KIND {KINDS[case['kind']]}",
+        "#define SPATTER_CHAIN 0",
         f"#define SPATTER_PATTERN_LENGTH {case['length']}u",
         f"#define SPATTER_COUNT {case['count']}u",
         f"#define SPATTER_WRAP {case['wrap']}u",

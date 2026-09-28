@@ -1,8 +1,8 @@
 """Composable address maps for the five Spatter transfer families.
 
 This is the software contract for the Muon operations in spatter_ops.hpp.
-Each transfer is one 64-bit read and one 64-bit write. A future multi-kernel
-launcher can materialize the output of one transfer as the next one's input.
+Each transfer is one 64-bit read and one 64-bit write. run_chain.py
+materializes a Gather output before a following Scatter reads it.
 """
 
 from __future__ import annotations

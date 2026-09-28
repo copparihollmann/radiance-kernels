@@ -25,11 +25,19 @@ Spatter's last-iteration result when `wrap` reuses a slot. Other families
 schedule independent transfers over `(iteration, pattern entry)`. The software
 reference can compose stages with `stitch_reference(stages, source)`: each stage
 materializes its output before the next stage reads it. The unit check compares
-a Gather -> Scatter chain with its fused GS equivalent. The SoC runner currently
-launches one stage per ELF; on-device multi-stage orchestration is a subsequent
-integration step. Composition needs matching intermediate array lengths and a
-barrier between stages. Repeated Scatter destinations also need atomics or an
-explicit ordering rule for deterministic results.
+a Gather -> Scatter chain with its fused GS equivalent. `run_chain.py` builds
+one ELF with a materialized dense intermediate, two Muon schedules, and a
+barrier between stages. It accepts different stage counts when their
+intermediate lengths match and Scatter destinations do not overlap:
+
+```sh
+python3 run_chain.py composition-smoke.json 2 composition-smoke.json 1 \
+  --out runs/materialized-chain
+```
+
+General chains of arbitrary Spatter families remain to be mapped. Repeated
+Scatter destinations require the separate ordered collision policy or
+atomic operations for deterministic results.
 
 For a Gather followed by Scatter with matching count, pattern length, and
 `wrap`, `tools/spatter-compose.py` bypasses the dense intermediate and emits a
@@ -50,8 +58,8 @@ python3 run.py --suite runs/composed-suite.json --case 0 \
 `composition-smoke.json` cases 2 and 3 exercise `count=3, wrap=2`. The
 generated GS case records `gather-final-wrap` so its address map reflects the
 final writer of each intermediate slot. `stitch_reference` independently
-models the two-stage materialization in software. General device-side stage
-launching remains future work.
+models the two-stage materialization in software. The fused and materialized
+ELFs have separate cycle measurements.
 
 This implements Spatter's documented transfer equations and its serial
 backend's Gather writes. The upstream CUDA Gather and MultiGather kernels

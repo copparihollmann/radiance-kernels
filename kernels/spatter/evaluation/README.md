@@ -71,6 +71,18 @@ using the same fused ELF. The default parallel overlapping case passed its
 guard and nonzero probe checks and is labeled exploratory. Ordered Scatter
 serializes writes to each destination and reports its own cycles; it is not
 the upstream CUDA atomic-exchange mapping.
+
+`run_chain.py` materializes the intermediate dense array between Gather and
+Scatter inside one ELF. For `composition-smoke.json` cases 2→3, its final
+digest is `b676e2fe97e2a922`, identical to the fused GS case. The timing
+model reports 4,839 cycles and 48,704 issued global-memory bytes for the
+materialized chain, versus 3,189 cycles and 24,448 bytes for the fused case.
+These are tiny correctness probes, not a scalable throughput comparison.
+Cases 2→1 also execute as a materialized chain even though their stage counts
+differ; that model run passes in 4,769 cycles.
+[Composition cycles](composition-model-results.csv) and
+[memory counters](composition-memory.csv) retain the exact measurements.
+
 [Current-build memory counters](current-build-memory.csv) record the
 timing model's issued global-memory transactions and bytes, including effects
 from index reads, cache lines, and transaction granularity. For example, the
