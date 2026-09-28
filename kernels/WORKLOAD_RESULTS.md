@@ -64,6 +64,10 @@ the exact cycle and payload figures.
 The [standard-suite audit](spatter/evaluation/standard-suite-coverage.csv)
 finds 38 of 114 upstream configurations fit the current GPU address window
 at their original size; 75 exceed it, and one exceeds the RV32 task range.
+Native-size coverage by transfer family is Gather 23/78, Scatter 9/30,
+GatherScatter 2/2, MultiGather 2/2, and MultiScatter 2/2. All five family
+implementations are present, but original-size support is limited by the
+current GPU address window and task range.
 Count-reduced versions are mapping checks, not original benchmark results.
 Gather/MultiGather implement the documented full transfer, whereas upstream
 CUDA uses a conditional single-slot store; their throughput figures do not
