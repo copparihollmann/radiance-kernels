@@ -44,7 +44,7 @@ def inspect_run(build_root: Path, rtl_root: Path, model_root: Path,
             raise ValueError(f"{path}: source suite or case differs")
         if result["kernel_source_sha256"] != builds["kernel_source_sha256"]:
             raise ValueError(f"{path}: kernel source differs")
-        if result["address_plan"] != builds["address_plan"]:
+        if result.get("address_plan") != builds["address_plan"]:
             raise ValueError(f"{path}: address plan differs")
     elf_hash = digest(locations[0] / "kernel.soc.elf")
     for path, result in zip(locations[1:], (rtl, model)):

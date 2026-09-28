@@ -7,6 +7,8 @@ contains `kernels/spatter`, its simulator tools and this record. The RTL
 model uses Chipyard `d45f86f4cca379715ac0ceb3a9f2369927796794`, Radiance
 `b83419ea85e7fc0b6cbd81b3bb0a0cb3751a5445`, and Cyclotron
 `9b774a53a882df4a655c04b5aa662ae8a01d5f47`.
+VCS runtime currently queues for a license on this machine, so current-build
+RTL runs use the built Verilator 5.022 model. No FPGA bitstream is available.
 
 ## Scope and provenance
 
@@ -46,7 +48,8 @@ transaction amplification. xRAGE9's non-atomic result cannot be compared with
 the published atomic-scatter measurement.
 
 The five current-build GPU STREAM cases have passed complete-output Cyclotron
-checks. [Current-build memory counters](current-build-memory.csv) record the
+checks; their cycles are in [current-build model results](current-build-model-results.csv).
+[Current-build memory counters](current-build-memory.csv) record the
 timing model's issued global-memory transactions and bytes, including effects
 from index reads, cache lines, and transaction granularity. For example, the
 same 4,194,304 logical payload bytes produced 8,413,440 model global-memory
