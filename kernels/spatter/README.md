@@ -1,5 +1,8 @@
 # Spatter on Radiance
 
+The [workload result summary](../WORKLOAD_RESULTS.md) combines this kernel's
+cycles with the standalone STREAM measurements.
+
 This kernel lives in `radiance-kernels` and builds with `../common.mk`, the same
 Muon and RV64 host infrastructure used by the other kernels. It maps the five
 [Spatter](https://github.com/hpcgarage/spatter) transfer families: Gather,
@@ -80,8 +83,9 @@ For the older compiler, build the runtime first and set that environment
 variable while building the kernel. The Makefile adds Muon's bundled libc++
 headers.
 
-From `kernels/spatter`, plain `make` prepares a small Gather case. To prepare
-and build a particular JSON case:
+From a fresh `kernels/spatter` checkout, plain `make` prepares a small Gather
+case. Subsequent `make` calls reuse the last generated case. To prepare and
+build a particular JSON case:
 
 ```sh
 python3 run.py --suite smoke.json --case 0 --out runs/smoke-0 --build-only

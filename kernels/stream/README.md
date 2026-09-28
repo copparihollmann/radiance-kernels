@@ -1,5 +1,8 @@
 # STREAM on Radiance
 
+The [workload result summary](../WORKLOAD_RESULTS.md) combines these cycles
+with the Spatter measurements.
+
 The four independent STREAM operations use float32 arrays: Copy `C=A`, Scale
 `B=2*C`, Add `C=A+B`, and Triad `A=B+2*C`. They build through `../common.mk`
 and run on the same one-cluster Radiance SoC as `kernels/spatter`. The generated
@@ -11,7 +14,8 @@ contract.
 Build each case with `LLVM_MUON`, `RISCV_TOOLCHAIN_PATH`,
 `RISCV64_TOOLCHAIN_PATH`, `RISCV`, and `MU_STACK_WORD_STRIDE` set for the same
 toolchain as the runtime library. The installed older compiler requires
-`MU_STACK_WORD_STRIDE=1`. Plain `make` creates a 256-element Copy smoke input.
+`MU_STACK_WORD_STRIDE=1`. On a fresh checkout, plain `make` creates a
+256-element Copy smoke input; later calls reuse the last generated case.
 
 ```sh
 python3 run.py --kind copy --elements 65536 --out runs/copy-65536
