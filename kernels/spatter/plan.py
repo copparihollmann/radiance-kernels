@@ -12,15 +12,20 @@ from dataclasses import asdict, dataclass
 
 @dataclass(frozen=True)
 class AddressMap:
-    kind: str  # dense, pattern, or nested_pattern
+    kind: str  # dense, pattern, final_gather_pattern, or nested_pattern
     table: str | None = None
     inner: str | None = None
     delta: int = 0
+    wrap: int = 0
 
     def at(self, case: dict, iteration: int, j: int) -> int:
         if self.kind == "dense":
             return j + case["length"] * (iteration % case["wrap"])
-        if self.kind == "pattern":
+        if self.kind == "final_gather_pattern":
+            residue = iteration % self.wrap
+            iteration = residue + ((case["count"] - 1 - residue) // self.wrap) * self.wrap
+            base = case[self.table][j]
+        elif self.kind == "pattern":
             base = case[self.table][j]
         elif self.kind == "nested_pattern":
             base = case[self.table][case[self.inner][j]]
@@ -51,13 +56,18 @@ def plan_for(case: dict) -> TransferPlan:
     if kind == "scatter":
         return TransferPlan("dense", "sparse", dense,
                             AddressMap("pattern", "pattern", delta=case["delta"]),
-                            "task")
+                            "destination_owner" if case["collision_policy"] == "ordered" else "task")
     if kind == "gs":
+        source_map = (AddressMap("final_gather_pattern", "gather",
+                                 delta=case["delta_gather"],
+                                 wrap=case["gather_final_wrap"])
+                      if case["gather_final_wrap"] else
+                      AddressMap("pattern", "gather", delta=case["delta_gather"]))
         return TransferPlan(
             "sparse_gather", "sparse_scatter",
-            AddressMap("pattern", "gather", delta=case["delta_gather"]),
+            source_map,
             AddressMap("pattern", "scatter", delta=case["delta_scatter"]),
-            "task")
+            "destination_owner" if case["collision_policy"] == "ordered" else "task")
     if kind == "multigather":
         return TransferPlan(
             "sparse", "dense",
@@ -67,7 +77,7 @@ def plan_for(case: dict) -> TransferPlan:
         return TransferPlan(
             "dense", "sparse", dense,
             AddressMap("nested_pattern", "pattern", "scatter", case["delta"]),
-            "task")
+            "destination_owner" if case["collision_policy"] == "ordered" else "task")
     raise ValueError(f"unsupported Spatter family: {kind}")
 
 
@@ -96,20 +106,21 @@ def stitch_reference(stages: list[dict], source: list[int]) -> list[int]:
 def fuse_gather_scatter(gather: dict, scatter: dict) -> dict:
     """Emit a GS configuration for a lossless Gather -> Scatter chain.
 
-    Every (iteration, pattern entry) needs its own intermediate dense slot.
-    A shorter wrap lets later Gather iterations overwrite values before the
-    Scatter stage reads them, so it cannot be fused by simple address bypass.
+    Each Scatter read observes the final Gather write to its wrapped dense
+    slot, including when several Gather iterations share that slot.
     """
     if gather["kind"] != "gather" or scatter["kind"] != "scatter":
         raise ValueError("fusion requires a Gather followed by a Scatter")
     if gather["count"] != scatter["count"] or gather["length"] != scatter["length"]:
         raise ValueError("fusion requires matching count and pattern length")
     count = gather["count"]
-    if gather["wrap"] != count or scatter["wrap"] != count:
-        raise ValueError("fusion requires wrap equal to count in both stages")
+    if gather["wrap"] != scatter["wrap"]:
+        raise ValueError("fusion requires matching wrap in both stages")
     if gather["dst_length"] != scatter["src_length"]:
         raise ValueError("fusion requires matching intermediate array lengths")
     return {"kernel": "GS", "pattern-gather": gather["pattern"],
             "pattern-scatter": scatter["pattern"], "count": count,
+            "gather-final-wrap": gather["wrap"],
+            "collision-policy": scatter["collision_policy"],
             "source-tag": gather["payload_tag"],
             "delta-gather": gather["delta"], "delta-scatter": scatter["delta"]}

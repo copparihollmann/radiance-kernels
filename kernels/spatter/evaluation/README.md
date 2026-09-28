@@ -62,11 +62,15 @@ xRAGE5's full
 8,368,968-address input produced the expected digest `2260887d7f6bc955` in
 100,529,234 modeled cycles. xRAGE9 used all 6,664,304 addresses and reported
 99,547,352 modeled cycles.
-[Seven paired current-build smoke results](current-build-smoke-results.csv)
-cover all Spatter operation families, an overlapping Scatter probe, and the
-generated Gather→Scatter fusion. The six deterministic cases passed both the
-full Verilator SoC and Cyclotron check on the same fused ELF; the overlapping
-case passed its guard and nonzero probe checks and is labeled exploratory.
+[Nine paired current-build smoke results](current-build-smoke-results.csv)
+cover all Spatter operation families, an overlapping Scatter probe, the
+generated Gather→Scatter fusion both with and without dense-slot reuse, and
+an ordered Scatter variant for duplicate destinations. Eight cases passed
+complete output checks on both the full Verilator SoC and Cyclotron model
+using the same fused ELF. The default parallel overlapping case passed its
+guard and nonzero probe checks and is labeled exploratory. Ordered Scatter
+serializes writes to each destination and reports its own cycles; it is not
+the upstream CUDA atomic-exchange mapping.
 [Current-build memory counters](current-build-memory.csv) record the
 timing model's issued global-memory transactions and bytes, including effects
 from index reads, cache lines, and transaction granularity. For example, the

@@ -36,7 +36,9 @@ def inspect_run(build_root: Path, rtl_root: Path, model_root: Path,
     locations = [build_root / name, rtl_root / name, model_root / name]
     builds, rtl, model = [json.loads((path / "result.json").read_text())
                           for path in locations]
-    expected_status = "exploratory" if builds["destination_overlap"] else "passed"
+    exploratory = (builds["destination_overlap"] and
+                   builds.get("collision_policy", "parallel") == "parallel")
+    expected_status = "exploratory" if exploratory else "passed"
     for path, result in zip(locations[1:], (rtl, model)):
         if result["status"] != expected_status:
             raise ValueError(f"{path}: status {result['status']}, expected {expected_status}")
@@ -55,7 +57,7 @@ def inspect_run(build_root: Path, rtl_root: Path, model_root: Path,
                       r"guards_intact=(\w+) nonzero_words=(\d+)", log)
     if not match or match.group(3) != "true" or int(match.group(4)) == 0:
         raise ValueError(f"{locations[2]}: incomplete GPU output readback")
-    if not builds["destination_overlap"] and match.group(1) != builds["expected_digest"]:
+    if not exploratory and match.group(1) != builds["expected_digest"]:
         raise ValueError(f"{locations[2]}: complete output digest differs")
     return [summary.row_for(path, None) for path in locations[1:]]
 
@@ -76,7 +78,8 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary = args.output.with_suffix(".tmp")
     with temporary.open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=summary.FIELDS)
+        writer = csv.DictWriter(stream, fieldnames=summary.FIELDS,
+                                lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     temporary.replace(args.output)

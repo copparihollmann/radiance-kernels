@@ -86,7 +86,9 @@ def run(name: str, max_cycles: int, sim: Path, output_root: Path, source_root: P
             data["error"] = (f"simulator exit {proc.returncode}; GPU reports {len(cycles)}; "
                              f"finish={('Verilog $finish' in log_text)}")
         else:
-            data["status"] = "exploratory" if data["destination_overlap"] else "passed"
+            data["status"] = ("exploratory" if data["destination_overlap"] and
+                              data.get("collision_policy", "parallel") == "parallel"
+                              else "passed")
     except KeyboardInterrupt:
         data["status"] = "interrupted"
         data["error"] = "interrupted by signal"

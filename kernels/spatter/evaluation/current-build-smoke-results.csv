@@ -13,3 +13,7 @@ smoke-5,Verilator 5.022,exploratory,guards-and-nonzero-exploratory,scatter,4,1,6
 smoke-5,Cyclotron timing model,exploratory,guards-and-nonzero-exploratory,scatter,4,1,64,2745,,,0.023315,0.011658,,
 composed,Verilator 5.022,passed,digest-checked,gs,3,2,96,8058,0.0:380;0.1:345,0.0:0.047;0.1:0.043,0.011914,0.005957,,
 composed,Cyclotron timing model,passed,digest-checked,gs,3,2,96,3217,,,0.029841,0.014921,,
+composed-wrap,Verilator 5.022,passed,digest-checked,gs,3,3,144,8598,0.0:419;0.1:381,0.0:0.049;0.1:0.045,0.016748,0.008374,,
+composed-wrap,Cyclotron timing model,passed,digest-checked,gs,3,3,144,3189,,,0.045155,0.022578,,
+ordered-overlap,Verilator 5.022,passed,digest-checked,scatter,2,1,32,6601,0.0:318;0.1:273,0.0:0.048;0.1:0.042,0.004848,0.002424,,
+ordered-overlap,Cyclotron timing model,passed,digest-checked,scatter,2,1,32,3498,,,0.009148,0.004574,,

@@ -69,7 +69,10 @@ def run(name: str, timeout: int, functional: bool, source_root: Path,
         "timing_config_sha256": digest(config),
         "elf_sha256": elf_hash,
         "gpu_guard_before_addr": f"0x{guard_address(elf, readelf):08x}",
-        "correctness": "guards-and-nonzero-exploratory" if data["destination_overlap"] else "digest-checked",
+        "correctness": ("guards-and-nonzero-exploratory"
+                        if data["destination_overlap"] and
+                        data.get("collision_policy", "parallel") == "parallel"
+                        else "digest-checked"),
         "status": "running",
     })
     data.pop("gpu_cycles", None)
@@ -100,7 +103,9 @@ def run(name: str, timeout: int, functional: bool, source_root: Path,
             data["status"] = "failed"
             data["error"] = f"model exit {proc.returncode}; cycles={bool(cycles)}; readback={bool(check)}"
         else:
-            data["status"] = "exploratory" if data["destination_overlap"] else "passed"
+            data["status"] = ("exploratory" if data["destination_overlap"] and
+                              data.get("collision_policy", "parallel") == "parallel"
+                              else "passed")
     except subprocess.TimeoutExpired:
         data["status"] = "timeout"
         data["error"] = f"model exceeded {timeout} wall seconds"

@@ -29,11 +29,13 @@ integration step. Composition needs matching intermediate array lengths and a
 barrier between stages. Repeated Scatter destinations also need atomics or an
 explicit ordering rule for deterministic results.
 
-For a Gather followed by Scatter with matching count and pattern length, and
-`wrap == count` in both stages, `tools/spatter-compose.py` bypasses the unique
-dense intermediate and emits a fused GS case. The emitted `source-tag` keeps
-the generated source values identical to the original Gather. The result uses
-the existing Muon GS path and can be built and simulated like any other
+For a Gather followed by Scatter with matching count, pattern length, and
+`wrap`, `tools/spatter-compose.py` bypasses the dense intermediate and emits a
+fused GS case. For `wrap < count`, the fused source address selects the last
+Gather iteration that wrote the dense slot read by Scatter. The emitted
+`source-tag` keeps the generated source values identical to the original
+Gather. This fused execution has its own cycle count; it is not the sum of two
+separately launched kernels. It can be built and simulated like any other
 Spatter case:
 
 ```sh
@@ -43,9 +45,11 @@ python3 run.py --suite runs/composed-suite.json --case 0 \
   --out runs/composed --build-only
 ```
 
-When `wrap < count`, a later Gather iteration overwrites an intermediate slot
-before Scatter reads it. The tool rejects that fusion; `stitch_reference`
-still models the two-stage materialization in software.
+`composition-smoke.json` cases 2 and 3 exercise `count=3, wrap=2`. The
+generated GS case records `gather-final-wrap` so its address map reflects the
+final writer of each intermediate slot. `stitch_reference` independently
+models the two-stage materialization in software. General device-side stage
+launching remains future work.
 
 This implements Spatter's documented transfer equations and its serial
 backend's Gather writes. The upstream CUDA Gather and MultiGather kernels
@@ -79,12 +83,31 @@ python3 run.py --suite smoke.json --case 0 --out runs/smoke-0 --build-only
 pattern. It is not performance-equivalent to the original repetition count.
 The output directory contains `kernel.soc.elf`, `result.json`, and `build.log`.
 
+Scatter, GS, and MultiScatter can use `--collision-policy ordered` when
+destinations repeat. The generator groups transfers by destination in source
+order; one GPU lane owns each destination, so all 64-bit stores complete
+without another lane writing the same value concurrently. This gives a
+deterministic final output and permits a full digest check:
+
+```sh
+python3 run.py --suite exploratory-smoke.json --case 0 \
+  --collision-policy ordered --out runs/ordered-overlap --build-only
+```
+
+The ordered path executes every transfer but adds a generated task schedule
+and serializes conflicts. Its cycles describe that mapping, not the upstream
+CUDA `atomicExch` implementation. The default parallel path retains its
+exploratory status when destinations overlap.
+
 For the five standard GPU STREAM cases, pass
 `standard-suite/basic-tests/gpu-stream.json` and case indices 0 through 4.
 For LANL `datafiles/xrage/asteroid/spatter.json`, pattern 5 is case 4 and
 pattern 9 is case 8. Original-size xRAGE5 has 8,368,968 gather addresses;
 xRAGE9 has 6,664,304 scatter addresses. The input JSON used for the evaluation
 has SHA-256 `7325525ada0dacb6e1206717d242f6721b6d8da77718506fd909444c388f7733`.
+For xRAGE9, `--collision-policy ordered` creates a complete-output-checkable
+mapping of the repeated destinations. Keep its results separate from both the
+default parallel mapping and Spatter's CUDA atomic result.
 
 ## Simulate and validate
 
@@ -122,10 +145,13 @@ converts completed run directories to CSV.
 For deterministic cases, the RV64 host checks the full digest when the output
 has at most 1024 elements, or 64 spaced samples for larger outputs; the
 Cyclotron checker validates the complete output. The host checks guard regions
-in either case. xRAGE9 has duplicate destinations; the current kernel has no
-atomic scatter, so its RTL check is a nonzero output probe plus guards and its
-result is exploratory. It must not be compared with the published atomic
-xRAGE9 GPU result. The logical payload metric counts one 8-byte read and one
+in either case. xRAGE9 has duplicate destinations. The default parallel
+mapping has no atomic scatter, so its RTL check is a nonzero output probe plus
+guards and its result is exploratory. The ordered mapping checks a complete
+serial-order digest, but uses a generated schedule and is not an atomic
+throughput result. Neither result should be compared directly with the
+published atomic xRAGE9 GPU result. The logical payload metric counts one
+8-byte read and one
 8-byte write per transfer, excluding pattern traffic; no GPU frequency or
 HBM timing calibration is assumed. See [evaluation/README.md](evaluation/README.md)
 for measured cases and provenance.

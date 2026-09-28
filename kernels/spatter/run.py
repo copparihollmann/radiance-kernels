@@ -25,7 +25,7 @@ FNV_PRIME = 0x100000001B3
 KINDS = {"gather": 0, "scatter": 1, "gs": 2, "multigather": 3, "multiscatter": 4}
 ARRAYS = (
     "pattern", "pattern_gather", "pattern_scatter", "sparse", "dense",
-    "sparse_gather", "sparse_scatter",
+    "sparse_gather", "sparse_scatter", "group_offsets", "group_tasks",
 )
 
 
@@ -85,11 +85,20 @@ def normalize(raw: dict) -> dict:
     kind_name = str(raw.get("kernel", "Gather")).lower()
     if kind_name not in KINDS:
         raise ValueError(f"unsupported kernel: {kind_name}")
+    collision_policy = raw.get("collision-policy", "parallel")
+    if collision_policy not in ("parallel", "ordered"):
+        raise ValueError("collision-policy must be parallel or ordered")
+    if collision_policy == "ordered" and kind_name not in ("scatter", "gs", "multiscatter"):
+        raise ValueError("ordered collision-policy needs a scatter destination")
     count = positive(raw.get("count", 1024), "count")
     local_work_size = raw.get("local-work-size")
     if local_work_size is not None:
         local_work_size = positive(local_work_size, "local-work-size")
     wrap = positive(raw.get("wrap", 1), "wrap")
+    gather_final_wrap = positive(raw.get("gather-final-wrap", 0),
+                                 "gather-final-wrap", True)
+    if gather_final_wrap and kind_name != "gs":
+        raise ValueError("gather-final-wrap is supported only for GS")
     delta = positive(raw.get("delta", 8), "delta", True)
     delta_gather = positive(raw.get("delta-gather", 8), "delta-gather", True)
     delta_scatter = positive(raw.get("delta-scatter", 8), "delta-scatter", True)
@@ -138,12 +147,22 @@ def normalize(raw: dict) -> dict:
         raise ValueError("source-tag exceeds the supported range")
     if max(src_length, dst_length) * 8 > 0x70000000:
         raise ValueError("array exceeds the current GPU DRAM address window")
+    pattern_words = sum(max(1, len(table)) for table in (pattern, gather, scatter))
+    schedule_words = (dst_length + 1 + count * length
+                      if collision_policy == "ordered" else 2)
+    embedded_bytes = ((src_length + dst_length) * 8 +
+                      (pattern_words + schedule_words) * 4)
+    # RV32 code, runtime data, guards, and alignment occupy the same window.
+    if embedded_bytes + 0x100000 > 0x70000000:
+        raise ValueError("input, output, patterns, and schedule exceed GPU DRAM address window")
     case = dict(
         kind=kind_name, pattern=pattern, gather=gather, scatter=scatter,
         count=count, wrap=wrap, delta=delta, delta_gather=delta_gather,
-        delta_scatter=delta_scatter, length=length, src_length=src_length,
+        delta_scatter=delta_scatter, gather_final_wrap=gather_final_wrap,
+        length=length, src_length=src_length,
         dst_length=dst_length, source=source, output=output,
         payload_tag=payload_tag,
+        collision_policy=collision_policy,
         requested_local_work_size=local_work_size,
     )
     case["_plan"] = plan_for(case)
@@ -198,9 +217,9 @@ def reference(case: dict) -> tuple[int | None, bool]:
             if seen[dst]:
                 overlap = True
             seen[dst] = 1
-            if not overlap:
+            if not overlap or case["collision_policy"] == "ordered":
                 output[dst] = payload(tag, source_index(case, i, j))
-    return (None if overlap else fnv(output)), overlap
+    return (None if overlap and case["collision_policy"] == "parallel" else fnv(output)), overlap
 
 
 def sample_digest(case: dict, samples: int = 64) -> int:
@@ -244,15 +263,48 @@ def write_source(path: Path, length: int, tag: int) -> None:
             stream.write(struct.pack(f"<{len(chunk)}Q", *chunk))
 
 
+def write_destination_groups(case: dict) -> None:
+    """Stable counting sort of transfers by destination, preserving every write.
+
+    Each destination is owned by one GPU lane. Writes to a repeated address
+    retain source order, so two 32-bit stores cannot tear against another
+    lane's write to the same 64-bit value.
+    """
+    destinations = case["dst_length"]
+    tasks = case["count"] * case["length"]
+    counts = array("I", [0]) * destinations
+    for task in range(tasks):
+        i, j = divmod(task, case["length"])
+        counts[destination(case, i, j)] += 1
+    offsets = array("I", [0]) * (destinations + 1)
+    for index, count in enumerate(counts):
+        offsets[index + 1] = offsets[index] + count
+    cursor = offsets[:destinations]
+    ordered = array("I", [0]) * tasks
+    for task in range(tasks):
+        i, j = divmod(task, case["length"])
+        dst = destination(case, i, j)
+        ordered[cursor[dst]] = task
+        cursor[dst] += 1
+    write_u32(GENERATED / "group_offsets.bin", offsets)
+    write_u32(GENERATED / "group_tasks.bin", ordered)
+
+
 def prepare(case: dict, suite: Path, case_id: int) -> dict:
     GENERATED.mkdir(exist_ok=True)
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
     write_u32(GENERATED / "pattern_scatter.bin", case["scatter"])
     write_source(GENERATED / "source.bin", case["src_length"], case["payload_tag"])
+    if case["collision_policy"] == "ordered":
+        write_destination_groups(case)
+    else:
+        write_u32(GENERATED / "group_offsets.bin", [])
+        write_u32(GENERATED / "group_tasks.bin", [])
     expected, overlap = reference(case)
-    probe_index = destination(case, 0, 0) if overlap else 0
-    readback_samples = min(64, case["dst_length"]) if case["dst_length"] > 1024 and not overlap else 0
+    exploratory = overlap and case["collision_policy"] == "parallel"
+    probe_index = destination(case, 0, 0) if exploratory else 0
+    readback_samples = min(64, case["dst_length"]) if case["dst_length"] > 1024 and not exploratory else 0
     expected_sample = sample_digest(case, readback_samples) if readback_samples else 0
     lines = [
         "#pragma once",
@@ -263,17 +315,21 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
         f"#define SPATTER_DELTA {case['delta']}u",
         f"#define SPATTER_DELTA_GATHER {case['delta_gather']}u",
         f"#define SPATTER_DELTA_SCATTER {case['delta_scatter']}u",
+        f"#define SPATTER_GATHER_FINAL_WRAP {case['gather_final_wrap']}u",
+        f"#define SPATTER_ORDERED_COLLISIONS {int(case['collision_policy'] == 'ordered')}",
         f"#define SPATTER_OUTPUT_LENGTH {case['dst_length']}u",
         f"#define SPATTER_EXPECTED_DIGEST 0x{(expected or 0):016x}ULL",
         f"#define SPATTER_READBACK_SAMPLES {readback_samples}u",
         f"#define SPATTER_EXPECTED_SAMPLE_DIGEST 0x{expected_sample:016x}ULL",
         f"#define SPATTER_EXPLORATORY_PROBE_INDEX {probe_index}u",
-        f"#define SPATTER_EXPLORATORY {int(overlap)}",
+        f"#define SPATTER_EXPLORATORY {int(exploratory)}",
     ]
     (GENERATED / "config.h").write_text("\n".join(lines) + "\n")
     names = {
         "pattern": "pattern.bin", "pattern_gather": "pattern_gather.bin",
-        "pattern_scatter": "pattern_scatter.bin", case["source"]: "source.bin",
+        "pattern_scatter": "pattern_scatter.bin",
+        "group_offsets": "group_offsets.bin", "group_tasks": "group_tasks.bin",
+        case["source"]: "source.bin",
     }
     asm = ['.section .data,"aw",@progbits']
     for name in ARRAYS:
@@ -307,6 +363,7 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
         "readback_samples": readback_samples,
         "exploratory_probe_index": probe_index if overlap else None,
         "destination_overlap": overlap,
+        "collision_policy": case["collision_policy"],
         "status": "prepared",
     }
     (GENERATED / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -343,6 +400,8 @@ def main() -> int:
     parser.add_argument("--case", type=int, default=0, help="zero-based JSON configuration index")
     parser.add_argument("--count", type=int,
                         help="replace the suite repetition count for a clearly labeled scaled run")
+    parser.add_argument("--collision-policy", choices=("parallel", "ordered"),
+                        help="ordered serializes transfers per destination for complete scatter checks")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--build-only", action="store_true")
@@ -377,6 +436,8 @@ def main() -> int:
             parser.error("suite must be a nonempty JSON list and --case must select an entry")
         original_count = suite[args.case].get("count", 1024)
         raw_case = dict(suite[args.case])
+        if args.collision_policy is not None:
+            raw_case["collision-policy"] = args.collision_policy
         if args.count is not None:
             raw_case["count"] = args.count
         case = normalize(raw_case)
@@ -397,7 +458,8 @@ def main() -> int:
         manifest["simulator"] = "VCS" if args.simv else None
         manifest["cyclotron_trace_requested"] = args.record_trace
         manifest["correctness"] = (
-            "guards-and-nonzero-exploratory" if manifest["destination_overlap"] else
+            "guards-and-nonzero-exploratory" if manifest["destination_overlap"] and
+            manifest["collision_policy"] == "parallel" else
             "sample-checked" if manifest["readback_samples"] else "digest-checked"
         )
         (out / "result.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -447,7 +509,8 @@ def main() -> int:
             # host publishes HTIF status 1/3 only after validation.
             manifest["status"] = (
                 "failed" if not cycles or "*** FAILED ***" in log else
-                "exploratory" if manifest["destination_overlap"] else "passed"
+                "exploratory" if manifest["destination_overlap"] and
+                manifest["collision_policy"] == "parallel" else "passed"
             )
     except subprocess.CalledProcessError as error:
         manifest["status"] = "failed"

@@ -49,6 +49,11 @@ class SpatterMappingTest(unittest.TestCase):
         ]))
         colliding = normalize({"kernel": "Scatter", "pattern": [0, 0], "count": 1})
         self.assertEqual(reference(colliding), (None, True))
+        ordered = normalize({"kernel": "Scatter", "pattern": [0, 0],
+                             "count": 1, "collision-policy": "ordered"})
+        self.assertEqual(ordered["_plan"].schedule, "destination_owner")
+        self.assertEqual(reference(ordered),
+                         (fnv([payload(2, 1)]), True))
 
     def test_stitch_gather_and_scatter_as_gs(self):
         gather = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
@@ -67,10 +72,28 @@ class SpatterMappingTest(unittest.TestCase):
                          reference(fused)[0])
         with self.assertRaisesRegex(ValueError, "stage output length"):
             stitch_reference([gather, gather], source)
-        overwritten = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
-                                 "count": 2, "delta": 5, "wrap": 1})
-        with self.assertRaisesRegex(ValueError, "wrap equal to count"):
-            fuse_gather_scatter(overwritten, scatter)
+        wrapped_gather = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
+                                    "count": 3, "delta": 5, "wrap": 2})
+        wrapped_scatter = normalize({"kernel": "Scatter", "pattern": [2, 0, 1],
+                                     "count": 3, "delta": 5, "wrap": 2})
+        wrapped_fused = normalize(fuse_gather_scatter(wrapped_gather, wrapped_scatter))
+        wrapped_source = [payload(wrapped_gather["payload_tag"], i)
+                          for i in range(wrapped_gather["src_length"])]
+        expected = stitch_reference([wrapped_gather, wrapped_scatter], wrapped_source)
+        self.assertEqual(execute_reference(wrapped_fused, wrapped_source), expected)
+        self.assertEqual(reference(wrapped_fused), (fnv(expected), False))
+        ordered_scatter = normalize({"kernel": "Scatter", "pattern": [0, 0, 1],
+                                     "count": 3, "delta": 5, "wrap": 2,
+                                     "collision-policy": "ordered"})
+        ordered_fused = normalize(fuse_gather_scatter(wrapped_gather, ordered_scatter))
+        self.assertEqual(ordered_fused["collision_policy"], "ordered")
+        ordered_expected = stitch_reference([wrapped_gather, ordered_scatter], wrapped_source)
+        self.assertEqual(execute_reference(ordered_fused, wrapped_source), ordered_expected)
+        self.assertEqual(reference(ordered_fused), (fnv(ordered_expected), True))
+        mismatched_wrap = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
+                                     "count": 3, "delta": 5, "wrap": 1})
+        with self.assertRaisesRegex(ValueError, "matching wrap"):
+            fuse_gather_scatter(mismatched_wrap, wrapped_scatter)
 
     def test_pattern_generators(self):
         self.assertEqual(parse_pattern("UNIFORM:4:3:NR", 8), ([0, 3, 6, 9], 12))
@@ -82,6 +105,9 @@ class SpatterMappingTest(unittest.TestCase):
                               ("compress", True), ("shared-memory", 1024)):
             with self.subTest(option=option), self.assertRaisesRegex(ValueError, option):
                 normalize({"kernel": "Scatter", "pattern": [0, 1], option: value})
+        with self.assertRaisesRegex(ValueError, "needs a scatter"):
+            normalize({"kernel": "Gather", "pattern": [0, 1],
+                       "collision-policy": "ordered"})
 
 
 if __name__ == "__main__":
