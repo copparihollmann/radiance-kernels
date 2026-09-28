@@ -54,8 +54,9 @@ single-slot write to keep loads live, while this port performs the documented
 full transfer and validates the dense output. Their payload definitions and
 throughputs therefore also differ.
 
-The five current-build GPU STREAM cases, original-size xRAGE5, and ordered
-xRAGE9 have passed complete-output Cyclotron timing checks. The default
+The five current-build GPU STREAM cases, original-size xRAGE5, ordered
+xRAGE9, and original-size LULESH Gather case 1 have passed complete-output
+Cyclotron timing checks. The default
 parallel xRAGE9 mapping checks guards and a nonzero output, but its duplicate
 destinations make that result exploratory. Their cycles are in
 [current-build model results](current-build-model-results.csv). xRAGE5's full
@@ -67,6 +68,12 @@ cycles. Ordered Scatter issued 581,683,520 model global-memory bytes versus
 389,316,672 for parallel Scatter because it reads the generated conflict
 schedule. Its separate functional check matched the same full digest and ELF
 hash in 1,461,440 functional steps; those steps are not timing-model cycles.
+LULESH Gather uses all 231,198 repetitions and 3,699,168 transfers from
+`standard-suite/app-traces/lulesh.json` at SHA-256
+`9073035ecf77e7fde65262f782286207e76cca24312b2e01688b038901d021ee`.
+Its full output digest `c355a1efb460db72` passed in both functional and
+timing modes on identical ELF hashes. The timing model recorded 74,419,767
+cycles and 532,704,064 issued global-memory bytes.
 [Ten paired current-build smoke results](current-build-smoke-results.csv)
 cover all Spatter operation families, an overlapping Scatter probe, the
 generated Gather→Scatter fusion both with and without dense-slot reuse, and
@@ -99,6 +106,7 @@ not measured HBM traffic. Regenerate them with:
 ```sh
 python3 tools/spatter-memory-summary.py runs/model/gpu-stream-{0,1,2,3,4} \
   runs/model/xrage5 runs/model/xrage9 runs/model/xrage9-ordered \
+  runs/model/lulesh-gather \
   > evaluation/current-build-memory.csv
 ```
 
