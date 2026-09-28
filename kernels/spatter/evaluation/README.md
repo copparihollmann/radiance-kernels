@@ -54,14 +54,19 @@ single-slot write to keep loads live, while this port performs the documented
 full transfer and validates the dense output. Their payload definitions and
 throughputs therefore also differ.
 
-The five current-build GPU STREAM cases and original-size xRAGE5 have passed
-complete-output Cyclotron checks. Original-size xRAGE9 passed guards and a
-nonzero output check, but its duplicate destinations make it exploratory.
-Their cycles are in [current-build model results](current-build-model-results.csv).
-xRAGE5's full
-8,368,968-address input produced the expected digest `2260887d7f6bc955` in
-100,529,234 modeled cycles. xRAGE9 used all 6,664,304 addresses and reported
-99,547,352 modeled cycles.
+The five current-build GPU STREAM cases, original-size xRAGE5, and ordered
+xRAGE9 have passed complete-output Cyclotron timing checks. The default
+parallel xRAGE9 mapping checks guards and a nonzero output, but its duplicate
+destinations make that result exploratory. Their cycles are in
+[current-build model results](current-build-model-results.csv). xRAGE5's full
+8,368,968-address input produced digest `2260887d7f6bc955` in 100,529,234
+modeled cycles. The two xRAGE9 mappings each used all 6,664,304 addresses.
+Parallel Scatter reported 99,547,352 exploratory model cycles; ordered
+Scatter passed complete digest `215de6e81154b9c5` in 96,235,005 model
+cycles. Ordered Scatter issued 581,683,520 model global-memory bytes versus
+389,316,672 for parallel Scatter because it reads the generated conflict
+schedule. Its separate functional check matched the same full digest and ELF
+hash in 1,461,440 functional steps; those steps are not timing-model cycles.
 [Ten paired current-build smoke results](current-build-smoke-results.csv)
 cover all Spatter operation families, an overlapping Scatter probe, the
 generated Gather→Scatter fusion both with and without dense-slot reuse, and
@@ -93,7 +98,7 @@ not measured HBM traffic. Regenerate them with:
 
 ```sh
 python3 tools/spatter-memory-summary.py runs/model/gpu-stream-{0,1,2,3,4} \
-  runs/model/xrage5 runs/model/xrage9 \
+  runs/model/xrage5 runs/model/xrage9 runs/model/xrage9-ordered \
   > evaluation/current-build-memory.csv
 ```
 

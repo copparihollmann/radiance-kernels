@@ -26,12 +26,13 @@ GPU frequency is assumed.
 | Spatter GPU STREAM MultiGather | 262,144 | 1,999,593 | 4,194,304 | 8,414,464 |
 | xRAGE asteroid pattern 5, Gather | 8,368,968 | 100,529,234 | 133,903,488 | 478,662,848 |
 | xRAGE asteroid pattern 9, parallel Scatter | 6,664,304 | 99,547,352 | 106,628,864 | 389,316,672 |
+| xRAGE asteroid pattern 9, ordered Scatter | 6,664,304 | 96,235,005 | 106,628,864 | 581,683,520 |
 
 The xRAGE9 parallel Scatter row is exploratory: repeated destinations race,
-so its output check covers guards and a nonzero probe. An ordered Scatter
-kernel that executes every transfer without racing is undergoing an
-original-size complete-output timing run. Its cycle count represents the
-ordered mapping, not upstream CUDA atomic exchange.
+so its output check covers guards and a nonzero probe. Ordered Scatter
+executes every transfer without racing and passed the full serial-order digest
+`215de6e81154b9c5` over 6,664,304 transfers. Its cycle and memory counts
+describe the generated conflict schedule, not upstream CUDA atomic exchange.
 
 See the exact [STREAM cycle](stream/evaluation/current-build-model-results.csv),
 [STREAM memory](stream/evaluation/current-build-memory.csv),
@@ -49,6 +50,10 @@ overlapping Scatter, and a two-stage materialized Gather→Scatter chain. Their
 paired hashes, correctness checks, and GPU cycles are in the
 [STREAM smoke table](stream/evaluation/current-build-smoke-results.csv) and
 [Spatter smoke table](spatter/evaluation/current-build-smoke-results.csv).
+An [earlier-build RTL table](spatter/evaluation/prior-build-results.csv) has
+original-size GPU STREAM cycles, but its embedded device segments differ from
+the current branch. A current-branch original-size Verilator run is still in
+progress and is kept separate from those historical measurements.
 
 For the small equal-count composition case, fused GS and the materialized
 two-stage chain have the same output digest. The model reports 3,189 and
