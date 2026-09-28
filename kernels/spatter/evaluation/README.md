@@ -9,6 +9,10 @@ model uses Chipyard `d45f86f4cca379715ac0ceb3a9f2369927796794`, Radiance
 `9b774a53a882df4a655c04b5aa662ae8a01d5f47`.
 VCS runtime currently queues for a license on this machine, so current-build
 RTL runs use the built Verilator 5.022 model. No FPGA bitstream is available.
+A 90-second same-revision VCS probe on 2026-09-28 used the current-branch
+LULESH Gather smoke ELF. It exited with timeout code 124 while reporting a
+license-server connection failure and queued runtime license; no GPU cycles
+were produced by that probe.
 
 ## Scope and provenance
 
