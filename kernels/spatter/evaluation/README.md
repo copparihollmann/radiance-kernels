@@ -46,9 +46,21 @@ counts an 8-byte read and an 8-byte write per transfer; Spatter's one-sided
 bandwidth convention counts half that. Neither includes index traffic or DRAM
 transaction amplification. xRAGE9's non-atomic result cannot be compared with
 the published atomic-scatter measurement.
+The upstream CUDA Gather and MultiGather implementations use a conditional
+single-slot write to keep loads live, while this port performs the documented
+full transfer and validates the dense output. Their payload definitions and
+throughputs therefore also differ.
 
-The five current-build GPU STREAM cases have passed complete-output Cyclotron
-checks; their cycles are in [current-build model results](current-build-model-results.csv).
+The five current-build GPU STREAM cases and original-size xRAGE5 have passed
+complete-output Cyclotron checks; their cycles are in
+[current-build model results](current-build-model-results.csv). xRAGE5's full
+8,368,968-address input produced the expected digest `2260887d7f6bc955` in
+100,529,234 modeled cycles.
+[Seven paired current-build smoke results](current-build-smoke-results.csv)
+cover all Spatter operation families, an overlapping Scatter probe, and the
+generated Gather→Scatter fusion. The six deterministic cases passed both the
+full Verilator SoC and Cyclotron check on the same fused ELF; the overlapping
+case passed its guard and nonzero probe checks and is labeled exploratory.
 [Current-build memory counters](current-build-memory.csv) record the
 timing model's issued global-memory transactions and bytes, including effects
 from index reads, cache lines, and transaction granularity. For example, the
@@ -58,6 +70,7 @@ not measured HBM traffic. Regenerate them with:
 
 ```sh
 python3 tools/spatter-memory-summary.py runs/model/gpu-stream-{0,1,2,3,4} \
+  runs/model/xrage5 \
   > evaluation/current-build-memory.csv
 ```
 

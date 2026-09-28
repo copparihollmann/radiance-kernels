@@ -4,3 +4,4 @@ gpu-stream-1,Cyclotron timing model,passed,digest-checked,scatter,256,1024,41943
 gpu-stream-2,Cyclotron timing model,passed,digest-checked,gs,256,1024,4194304,2037327,,,2.058729,1.029364,,
 gpu-stream-3,Cyclotron timing model,passed,digest-checked,multiscatter,256,1024,4194304,1048236,,,4.001297,2.000649,,
 gpu-stream-4,Cyclotron timing model,passed,digest-checked,multigather,256,1024,4194304,1999593,,,2.097579,1.048789,,
+xrage5,Cyclotron timing model,passed,digest-checked,gather,8368968,1,133903488,100529234,,,1.331986,0.665993,,

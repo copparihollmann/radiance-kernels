@@ -91,3 +91,25 @@ def stitch_reference(stages: list[dict], source: list[int]) -> list[int]:
             raise ValueError("stage output length does not match the next input")
         source = execute_reference(case, source)
     return source
+
+
+def fuse_gather_scatter(gather: dict, scatter: dict) -> dict:
+    """Emit a GS configuration for a lossless Gather -> Scatter chain.
+
+    Every (iteration, pattern entry) needs its own intermediate dense slot.
+    A shorter wrap lets later Gather iterations overwrite values before the
+    Scatter stage reads them, so it cannot be fused by simple address bypass.
+    """
+    if gather["kind"] != "gather" or scatter["kind"] != "scatter":
+        raise ValueError("fusion requires a Gather followed by a Scatter")
+    if gather["count"] != scatter["count"] or gather["length"] != scatter["length"]:
+        raise ValueError("fusion requires matching count and pattern length")
+    count = gather["count"]
+    if gather["wrap"] != count or scatter["wrap"] != count:
+        raise ValueError("fusion requires wrap equal to count in both stages")
+    if gather["dst_length"] != scatter["src_length"]:
+        raise ValueError("fusion requires matching intermediate array lengths")
+    return {"kernel": "GS", "pattern-gather": gather["pattern"],
+            "pattern-scatter": scatter["pattern"], "count": count,
+            "source-tag": gather["payload_tag"],
+            "delta-gather": gather["delta"], "delta-scatter": scatter["delta"]}

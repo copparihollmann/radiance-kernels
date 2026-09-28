@@ -133,6 +133,9 @@ def normalize(raw: dict) -> dict:
         src_length = length * wrap
         dst_length = max(pattern) + delta * (count - 1) + 1
         source, output = "dense", "sparse"
+    payload_tag = positive(raw.get("source-tag", source_tag(source)), "source-tag")
+    if payload_tag > 0xFFFFFFFF:
+        raise ValueError("source-tag exceeds the supported range")
     if max(src_length, dst_length) * 8 > 0x70000000:
         raise ValueError("array exceeds the current GPU DRAM address window")
     case = dict(
@@ -140,6 +143,7 @@ def normalize(raw: dict) -> dict:
         count=count, wrap=wrap, delta=delta, delta_gather=delta_gather,
         delta_scatter=delta_scatter, length=length, src_length=src_length,
         dst_length=dst_length, source=source, output=output,
+        payload_tag=payload_tag,
         requested_local_work_size=local_work_size,
     )
     case["_plan"] = plan_for(case)
@@ -176,7 +180,7 @@ def source_index(case: dict, i: int, j: int) -> int:
 def reference(case: dict) -> tuple[int | None, bool]:
     """Return serial output digest and whether destination writes overlap."""
     length, count = case["length"], case["count"]
-    tag = source_tag(case["source"])
+    tag = case["payload_tag"]
     if case["kind"] in ("gather", "multigather"):
         def values():
             for r in range(case["wrap"]):
@@ -211,14 +215,14 @@ def sample_digest(case: dict, samples: int = 64) -> int:
                 values.append(0)
             else:
                 last = r + ((case["count"] - 1 - r) // case["wrap"]) * case["wrap"]
-                values.append(payload(source_tag(case["source"]), source_index(case, last, j)))
+                values.append(payload(case["payload_tag"], source_index(case, last, j)))
         return fnv(values)
     selected = {pos: 0 for pos in positions}
     for i in range(case["count"]):
         for j in range(case["length"]):
             dst = destination(case, i, j)
             if dst in selected:
-                selected[dst] = payload(source_tag(case["source"]), source_index(case, i, j))
+                selected[dst] = payload(case["payload_tag"], source_index(case, i, j))
     return fnv(selected[pos] for pos in positions)
 
 
@@ -245,7 +249,7 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
     write_u32(GENERATED / "pattern_scatter.bin", case["scatter"])
-    write_source(GENERATED / "source.bin", case["src_length"], source_tag(case["source"]))
+    write_source(GENERATED / "source.bin", case["src_length"], case["payload_tag"])
     expected, overlap = reference(case)
     probe_index = destination(case, 0, 0) if overlap else 0
     readback_samples = min(64, case["dst_length"]) if case["dst_length"] > 1024 and not overlap else 0
@@ -293,6 +297,7 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
         "kind": case["kind"], "pattern_length": case["length"],
         "address_plan": address_plan,
         "count": case["count"], "wrap": case["wrap"],
+        "source_tag": case["payload_tag"],
         "requested_local_work_size": case["requested_local_work_size"],
         "muon_warps_per_core": 4,
         "source_elements": case["src_length"], "output_elements": case["dst_length"],

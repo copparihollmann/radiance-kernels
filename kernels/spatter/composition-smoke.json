@@ -1,0 +1,4 @@
+[
+  {"kernel":"Gather", "pattern":[4,1,3], "count":2, "wrap":2, "delta":5},
+  {"kernel":"Scatter", "pattern":[2,0,1], "count":2, "wrap":2, "delta":5}
+]

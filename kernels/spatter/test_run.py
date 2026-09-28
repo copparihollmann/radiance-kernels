@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from run import (destination, fnv, normalize, parse_pattern, payload, reference,
                  sample_digest, source_index, source_tag)
-from plan import execute_reference, stitch_reference
+from plan import execute_reference, fuse_gather_scatter, stitch_reference
 
 
 class SpatterMappingTest(unittest.TestCase):
@@ -55,15 +55,22 @@ class SpatterMappingTest(unittest.TestCase):
                             "count": 2, "delta": 5, "wrap": 2})
         scatter = normalize({"kernel": "Scatter", "pattern": [2, 0, 1],
                              "count": 2, "delta": 5, "wrap": 2})
-        fused = normalize({"kernel": "GS", "pattern-gather": [4, 1, 3],
-                           "pattern-scatter": [2, 0, 1], "count": 2,
-                           "delta-gather": 5, "delta-scatter": 5})
+        fused = normalize(fuse_gather_scatter(gather, scatter))
         self.assertEqual(gather["dst_length"], scatter["src_length"])
+        self.assertEqual(fused["payload_tag"], gather["payload_tag"])
         source = list(range(gather["src_length"]))
         self.assertEqual(stitch_reference([gather, scatter], source),
                          execute_reference(fused, source))
+        generated_source = [payload(gather["payload_tag"], i)
+                            for i in range(gather["src_length"])]
+        self.assertEqual(fnv(stitch_reference([gather, scatter], generated_source)),
+                         reference(fused)[0])
         with self.assertRaisesRegex(ValueError, "stage output length"):
             stitch_reference([gather, gather], source)
+        overwritten = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
+                                 "count": 2, "delta": 5, "wrap": 1})
+        with self.assertRaisesRegex(ValueError, "wrap equal to count"):
+            fuse_gather_scatter(overwritten, scatter)
 
     def test_pattern_generators(self):
         self.assertEqual(parse_pattern("UNIFORM:4:3:NR", 8), ([0, 3, 6, 9], 12))

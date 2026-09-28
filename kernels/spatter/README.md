@@ -29,6 +29,32 @@ integration step. Composition needs matching intermediate array lengths and a
 barrier between stages. Repeated Scatter destinations also need atomics or an
 explicit ordering rule for deterministic results.
 
+For a Gather followed by Scatter with matching count and pattern length, and
+`wrap == count` in both stages, `tools/spatter-compose.py` bypasses the unique
+dense intermediate and emits a fused GS case. The emitted `source-tag` keeps
+the generated source values identical to the original Gather. The result uses
+the existing Muon GS path and can be built and simulated like any other
+Spatter case:
+
+```sh
+python3 tools/spatter-compose.py composition-smoke.json 0 \
+  composition-smoke.json 1 --out runs/composed-suite.json
+python3 run.py --suite runs/composed-suite.json --case 0 \
+  --out runs/composed --build-only
+```
+
+When `wrap < count`, a later Gather iteration overwrites an intermediate slot
+before Scatter reads it. The tool rejects that fusion; `stitch_reference`
+still models the two-stage materialization in software.
+
+This implements Spatter's documented transfer equations and its serial
+backend's Gather writes. The upstream CUDA Gather and MultiGather kernels
+instead consume each loaded value through a conditional write to `dense[0]`;
+their usual traffic is effectively read-only. Radiance writes the mapped dense
+array on every transfer so its result can be checked end to end. Consequently,
+Radiance Gather/MultiGather payload and cycle figures are not directly
+comparable with the upstream CUDA throughput figures.
+
 ## Build
 
 Set `LLVM_MUON`, `RISCV_TOOLCHAIN_PATH`, `RISCV64_TOOLCHAIN_PATH`, and `RISCV`
