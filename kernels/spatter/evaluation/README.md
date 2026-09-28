@@ -9,6 +9,28 @@ model uses Chipyard `d45f86f4cca379715ac0ceb3a9f2369927796794`, Radiance
 `9b774a53a882df4a655c04b5aa662ae8a01d5f47`.
 VCS runtime currently queues for a license on this machine, so current-build
 RTL runs use the built Verilator 5.022 model. No FPGA bitstream is available.
+The original-size GPU STREAM ELFs were built before later Spatter source
+changes. Rebuilding from the tracked input deck leaves Gather and MultiGather
+load images unchanged except for 128 zero bytes in unused data space. Scatter,
+GS, and MultiScatter have different loaded instruction bytes, and their
+complete-output Cyclotron cycles change from 1,039,322 to 1,040,016, from
+2,037,327 to 2,038,053, and from 1,048,236 to 1,046,089. The
+[revision cycle comparison](gpu-stream-revision-comparison.csv),
+[memory comparison](gpu-stream-revision-memory.csv), and per-case ELF load
+comparisons record both builds. The current full-size RTL queue uses the
+rebuilt ELFs for those three cases.
+The original-size Gather completed a full SoC Verilator run and passed its RV64
+host digest check in 842,623 GPU cycles. The
+[current-build RTL/model pair](current-build-results.csv) was validated against
+one byte-identical ELF across build, RTL, and timing-model runs; the timing
+model reports 1,998,857 cycles. The rebuilt Gather load image has identical
+initialized instructions and data plus 128 unused zero bytes, and its model
+run passes the same complete digest and cycle count.
+The corresponding ELF load comparisons show compatible initialized segments
+for original-size xRAGE5, ordered xRAGE9, and both LULESH patterns. Parallel
+xRAGE9 has changed loaded instructions and is being rerun in the model.
+`../../evaluation/compare_elf_loads.py` produces the per-case JSON records;
+it exits nonzero when initialized bytes differ.
 A 90-second same-revision VCS probe on 2026-09-28 used the current-branch
 LULESH Gather smoke ELF. It exited with timeout code 124 while reporting a
 license-server connection failure and queued runtime license; no GPU cycles

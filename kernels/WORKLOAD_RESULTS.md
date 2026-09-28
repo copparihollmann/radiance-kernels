@@ -9,6 +9,16 @@ ELF and input hashes, raw logs, and simulator files for later reporting.
 
 ## Timing-model results at the stated input sizes
 
+**Revision audit in progress.** The Spatter values in this table came from
+their recorded ELFs. A rebuild from the current kernel source changed the
+Scatter, GS, and MultiScatter instruction images. Their new GPU STREAM model
+cycles are 1,040,016, 2,038,053, and 1,046,089 respectively; see the
+[revision comparison](spatter/evaluation/gpu-stream-revision-comparison.csv).
+Loaded-image checks also confirm that xRAGE5, ordered xRAGE9, and both LULESH
+patterns retain the same initialized executable content after rebuilding.
+Parallel xRAGE9 has changed instructions, and its new model run is in progress.
+Keep each result tied to its recorded ELF hash until this audit is complete.
+
 The Cyclotron timing model checked every output value and its guard regions
 for the deterministic cases below. It uses a generic DRAM timing node (200
 cycle base latency, 32 bytes/cycle service rate), not a calibrated HBM model.
@@ -71,8 +81,11 @@ both passed full digests. These scaled cycles are separate from the original
 LULESH counts above.
 An [earlier-build RTL table](spatter/evaluation/prior-build-results.csv) has
 original-size GPU STREAM cycles, but its embedded device segments differ from
-the current branch. A current-branch original-size Verilator run is still in
-progress and is kept separate from those historical measurements.
+the current branch. The original-size current-build Gather has now passed a
+full SoC Verilator host check in 842,623 GPU cycles; the
+[paired table](spatter/evaluation/current-build-results.csv) records the
+byte-identical build, RTL, and model ELF checks. The remaining four rebuilt
+GPU STREAM RTL cases are running sequentially.
 
 For the small equal-count composition case, fused GS and the materialized
 two-stage chain have the same output digest. The model reports 3,189 and
