@@ -34,6 +34,7 @@ RESULT_TABLES = (
     ("spatter-current", "spatter/evaluation/current-build-smoke-results.csv", "model", "rtl-single"),
     ("stream-current", "stream/evaluation/current-build-smoke-results.csv", "model", "rtl"),
     ("spatter-current", "spatter/evaluation/app-trace-smoke-results.csv", "model", "rtl"),
+    ("spatter-current", "spatter/evaluation/composition-ordered-pair.csv", "model", "rtl"),
     ("spatter-current", "spatter/evaluation/composition-model-results.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/current-build-memory.csv", "model", "model"),
     ("stream-current", "stream/evaluation/current-build-memory.csv", "model", "model"),

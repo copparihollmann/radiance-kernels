@@ -31,16 +31,19 @@ materializes its output before the next stage reads it. The unit check compares
 a Gather -> Scatter chain with its fused GS equivalent. `run_chain.py` builds
 one ELF with a materialized dense intermediate, two Muon schedules, and a
 barrier between stages. It accepts different stage counts when their
-intermediate lengths match and Scatter destinations do not overlap:
+intermediate lengths match. Repeated Scatter destinations require the
+`ordered` policy, which assigns each destination to one lane:
 
 ```sh
 python3 run_chain.py composition-smoke.json 2 composition-smoke.json 1 \
   --out runs/materialized-chain
+python3 run_chain.py composition-ordered.json 0 composition-ordered.json 1 \
+  --out runs/materialized-chain-ordered
 ```
 
-General chains of arbitrary Spatter families remain to be mapped. Repeated
-Scatter destinations require the separate ordered collision policy or
-atomic operations for deterministic results.
+General chains of arbitrary Spatter families remain to be mapped. Ordered
+Scatter serializes conflicting writes within each destination and has
+different performance from an atomic Scatter implementation.
 
 For a Gather followed by Scatter with matching count, pattern length, and
 `wrap`, `tools/spatter-compose.py` bypasses the dense intermediate and emits a

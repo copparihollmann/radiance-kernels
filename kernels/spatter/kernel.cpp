@@ -41,24 +41,43 @@ static void gather_stage(void*, uint32_t tid, uint32_t threads_per_block,
   }
 }
 
+static inline void scatter_chain_task(uint32_t task, uint32_t owned_destination) {
+  constexpr uint32_t length = SPATTER_SCATTER_LENGTH;
+  const uint32_t i = task / length;
+  const uint32_t j = task - i * length;
+#if SPATTER_CHAIN_ORDERED_COLLISIONS
+  const uint32_t dst = owned_destination;
+#else
+  const uint32_t dst = spatter::affine_index(
+      spatter::pattern_index(spatter_pattern_scatter, j),
+      SPATTER_SCATTER_DELTA, i);
+#endif
+  const uint32_t src = spatter::dense_index(
+      j, length, i, SPATTER_SCATTER_WRAP);
+  spatter::copy_value(spatter_sparse_scatter, dst, spatter_dense, src);
+}
+
 static void scatter_stage(void*, uint32_t tid, uint32_t threads_per_block,
                           uint32_t block_id) {
   const uint32_t global_tid = block_id * threads_per_block + tid;
   const uint32_t global_threads = MU_NUM_CLUSTERS * threads_per_block;
-  constexpr uint32_t length = SPATTER_SCATTER_LENGTH;
-  constexpr uint32_t tasks = length * SPATTER_SCATTER_COUNT;
+#if SPATTER_CHAIN_ORDERED_COLLISIONS
+  for (uint32_t owner = global_tid; owner < SPATTER_OUTPUT_LENGTH;) {
+    const uint32_t end = spatter_group_offsets[owner + 1u];
+    for (uint32_t k = spatter_group_offsets[owner]; k < end; ++k) {
+      scatter_chain_task(spatter_group_tasks[k], owner);
+    }
+    if (SPATTER_OUTPUT_LENGTH - owner <= global_threads) break;
+    owner += global_threads;
+  }
+#else
+  constexpr uint32_t tasks = SPATTER_SCATTER_LENGTH * SPATTER_SCATTER_COUNT;
   for (uint32_t task = global_tid; task < tasks;) {
-    const uint32_t i = task / length;
-    const uint32_t j = task - i * length;
-    const uint32_t dst = spatter::affine_index(
-        spatter::pattern_index(spatter_pattern_scatter, j),
-        SPATTER_SCATTER_DELTA, i);
-    const uint32_t src = spatter::dense_index(
-        j, length, i, SPATTER_SCATTER_WRAP);
-    spatter::copy_value(spatter_sparse_scatter, dst, spatter_dense, src);
+    scatter_chain_task(task, 0);
     if (tasks - task <= global_threads) break;
     task += global_threads;
   }
+#endif
 }
 
 int main() {

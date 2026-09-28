@@ -12,7 +12,8 @@ import shutil
 import subprocess
 
 from run import (GENERATED, ROOT, destination, fnv, normalize, payload,
-                 source_hash, source_index, write_source, write_u32)
+                 source_hash, source_index, write_destination_groups,
+                 write_source, write_u32)
 
 
 def selected(path: Path, index: int) -> dict:
@@ -30,17 +31,20 @@ def gather_slot(gather: dict, slot: int) -> int:
     return payload(gather["payload_tag"], source_index(gather, last, j))
 
 
-def expected_output(gather: dict, scatter: dict) -> array:
+def expected_output(gather: dict, scatter: dict) -> tuple[array, bool]:
     output = array("Q", [0]) * scatter["dst_length"]
     seen = bytearray(scatter["dst_length"])
+    overlap = False
     for i in range(scatter["count"]):
         for j in range(scatter["length"]):
             dst = destination(scatter, i, j)
             if seen[dst]:
-                raise ValueError("chain Scatter destinations overlap; use a non-overlapping case")
+                overlap = True
+                if scatter["collision_policy"] != "ordered":
+                    raise ValueError("chain Scatter destinations overlap; use ordered collision policy")
             seen[dst] = 1
             output[dst] = gather_slot(gather, source_index(scatter, i, j))
-    return output
+    return output, overlap
 
 
 def prepare(gather: dict, scatter: dict, suites: tuple[Path, Path],
@@ -49,19 +53,26 @@ def prepare(gather: dict, scatter: dict, suites: tuple[Path, Path],
         raise ValueError("chain needs Gather followed by Scatter")
     if gather["dst_length"] != scatter["src_length"]:
         raise ValueError("chain intermediate length does not match Scatter input")
-    embedded = (gather["src_length"] + gather["dst_length"] +
-                scatter["dst_length"]) * 8 + 4 * (len(gather["pattern"]) +
-                len(scatter["pattern"]))
+    ordered = scatter["collision_policy"] == "ordered"
+    schedule_words = (scatter["dst_length"] + 1 + scatter["count"] *
+                      scatter["length"] if ordered else 2)
+    embedded = ((gather["src_length"] + gather["dst_length"] +
+                 scatter["dst_length"]) * 8 +
+                4 * (len(gather["pattern"]) + len(scatter["pattern"]) +
+                     schedule_words))
     if embedded + 0x100000 > 0x70000000:
         raise ValueError("chain source, intermediate, and output exceed GPU DRAM window")
     GENERATED.mkdir(exist_ok=True)
     write_u32(GENERATED / "pattern.bin", [])
     write_u32(GENERATED / "pattern_gather.bin", gather["pattern"])
     write_u32(GENERATED / "pattern_scatter.bin", scatter["pattern"])
-    write_u32(GENERATED / "group_offsets.bin", [])
-    write_u32(GENERATED / "group_tasks.bin", [])
+    if ordered:
+        write_destination_groups(scatter)
+    else:
+        write_u32(GENERATED / "group_offsets.bin", [])
+        write_u32(GENERATED / "group_tasks.bin", [])
     write_source(GENERATED / "source.bin", gather["src_length"], gather["payload_tag"])
-    output = expected_output(gather, scatter)
+    output, overlap = expected_output(gather, scatter)
     expected = fnv(output)
     samples = min(64, len(output)) if len(output) > 1024 else 0
     positions = [i * (len(output) - 1) // (samples - 1) for i in range(samples)] if samples else []
@@ -76,6 +87,7 @@ def prepare(gather: dict, scatter: dict, suites: tuple[Path, Path],
         f"#define SPATTER_SCATTER_COUNT {scatter['count']}u",
         f"#define SPATTER_SCATTER_WRAP {scatter['wrap']}u",
         f"#define SPATTER_SCATTER_DELTA {scatter['delta']}u",
+        f"#define SPATTER_CHAIN_ORDERED_COLLISIONS {int(ordered)}",
         f"#define SPATTER_OUTPUT_LENGTH {scatter['dst_length']}u",
         f"#define SPATTER_EXPECTED_DIGEST 0x{expected:016x}ULL",
         f"#define SPATTER_READBACK_SAMPLES {samples}u",
@@ -90,6 +102,10 @@ def prepare(gather: dict, scatter: dict, suites: tuple[Path, Path],
         '.incbin "generated/pattern_gather.bin"',
         '.balign 64', '.globl spatter_pattern_scatter', 'spatter_pattern_scatter:',
         '.incbin "generated/pattern_scatter.bin"',
+        '.balign 64', '.globl spatter_group_offsets', 'spatter_group_offsets:',
+        '.incbin "generated/group_offsets.bin"',
+        '.balign 64', '.globl spatter_group_tasks', 'spatter_group_tasks:',
+        '.incbin "generated/group_tasks.bin"',
         '.balign 64', '.globl spatter_sparse_gather', 'spatter_sparse_gather:',
         '.incbin "generated/source.bin"',
         '.balign 64', '.globl spatter_dense', 'spatter_dense:',
@@ -118,8 +134,8 @@ def prepare(gather: dict, scatter: dict, suites: tuple[Path, Path],
                                         scatter["count"] * scatter["length"]),
         "expected_digest": f"{expected:016x}",
         "expected_sample_digest": f"{expected_sample:016x}" if samples else None,
-        "readback_samples": samples, "destination_overlap": False,
-        "collision_policy": "parallel",
+        "readback_samples": samples, "destination_overlap": overlap,
+        "collision_policy": scatter["collision_policy"],
         "address_plan": {"stages": [gather["_plan"].as_dict(),
                                       scatter["_plan"].as_dict()],
                          "intermediate": "spatter_dense", "barrier": True},

@@ -108,6 +108,20 @@ materialized chain, versus 3,189 cycles and 24,448 bytes for the fused case.
 These are tiny correctness probes, not a scalable throughput comparison.
 Cases 2→1 also execute as a materialized chain even though their stage counts
 differ; that run passes in 4,769 model cycles and 13,716 full SoC RTL cycles.
+A second materialized chain, from `composition-ordered.json` cases 0→1,
+passes complete output digest `546ebd1e8889cdb4` with repeated Scatter
+destinations. Its destination-owner schedule preserves serial write order. The
+timing model reports 5,890 cycles and 49,344 issued global-memory bytes; the
+full SoC Verilator run passes the same digest in 14,134 GPU cycles. The
+[paired record](composition-ordered-pair.csv) was generated after the ELF
+hashes matched across build, model, and RTL runs.
+This is a software conflict schedule rather than an atomic Scatter mapping.
+Fusing the same two stages into one ordered GS kernel preserves digest
+`546ebd1e8889cdb4`. The fused timing model uses 4,752 cycles and 25,600
+issued global-memory bytes versus 5,890 cycles and 49,344 bytes for the
+materialized chain. The full SoC RTL reports 9,649 fused cycles versus 14,134
+for the chain. The fused kernel performs one transfer per task (96
+logical bytes), while the chain performs both stages (192 logical bytes).
 [Composition cycles](composition-model-results.csv) and
 [memory counters](composition-memory.csv) retain the exact measurements.
 

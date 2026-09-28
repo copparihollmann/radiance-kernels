@@ -103,8 +103,22 @@ class SpatterMappingTest(unittest.TestCase):
                              "count": 2, "wrap": 2, "delta": 5})
         source = [payload(gather["payload_tag"], i)
                   for i in range(gather["src_length"])]
-        self.assertEqual(list(expected_output(gather, scatter)),
+        self.assertEqual(list(expected_output(gather, scatter)[0]),
                          stitch_reference([gather, scatter], source))
+
+    def test_materialized_chain_with_ordered_scatter(self):
+        gather = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
+                            "count": 2, "wrap": 2, "delta": 5})
+        scatter_raw = {"kernel": "Scatter", "pattern": [0, 0, 1],
+                       "count": 2, "wrap": 2, "delta": 0}
+        ordered = normalize({**scatter_raw, "collision-policy": "ordered"})
+        source = [payload(gather["payload_tag"], i)
+                  for i in range(gather["src_length"])]
+        output, overlap = expected_output(gather, ordered)
+        self.assertTrue(overlap)
+        self.assertEqual(list(output), stitch_reference([gather, ordered], source))
+        with self.assertRaisesRegex(ValueError, "ordered collision policy"):
+            expected_output(gather, normalize(scatter_raw))
 
     def test_pattern_generators(self):
         self.assertEqual(parse_pattern("UNIFORM:4:3:NR", 8), ([0, 3, 6, 9], 12))

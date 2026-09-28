@@ -10,21 +10,21 @@ logs, and model counter summaries, along with both CSV inventories.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
 
-The current snapshot indexes 127 run records and 535 files across seven
-roots. It preserves 408 non-ELF files in the metadata archive. The 127 ELFs
-total 1,513,397,448 bytes; they remain in the run roots and have local
+The current snapshot indexes 133 run records and 560 files across seven
+roots. It preserves 427 non-ELF files in the metadata archive. The 133 ELFs
+total 1,513,616,136 bytes; they remain in the run roots and have local
 hardlinks under the ignored `elf-snapshot/` directory. The hardlinks preserve
 the binaries if a run directory is removed without copying the data blocks.
 Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
-against all 408 recorded file hashes.
-The generator also checked 66 rows in the current-build cycle and memory
+against all 427 recorded file hashes.
+The generator also checked 74 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
 `verify_report.py` checks the 14 workload rows in `WORKLOAD_RESULTS.md`
 against the model cycle and memory tables, including the exploratory status
 of parallel xRAGE9 Scatter.
-The dependency snapshot covers 17 input/simulator path records (14 distinct
+The dependency snapshot covers 19 input/simulator path records (16 distinct
 contents). It includes the 517,377,170-byte xRAGE input deck and the four
 referenced simulator binaries. Hardlinks avoid copying data where permitted;
 the sandbox required a verified local copy of the xRAGE deck. These snapshots

@@ -79,6 +79,16 @@ two-stage chain have the same output digest. The model reports 3,189 and
 4,839 cycles respectively; the chain also moves more data. The
 [composition table](spatter/evaluation/composition-model-results.csv) records
 the exact cycle and payload figures.
+An additional materialized Gather→ordered Scatter chain passes a complete
+output digest with repeated destinations on identical model and full SoC RTL
+ELFs. It takes 5,890 model cycles and 14,134 RTL GPU cycles, and issues
+49,344 model global-memory bytes for 192 logical payload bytes. The
+[paired result](spatter/evaluation/composition-ordered-pair.csv) records the
+exact check. These are small composition checks, not atomic Scatter throughput.
+Fusing those same two stages as ordered GS preserves the digest in 4,752 model
+cycles and 9,649 RTL GPU cycles, with 25,600 issued model global-memory bytes.
+The fused kernel moves 96 logical payload bytes; the materialized chain moves
+192.
 
 The [standard-suite audit](spatter/evaluation/standard-suite-coverage.csv)
 finds 38 of 114 upstream configurations fit the current GPU address window
