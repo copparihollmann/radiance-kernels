@@ -19,6 +19,8 @@ Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
 against all 473 recorded file hashes.
+`verify_artifact_snapshot.py` repeats that check and verifies the ELF and
+dependency snapshots, the run JSON records, and input/simulator references.
 The generator also checked 96 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
 `verify_report.py` checks the 14 workload rows in `WORKLOAD_RESULTS.md`
@@ -54,12 +56,22 @@ python3 kernels/evaluation/make_inventory.py --workspace /path/to/chipyard
 python3 kernels/evaluation/snapshot_elfs.py --workspace /path/to/chipyard
 python3 kernels/evaluation/snapshot_dependencies.py
 python3 kernels/evaluation/verify_report.py
+python3 kernels/evaluation/verify_artifact_snapshot.py
 ```
 
 The archive is a compact raw-record snapshot, not a replacement for the
-1.5 GB of local ELF binaries, input decks, or simulator binaries. The binary
-snapshots are local and are not committed to Git; their CSV indexes are
-committed. The run index records
+1,858,172,776 bytes of ELF binaries or the input and simulator binaries.
+These large snapshots are local and are not committed to Git; their CSV indexes are
+committed. **Keep `elf-snapshot/` and `dependency-snapshot/` with this checkout
+when preserving results for a paper. Git alone cannot restore the large ELF,
+xRAGE input, and simulator binaries.** The hardlinks under `elf-snapshot/` also
+share storage with the run roots, so deleting both removes the binaries.
+The archive and manifests are a point-in-time capture while some runs are
+active. Refresh them after those runs finish, then rerun both verifiers before
+extracting final numbers. A `running`, `built`, or `interrupted` record is
+never a completed performance measurement.
+
+The run index records
 each ELF hash, input path and hash, source hash, simulator path and hash, and
 the checker and timing-config hashes where available. These let a later
 report distinguish current-branch measurements, older builds, complete
