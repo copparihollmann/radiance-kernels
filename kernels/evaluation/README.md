@@ -21,6 +21,9 @@ matched when this snapshot was generated. The archive's contents were checked
 against all 408 recorded file hashes.
 The generator also checked 66 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
+`verify_report.py` checks the 14 workload rows in `WORKLOAD_RESULTS.md`
+against the model cycle and memory tables, including the exploratory status
+of parallel xRAGE9 Scatter.
 The dependency snapshot covers 17 input/simulator path records (14 distinct
 contents). It includes the 517,377,170-byte xRAGE input deck and the four
 referenced simulator binaries. Hardlinks avoid copying data where permitted;
@@ -50,6 +53,7 @@ complete:
 python3 kernels/evaluation/make_inventory.py --workspace /path/to/chipyard
 python3 kernels/evaluation/snapshot_elfs.py --workspace /path/to/chipyard
 python3 kernels/evaluation/snapshot_dependencies.py
+python3 kernels/evaluation/verify_report.py
 ```
 
 The archive is a compact raw-record snapshot, not a replacement for the
