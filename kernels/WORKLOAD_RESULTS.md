@@ -114,13 +114,15 @@ with a complete output digest. Rebuilt GS passed its sampled host check in
 2,158,179 RTL GPU cycles, versus 2,038,053 timing-model cycles with a complete
 output digest. Rebuilt MultiGather passed a complete host digest in 945,962
 RTL GPU cycles; its identical-ELF model run passed the same digest in
-1,999,593 cycles. The
+1,999,593 cycles. Rebuilt MultiScatter passed its sampled host check in
+1,360,268 RTL GPU cycles; its identical-ELF model run passed a complete
+output digest in 1,046,089 cycles. The
 [paired table](spatter/evaluation/current-build-results.csv) records the
-byte-identical build, RTL, and model ELF checks. MultiScatter is the remaining
-full-size GPU STREAM Spatter RTL case and is running on the 16-thread Verilator
-binary. The earlier partial attempt is retained as interrupted.
-Full-size STREAM Copy is running on the 8-thread Verilator binary; Scale, Add,
-and Triad are queued behind it. Their earlier partial attempts are retained as
+byte-identical build, RTL, and model ELF checks for all five full-size GPU
+STREAM Spatter cases. The earlier partial MultiScatter attempt is retained as
+interrupted. Full-size STREAM Copy is running on the 8-thread Verilator binary
+and Scale on the 16-thread binary; Add and Triad are queued. Their earlier
+partial attempts are retained as
 interrupted. The
 [paired table](stream/evaluation/current-build-results.csv) has no
 result rows until the first case completes.

@@ -299,10 +299,10 @@ spatter-current,rtl/rebuild-gpu-stream-2/kernel.soc.elf,rtl/rebuild-gpu-stream-2
 spatter-current,rtl/rebuild-gpu-stream-2/result.json,rtl/rebuild-gpu-stream-2,passed,1858,c0c5dc6102c021e3b48a000c8a7683df906552f7b025b0f23f4af3762fd79df1,false,true
 spatter-current,rtl/rebuild-gpu-stream-2/trace_monitor_rockettile_0.encoded.trace,rtl/rebuild-gpu-stream-2,passed,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
 spatter-current,rtl/rebuild-gpu-stream-2/verilator.log,rtl/rebuild-gpu-stream-2,passed,31416,31add3c9a25f5a439073d0a9c1f640cfe6c972f7b7885669b624aeb48bb11159,false,true
-spatter-current,rtl/rebuild-gpu-stream-3/kernel.soc.elf,rtl/rebuild-gpu-stream-3,running,40544,443812af97be71d5d45b3f5adf2cc8661f3e5d3f73f186000b9edbb5f9b430f6,false,false
-spatter-current,rtl/rebuild-gpu-stream-3/result.json,rtl/rebuild-gpu-stream-3,running,1807,6714e40b9e180ceaebff62f0430a80f94ac76a52a123da348e1e4f6d00b0a8ac,false,true
-spatter-current,rtl/rebuild-gpu-stream-3/trace_monitor_rockettile_0.encoded.trace,rtl/rebuild-gpu-stream-3,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
-spatter-current,rtl/rebuild-gpu-stream-3/verilator.log,rtl/rebuild-gpu-stream-3,running,2297,1bc405544b01f1f94c9b2ca2ecaaa75f99db43d6943fb9dc9558ac8bdbdafe99,false,true
+spatter-current,rtl/rebuild-gpu-stream-3/kernel.soc.elf,rtl/rebuild-gpu-stream-3,passed,40544,443812af97be71d5d45b3f5adf2cc8661f3e5d3f73f186000b9edbb5f9b430f6,false,false
+spatter-current,rtl/rebuild-gpu-stream-3/result.json,rtl/rebuild-gpu-stream-3,passed,1870,928c5ac20bde4300a8a421ae17ff8a949ec9a078501befb794d9046f4a0cb9c2,false,true
+spatter-current,rtl/rebuild-gpu-stream-3/trace_monitor_rockettile_0.encoded.trace,rtl/rebuild-gpu-stream-3,passed,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
+spatter-current,rtl/rebuild-gpu-stream-3/verilator.log,rtl/rebuild-gpu-stream-3,passed,31416,ef7e783b0e8e3c193fcd90ee2760017f707a963546ea3c71d28b045700fc2973,false,true
 spatter-current,rtl/rebuild-gpu-stream-4/kernel.soc.elf,rtl/rebuild-gpu-stream-4,passed,2133600,dee6b7bb4f245024b1399c26a61435815fa759afabaf24c619ebe90a5525926e,false,false
 spatter-current,rtl/rebuild-gpu-stream-4/result.json,rtl/rebuild-gpu-stream-4,passed,1835,a372960a016805a274215843c553937068686d45d828f08187ab3145b44be453,false,true
 spatter-current,rtl/rebuild-gpu-stream-4/trace_monitor_rockettile_0.encoded.trace,rtl/rebuild-gpu-stream-4,passed,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
@@ -466,7 +466,11 @@ stream-current,rtl/triad-256/verilator.log,rtl/triad-256,passed,5014,8100adebbec
 stream-current,rtl-full/copy-1048576/kernel.soc.elf,rtl-full/copy-1048576,running,8425056,f94cd8f10b5641151439d304097488043215d964deb36d78a6307cdfe387160c,false,false
 stream-current,rtl-full/copy-1048576/result.json,rtl-full/copy-1048576,running,1135,ed34b20503dfb9169bb8a30c3443baa96696b0653e6e1f70166a6762ca59a5dc,false,true
 stream-current,rtl-full/copy-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full/copy-1048576,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
-stream-current,rtl-full/copy-1048576/verilator.log,rtl-full/copy-1048576,running,2293,785da26eecd52f3c622081fc152303c09c5326a3ea5d8e74ff71a0729c664e73,false,true
+stream-current,rtl-full/copy-1048576/verilator.log,rtl-full/copy-1048576,running,10894,0ab27dbbaa61ec72fe3fec03924924874ddbb936fb43cc1902a0ca6a55e4ace9,false,true
+stream-current,rtl-full/scale-1048576/kernel.soc.elf,rtl-full/scale-1048576,running,8425056,0bc6aff29812600b308a2c4a190fce80b2580e8de538248a4b49f16e6cfa0113,false,false
+stream-current,rtl-full/scale-1048576/result.json,rtl-full/scale-1048576,running,1141,8f5221206a8fe68dab6424e0b8b7ad513dbff3ecfe46c9b2ed1c40f5f75591af,false,true
+stream-current,rtl-full/scale-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full/scale-1048576,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
+stream-current,rtl-full/scale-1048576/verilator.log,rtl-full/scale-1048576,running,3056,f0d87e6e08080423325bb5483de61e945b001e4f120d9201e8746a6ec6f14389,false,true
 stream-current,rtl-full-lost-session-20260929/add-1048576/kernel.soc.elf,rtl-full-lost-session-20260929/add-1048576,interrupted,8425056,ec998349f9f16e80cb02d633453e5efeaf769cde9ccb4b88dd21fc3f67a84996,false,false
 stream-current,rtl-full-lost-session-20260929/add-1048576/result-at-interruption.json,rtl-full-lost-session-20260929/add-1048576,interrupted,1118,03be4c0c5553329fe04a4560f581f72b83c076117c736ef3b2cc93f319438a83,false,true
 stream-current,rtl-full-lost-session-20260929/add-1048576/result.json,rtl-full-lost-session-20260929/add-1048576,interrupted,1301,c3a85b34acddae2794e1cf1eb8d6fc48c75c00b7f29d1224f3e0381635cb339a,false,true

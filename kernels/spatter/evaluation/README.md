@@ -94,8 +94,10 @@ paired Cyclotron run checked the complete output digest in 2,038,053 cycles,
 and the build, RTL, and model ELFs have the same SHA-256. Rebuilt MultiGather
 passed a full RV64 host output digest in 945,962 Verilator GPU cycles, and its
 identical-ELF Cyclotron run passed the same complete digest in 1,999,593
-cycles. MultiScatter is being rerun on the 16-thread Verilator binary. Its
-earlier partial attempt is retained as interrupted under
+cycles. Rebuilt MultiScatter passed its RV64 host sample and guard check in
+1,360,268 GPU cycles on the 16-thread Verilator binary; its identical-ELF
+Cyclotron run passed the complete output digest in 1,046,089 model cycles.
+The earlier partial RTL attempt is retained as interrupted under
 `../runs/rtl-lost-session-20260929/`.
 The corresponding ELF load comparisons show compatible initialized segments
 for original-size xRAGE5, ordered xRAGE9, and both LULESH patterns. Parallel
