@@ -120,8 +120,9 @@ output digest in 1,046,089 cycles. The
 [paired table](spatter/evaluation/current-build-results.csv) records the
 byte-identical build, RTL, and model ELF checks for all five full-size GPU
 STREAM Spatter cases. The earlier partial MultiScatter attempt is retained as
-interrupted. Full-size STREAM Copy is running on the 8-thread Verilator binary
-and Scale on the 16-thread binary; Add and Triad are queued. Their earlier
+interrupted. Full-size STREAM Copy is running on the 8-thread Verilator binary;
+Scale and Triad are running on the 16-thread binary, with Add queued. Their
+earlier
 partial attempts are retained as
 interrupted. The
 [paired table](stream/evaluation/current-build-results.csv) has no
