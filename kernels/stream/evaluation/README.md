@@ -31,8 +31,7 @@ ELF hashes, checks, and exact cycle values are in
 
 The four original-size full SoC Verilator cases use separate directories under
 `../runs/rtl-full/`. Scale is active on the 16-thread simulator and Copy on the
-8-thread simulator; Add is also active on the 8-thread simulator, and Triad is
-queued. The earlier partial attempts
+8-thread simulator; Add and Triad are queued. The earlier partial attempts
 are archived under `../runs/rtl-full-lost-session-20260929/` with interrupted
 status. The
 later Triad attempt was stopped during host CPU saturation and is retained
@@ -40,8 +39,8 @@ under `../runs/rtl-full-interrupted-load-20260929/` without a cycle result.
 An 8-thread Copy attempt was stopped to switch to the verified 16-thread
 simulator; its partial files remain under
 `../runs/rtl-full-interrupted-switch-20260929/` without a cycle result.
-The concurrent 16-thread Copy restart was stopped when host CPU pressure
-rose; its partial files remain under
+Later Copy and Add attempts were stopped when host CPU pressure rose;
+their partial files remain under
 `../runs/rtl-full-interrupted-overload-20260929/` without a cycle result.
 The [paired table](current-build-results.csv) has no
 result rows until the first run completes. As each run completes, validate it

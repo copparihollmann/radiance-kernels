@@ -463,14 +463,10 @@ stream-current,rtl/triad-256/kernel.soc.elf,rtl/triad-256,passed,36448,ca8d2b405
 stream-current,rtl/triad-256/result.json,rtl/triad-256,passed,1146,cf81b3ddef6cac5eb4da951872cc32bfff8a9d574156b639ff418020e56dee91,false,true
 stream-current,rtl/triad-256/trace_monitor_rockettile_0.encoded.trace,rtl/triad-256,passed,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
 stream-current,rtl/triad-256/verilator.log,rtl/triad-256,passed,5014,8100adebbecb8f36bd518abd08a37971ea1d453624f191dac155bf2811d9e3a2,false,true
-stream-current,rtl-full/add-1048576/kernel.soc.elf,rtl-full/add-1048576,running,8425056,ec998349f9f16e80cb02d633453e5efeaf769cde9ccb4b88dd21fc3f67a84996,false,false
-stream-current,rtl-full/add-1048576/result.json,rtl-full/add-1048576,running,1133,689ef8e75751a7d6f3e1c43318f8a7850b64c313c1c812951d93c8ba2a1b8c58,false,true
-stream-current,rtl-full/add-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full/add-1048576,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
-stream-current,rtl-full/add-1048576/verilator.log,rtl-full/add-1048576,running,2638,01572325a8806c272cb27c9f0233fae31168aa03716dc16152dc545ceea5924c,false,true
 stream-current,rtl-full/copy-1048576/kernel.soc.elf,rtl-full/copy-1048576,running,8425056,f94cd8f10b5641151439d304097488043215d964deb36d78a6307cdfe387160c,false,false
 stream-current,rtl-full/copy-1048576/result.json,rtl-full/copy-1048576,running,1135,ed34b20503dfb9169bb8a30c3443baa96696b0653e6e1f70166a6762ca59a5dc,false,true
 stream-current,rtl-full/copy-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full/copy-1048576,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
-stream-current,rtl-full/copy-1048576/verilator.log,rtl-full/copy-1048576,running,4322,1de3ee9478f4e53e79e36c72e40ccadd21a54b2fad8ca6c135b7a9104a3df9da,false,true
+stream-current,rtl-full/copy-1048576/verilator.log,rtl-full/copy-1048576,running,4481,8ba3724338ffca445c06d36feb0d5b649c6d173f23ce01e6d592331d1d704b46,false,true
 stream-current,rtl-full/scale-1048576/kernel.soc.elf,rtl-full/scale-1048576,running,8425056,0bc6aff29812600b308a2c4a190fce80b2580e8de538248a4b49f16e6cfa0113,false,false
 stream-current,rtl-full/scale-1048576/result.json,rtl-full/scale-1048576,running,1141,8f5221206a8fe68dab6424e0b8b7ad513dbff3ecfe46c9b2ed1c40f5f75591af,false,true
 stream-current,rtl-full/scale-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full/scale-1048576,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
@@ -480,6 +476,11 @@ stream-current,rtl-full-interrupted-load-20260929/triad-1048576/result-at-interr
 stream-current,rtl-full-interrupted-load-20260929/triad-1048576/result.json,rtl-full-interrupted-load-20260929/triad-1048576,interrupted,1306,d05e9e9f8217ab04428b90e44a8eae3b1fc7ddc204568a6fa41fab44f8ba5c3b,false,true
 stream-current,rtl-full-interrupted-load-20260929/triad-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full-interrupted-load-20260929/triad-1048576,interrupted,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
 stream-current,rtl-full-interrupted-load-20260929/triad-1048576/verilator.log,rtl-full-interrupted-load-20260929/triad-1048576,interrupted,2294,72481e09ba271cdcb5c7ee5e9ab87c86491da650f4bb14602cdc3eae799c2e60,false,true
+stream-current,rtl-full-interrupted-overload-20260929/add-1048576/kernel.soc.elf,rtl-full-interrupted-overload-20260929/add-1048576,interrupted,8425056,ec998349f9f16e80cb02d633453e5efeaf769cde9ccb4b88dd21fc3f67a84996,false,false
+stream-current,rtl-full-interrupted-overload-20260929/add-1048576/result-at-interruption.json,rtl-full-interrupted-overload-20260929/add-1048576,interrupted,1133,689ef8e75751a7d6f3e1c43318f8a7850b64c313c1c812951d93c8ba2a1b8c58,false,true
+stream-current,rtl-full-interrupted-overload-20260929/add-1048576/result.json,rtl-full-interrupted-overload-20260929/add-1048576,interrupted,1328,032e4a71ce035fffad9d47f0417cda80aac335a45500ec02c6b93c403990f992,false,true
+stream-current,rtl-full-interrupted-overload-20260929/add-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full-interrupted-overload-20260929/add-1048576,interrupted,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
+stream-current,rtl-full-interrupted-overload-20260929/add-1048576/verilator.log,rtl-full-interrupted-overload-20260929/add-1048576,interrupted,2690,ce523ad44a78008f607545664b1b06f337f93e75704ae96c62eeda52aa152e07,false,true
 stream-current,rtl-full-interrupted-overload-20260929/copy-1048576/kernel.soc.elf,rtl-full-interrupted-overload-20260929/copy-1048576,interrupted,8425056,f94cd8f10b5641151439d304097488043215d964deb36d78a6307cdfe387160c,false,false
 stream-current,rtl-full-interrupted-overload-20260929/copy-1048576/result-at-interruption.json,rtl-full-interrupted-overload-20260929/copy-1048576,interrupted,1138,f9d11e5d082953efb7c695b0af0e7becef10daf0450af788424a37ee576980b1,false,true
 stream-current,rtl-full-interrupted-overload-20260929/copy-1048576/result.json,rtl-full-interrupted-overload-20260929/copy-1048576,interrupted,1330,99aeb7b94078bc2b9547369471df4f3a426440d909977f08f3ad8fd18c585603,false,true
