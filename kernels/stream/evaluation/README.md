@@ -30,8 +30,11 @@ ELF hashes, checks, and exact cycle values are in
 [smoke results](current-build-smoke-results.csv).
 
 The four original-size full SoC Verilator cases use separate directories under
-`../runs/rtl-full/`. Scale is active on the 16-thread simulator and Copy on the
-8-thread simulator; Add and Triad are queued. The earlier partial attempts
+`../runs/rtl-full/`. Scale passed its RV64 host sample and guard check in
+3,971,774 GPU cycles on the 16-thread simulator. Its identical-ELF Cyclotron
+run passed the complete output digest in 4,024,544 model cycles. Copy is
+active on the 8-thread simulator and Add on the 16-thread simulator; Triad is
+queued. The earlier partial attempts
 are archived under `../runs/rtl-full-lost-session-20260929/` with interrupted
 status. The
 later Triad attempt was stopped during host CPU saturation and is retained
@@ -42,8 +45,8 @@ simulator; its partial files remain under
 Later Copy and Add attempts were stopped when host CPU pressure rose;
 their partial files remain under
 `../runs/rtl-full-interrupted-overload-20260929/` without a cycle result.
-The [paired table](current-build-results.csv) has no
-result rows until the first run completes. As each run completes, validate it
+The [paired table](current-build-results.csv) records completed cases. As each
+run completes, validate it
 against its build ELF and the complete Cyclotron output readback, then update
 the paired table from `kernels/stream`:
 

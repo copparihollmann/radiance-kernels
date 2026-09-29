@@ -10,18 +10,18 @@ logs, and model counter summaries, along with both CSV inventories.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
 
-The current snapshot indexes 168 run records and 705 files across seven
-roots. It preserves 537 non-ELF files in the metadata archive. The 168 ELFs
+The current snapshot indexes 169 run records and 709 files across seven
+roots. It preserves 540 non-ELF files in the metadata archive. The 169 ELFs
 remain in the run roots and have local
 hardlinks under the ignored `elf-snapshot/` directory. The hardlinks preserve
 the binaries if a run directory is removed without copying the data blocks.
 Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
-against all 537 recorded file hashes.
+against all 540 recorded file hashes.
 `verify_artifact_snapshot.py` repeats that check and verifies the ELF and
 dependency snapshots, the run JSON records, and input/simulator references.
-The generator also checked 114 rows in the current-build cycle and memory
+The generator also checked 116 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
 `verify_report.py` checks the 15 workload rows in `WORKLOAD_RESULTS.md`
 against the model cycle and memory tables, then regenerates every table row
