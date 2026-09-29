@@ -85,3 +85,16 @@ manifest hashes all 118 locally retained golden files. Run
 /path/to/spatter` to verify them against the pinned upstream source. Keep
 `kernels/spatter/golden-runs/` with the ELF and dependency snapshots when
 retaining raw inputs and outputs for publication.
+
+For a portable report archive after the live simulations finish, use
+`export_report_bundle.py`. It verifies the report tables and both snapshot
+manifests, then packages the raw metadata, ELF, input, simulator, and golden
+files with Git bundles for this kernel branch and the pinned original Spatter
+source. It refuses to label an archive complete while any run is still
+`running`; `--draft` creates an explicitly provisional copy. The resulting
+archive stays local and is not pushed:
+
+```sh
+python3 kernels/evaluation/export_report_bundle.py \
+  --upstream /path/to/spatter --output /path/to/report-bundle.tar.gz
+```
