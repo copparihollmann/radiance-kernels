@@ -9,6 +9,10 @@ model uses Chipyard `d45f86f4cca379715ac0ceb3a9f2369927796794`, Radiance
 `9b774a53a882df4a655c04b5aa662ae8a01d5f47`.
 VCS runtime currently queues for a license on this machine, so current-build
 RTL runs use the built Verilator 5.022 model. No FPGA bitstream is available.
+No Verilog or Scala logic file was edited for these runs. The local Radiance
+checkout has three submodule/resource link type changes for its build and a
+Cyclotron Rust DPI change that suppresses large instruction traces; the
+kernel and evaluation changes are in this `radiance-kernels` branch.
 
 ## Independent upstream correctness oracle
 
