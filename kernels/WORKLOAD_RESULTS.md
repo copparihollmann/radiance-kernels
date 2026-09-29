@@ -78,7 +78,10 @@ payload counts reads and writes required by each kernel. Model global-memory
 bytes include index traffic, cache lines, and transaction granularity.
 The [consolidated result CSV](evaluation/workload-results.csv) puts all 14
 rows, normalized bytes per model cycle, correctness status, output digest,
-and input/source/ELF/timing/checker hashes in one machine-readable table. Regenerate it
+modeled global load and store queue issue counts, and
+input/source/ELF/timing/checker hashes in one machine-readable table. The load
+and store counts come from the GPU LSU and describe the whole recorded run;
+they are not separate DRAM read and write byte measurements. Regenerate it
 with `python3 kernels/evaluation/verify_report.py --write-csv` from the
 repository root; the normal verifier checks it against the raw model runs.
 

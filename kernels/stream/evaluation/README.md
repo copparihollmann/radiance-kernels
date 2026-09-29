@@ -17,8 +17,11 @@ results; no GPU clock or calibrated HBM bandwidth is available.
 [Model results](current-build-model-results.csv) and
 [memory counters](current-build-memory.csv) retain the exact values. Logical
 payload counts source reads and destination writes. Model memory bytes include
-cache-line and transaction effects. These results are for four independent
-ELFs; they are not a measurement of a sequential Copy→Scale→Add→Triad run.
+cache-line and transaction effects. The memory table also records GPU LSU
+global load and store queue issue counts for each recorded run; those counts
+are not separate DRAM read and write byte measurements. These results are for
+four independent ELFs; they are not a measurement of a sequential
+Copy→Scale→Add→Triad run.
 
 The 256-element Copy, Scale, Add, and Triad cases all passed full-output checks
 on both the full SoC RTL simulator and Cyclotron using identical ELFs. Their

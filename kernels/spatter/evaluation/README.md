@@ -209,7 +209,10 @@ timing model's issued global-memory transactions and bytes, including effects
 from index reads, cache lines, and transaction granularity. For example, the
 same 4,194,304 logical payload bytes produced 8,413,440 model global-memory
 bytes for Gather and 10,509,568 for GatherScatter. These are model counters,
-not measured HBM traffic. Regenerate the current cycle and memory tables with
+not measured HBM traffic. The table also records issued global load and store
+queue requests from the GPU LSU. These directional counts cover the recorded
+run and do not split the modeled DRAM byte total by read versus write.
+Regenerate the current cycle and memory tables with
 the exact same run names:
 
 ```sh

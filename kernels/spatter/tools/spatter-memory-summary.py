@@ -12,7 +12,8 @@ import sys
 
 FIELDS = ("run", "kind", "gpu_cycles", "logical_payload_bytes",
           "model_gmem_bytes_issued", "model_gmem_transactions",
-          "model_gmem_bytes_per_cycle", "l0_accesses", "l0_hits",
+          "model_gmem_bytes_per_cycle", "model_lsu_global_loads_issued",
+          "model_lsu_global_stores_issued", "l0_accesses", "l0_hits",
           "gmem_queue_full_rejects")
 
 
@@ -31,15 +32,23 @@ def row_for(path: Path) -> dict:
         raise ValueError(f"{path}: expected one matching Cyclotron summary, found {len(matches)}")
     total = matches[0]
     gmem = total["gmem_stats"]
+    lsu = total["lsu_stats"]
     hits = total["gmem_hits"]
     cycles = result["gpu_cycles"]
     if gmem["issued"] != gmem["completed"]:
         raise ValueError(f"{path}: GPU memory transactions did not drain")
+    if (lsu["global_ldq_issued"] != lsu["global_ldq_completed"] or
+            lsu["global_stq_issued"] != lsu["global_stq_completed"] or
+            sum(lsu[f"{queue}_issued"] for queue in
+                ("global_ldq", "global_stq", "shared_ldq", "shared_stq")) != lsu["issued"]):
+        raise ValueError(f"{path}: GPU LSU queue counts are inconsistent")
     return dict(run=path.name, kind=result["kind"], gpu_cycles=cycles,
                 logical_payload_bytes=result["logical_payload_bytes"],
                 model_gmem_bytes_issued=gmem["bytes_issued"],
                 model_gmem_transactions=gmem["issued"],
                 model_gmem_bytes_per_cycle=round(gmem["bytes_issued"] / cycles, 6),
+                model_lsu_global_loads_issued=lsu["global_ldq_issued"],
+                model_lsu_global_stores_issued=lsu["global_stq_issued"],
                 l0_accesses=hits["l0_accesses"], l0_hits=hits["l0_hits"],
                 gmem_queue_full_rejects=gmem["queue_full_rejects"])
 

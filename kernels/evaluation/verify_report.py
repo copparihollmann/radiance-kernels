@@ -43,7 +43,8 @@ REPORT_FIELDS = (
     "workload", "family", "run", "simulator", "status", "correctness", "elements_or_transfers",
     "gpu_cycles", "logical_payload_bytes", "payload_bytes_per_cycle",
     "model_gmem_bytes_issued", "model_gmem_transactions",
-    "model_gmem_bytes_per_cycle", "output_digest", "expected_digest",
+    "model_gmem_bytes_per_cycle", "model_lsu_global_loads_issued",
+    "model_lsu_global_stores_issued", "output_digest", "expected_digest",
     "elf_sha256", "kernel_source_sha256", "suite_sha256",
     "timing_config_sha256", "checker_source_sha256",
 )
@@ -195,6 +196,8 @@ def report_csv(records: dict) -> str:
             "model_gmem_bytes_issued": memory["model_gmem_bytes_issued"],
             "model_gmem_transactions": memory["model_gmem_transactions"],
             "model_gmem_bytes_per_cycle": memory["model_gmem_bytes_per_cycle"],
+            "model_lsu_global_loads_issued": memory["model_lsu_global_loads_issued"],
+            "model_lsu_global_stores_issued": memory["model_lsu_global_stores_issued"],
             "output_digest": model["output_digest"],
             "expected_digest": model["expected_digest"],
             "elf_sha256": model["elf_sha256"],
