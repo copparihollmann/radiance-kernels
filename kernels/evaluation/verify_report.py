@@ -134,12 +134,10 @@ def verify_paired_rtl_tables() -> int:
     verified = 0
     for family, rtl_directory in (("spatter", "rtl"), ("stream", "rtl-full")):
         table = KERNELS / family / "evaluation/current-build-results.csv"
-        reported = []
-        if table.exists():
-            with table.open(newline="") as source:
-                reported = list(csv.DictReader(source))
-            if len(reported) % 2:
-                raise ValueError(f"{table}: incomplete RTL/model pairs")
+        with table.open(newline="") as source:
+            reported = list(csv.DictReader(source))
+        if len(reported) % 2:
+            raise ValueError(f"{table}: incomplete RTL/model pairs")
         output = io.StringIO(newline="")
         writer = csv.DictWriter(output, fieldnames=summarize.FIELDS, lineterminator="\n")
         writer.writeheader()
@@ -171,7 +169,7 @@ def verify_paired_rtl_tables() -> int:
                 completed.append(name)
         if included != completed:
             raise ValueError(f"{table}: does not cover every completed full-size RTL case")
-        if reported and table.read_text() != output.getvalue():
+        if table.read_text() != output.getvalue():
             raise ValueError(f"{table}: paired CSV differs from raw RTL/model runs")
         verified += len(included)
     return verified
