@@ -25,6 +25,9 @@ The [pattern parser audit](upstream-pattern-parser-results.csv) separately
 checks all 16 distinct generator strings in the upstream standard suite, plus
 MS1, Laplacian, and explicit-list examples. All 19 expansions and deltas
 match Spatter's parser.
+With `--upstream`, the golden verifier also regenerates
+`standard-suite-coverage.csv` from the pinned source and requires a byte-for-byte
+match.
 
 The [original-size comparison](upstream-golden-results.csv) passes all five
 GPU STREAM Spatter families, xRAGE5 Gather, ordered xRAGE9 Scatter, and two

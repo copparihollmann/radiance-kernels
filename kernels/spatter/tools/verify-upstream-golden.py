@@ -9,6 +9,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = Path(__file__).resolve().parent
@@ -62,6 +63,13 @@ def main() -> None:
         if revision != golden.UPSTREAM_REVISION:
             raise ValueError("upstream Spatter revision changed")
         source_hash = golden.upstream_source_hash(upstream)
+        audited_suite = subprocess.check_output([
+            sys.executable, str(TOOLS / "spatter-audit-suite.py"),
+            str(upstream / "standard-suite"), "--max-count", "1024",
+        ])
+        published_suite = (ROOT / "evaluation/standard-suite-coverage.csv").read_bytes()
+        if audited_suite != published_suite:
+            raise ValueError("standard-suite coverage differs from pinned upstream Spatter")
 
     seen = set()
     count = 0
@@ -95,8 +103,9 @@ def main() -> None:
                     (source_hash and row["upstream_source_sha256"] != source_hash)):
                 raise ValueError(f"golden check differs from Radiance/model: {name}")
             count += 1
+    coverage = "; pinned standard-suite coverage matched" if args.upstream else ""
     print(f"verified {count} upstream golden comparisons and "
-          f"{len(artifact_rows)} local golden artifact hashes")
+          f"{len(artifact_rows)} local golden artifact hashes{coverage}")
 
 
 if __name__ == "__main__":
