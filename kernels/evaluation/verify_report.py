@@ -55,6 +55,17 @@ RTL_CASES = {
                 "rebuild-gpu-stream-3", "rebuild-gpu-stream-4"),
     "stream": ("copy-1048576", "scale-1048576", "add-1048576", "triad-1048576"),
 }
+SMALL_RTL_TABLES = (
+    ("spatter", "current-build-smoke-results.csv", "rtl-single",
+     ("default", "smoke-1", "smoke-2", "smoke-3", "smoke-4", "smoke-5",
+      "composed", "composed-wrap", "ordered-overlap", "materialized-chain")),
+    ("stream", "current-build-smoke-results.csv", "rtl",
+     ("copy-256", "scale-256", "add-256", "triad-256")),
+    ("spatter", "app-trace-smoke-results.csv", "rtl",
+     ("lulesh-gather-smoke", "lulesh-scatter-smoke")),
+    ("spatter", "composition-ordered-pair.csv", "rtl",
+     ("materialized-chain-ordered", "composed-ordered")),
+)
 
 
 def indexed_csv(path: Path) -> dict[str, dict[str, str]]:
@@ -178,6 +189,35 @@ def verify_paired_rtl_tables() -> int:
     return verified
 
 
+def verify_small_rtl_tables() -> int:
+    """Rebuild every small paired table from the retained build, RTL, and model runs."""
+    validate = load_tool("spatter-validate.py")
+    summarize = load_tool("spatter-summarize.py")
+    verified = 0
+    for family, filename, rtl_directory, names in SMALL_RTL_TABLES:
+        root = KERNELS / family / "runs"
+        table = KERNELS / family / "evaluation" / filename
+        output = io.StringIO(newline="")
+        writer = csv.DictWriter(output, fieldnames=summarize.FIELDS,
+                                lineterminator="\n")
+        writer.writeheader()
+        for name in names:
+            rtl_path = root / rtl_directory / name
+            log = (rtl_path / "verilator.log").read_text(errors="replace")
+            cycles = [int(value) for value in re.findall(r"\bCycles:\s*(\d+)", log)]
+            result = json.loads((rtl_path / "result.json").read_text())
+            if ("Verilog $finish" not in log or "*** FAILED ***" in log or
+                    "%Error" in log or not cycles or
+                    result["gpu_cycles"] != max(cycles)):
+                raise ValueError(f"{rtl_path}: RTL log differs from reported result")
+            writer.writerows(validate.inspect_run(
+                root, root / rtl_directory, root / "model", name, summarize))
+        if table.read_text() != output.getvalue():
+            raise ValueError(f"{table}: paired CSV differs from raw RTL/model runs")
+        verified += len(names)
+    return verified
+
+
 def report_csv(records: dict) -> str:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=REPORT_FIELDS, lineterminator="\n")
@@ -256,12 +296,14 @@ def main() -> None:
         raise ValueError("the report does not cover every current full-size model run")
     verify_raw_runs(records)
     paired = verify_paired_rtl_tables()
+    small_paired = verify_small_rtl_tables()
     expected_csv = report_csv(records)
     if args.write_csv:
         REPORT_CSV.write_text(expected_csv)
     if REPORT_CSV.read_text() != expected_csv:
         raise ValueError(f"{REPORT_CSV} differs from verified model runs")
-    print(f"verified {len(found)} workload rows, {paired} paired RTL cases, and consolidated CSV")
+    print(f"verified {len(found)} workload rows, {paired} full-size and "
+          f"{small_paired} small paired RTL cases, and consolidated CSV")
 
 
 if __name__ == "__main__":

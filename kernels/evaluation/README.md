@@ -36,6 +36,10 @@ input/source/ELF/timing/checker provenance for all
 For each completed full-size RTL case, it regenerates the paired RTL/model CSV
 from the retained runs, checks the RTL log's finish signal and cycle count, and
 rejects a missing paired row.
+It also regenerates all 18 small paired RTL/model cases across the STREAM and
+Spatter smoke, LULESH app-trace, and ordered-composition tables. These checks
+verify the complete model output digest, build/RTL/model ELF hashes, and the
+RTL finish signal and cycle count against the archived logs.
 After intentional model-result changes, regenerate that table with
 `python3 kernels/evaluation/verify_report.py --write-csv`.
 The dependency snapshot covers 22 input/simulator path records (16 distinct
