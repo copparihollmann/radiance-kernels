@@ -1,3 +1,5 @@
 run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
 gpu-stream-0,Verilator 5.022,passed,digest-checked,gather,256,1024,4194304,842623,0.0:74213;0.1:74213,0.0:0.088;0.1:0.088,4.977676,2.488838,,
 gpu-stream-0,Cyclotron timing model,passed,digest-checked,gather,256,1024,4194304,1998857,,,2.098351,1.049176,,
+rebuild-gpu-stream-1,Verilator 5.022,passed,sample-checked,scatter,256,1024,4194304,1247066,0.0:221513;0.1:221513,0.0:0.178;0.1:0.180,3.363338,1.681669,,
+rebuild-gpu-stream-1,Cyclotron timing model,passed,digest-checked,scatter,256,1024,4194304,1040016,,,4.032923,2.016461,,

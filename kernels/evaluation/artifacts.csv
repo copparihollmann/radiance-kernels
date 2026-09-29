@@ -283,10 +283,14 @@ spatter-current,rtl/materialized-chain-ordered/kernel.soc.elf,rtl/materialized-c
 spatter-current,rtl/materialized-chain-ordered/result.json,rtl/materialized-chain-ordered,passed,2174,fce2ff68d7f74615c25fbcc6b2d180c1e78fe3d17484264fdb8026c21082e32c,false,true
 spatter-current,rtl/materialized-chain-ordered/trace_monitor_rockettile_0.encoded.trace,rtl/materialized-chain-ordered,passed,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
 spatter-current,rtl/materialized-chain-ordered/verilator.log,rtl/materialized-chain-ordered,passed,5036,e768a0461792ce1b44be00877498cdad10e0fe4c44e822e7a0975823fa6db63c,false,true
-spatter-current,rtl/rebuild-gpu-stream-1/kernel.soc.elf,rtl/rebuild-gpu-stream-1,running,36448,21f2751487e5e9e0f603828a86ee2a6df9b80f44dfff3d30dd15f7e0ce2229f1,false,false
-spatter-current,rtl/rebuild-gpu-stream-1/result.json,rtl/rebuild-gpu-stream-1,running,1772,4bf52e7c3a604a1e100fe79d8fda9724f718960646cf1476101adb1fd57af0b5,false,true
-spatter-current,rtl/rebuild-gpu-stream-1/trace_monitor_rockettile_0.encoded.trace,rtl/rebuild-gpu-stream-1,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
-spatter-current,rtl/rebuild-gpu-stream-1/verilator.log,rtl/rebuild-gpu-stream-1,running,8248,3e71b23d3ac972c5fc7f9b6d9d025d0a8a48308a53943e06785d30f58087ca83,false,true
+spatter-current,rtl/rebuild-gpu-stream-1/kernel.soc.elf,rtl/rebuild-gpu-stream-1,passed,36448,21f2751487e5e9e0f603828a86ee2a6df9b80f44dfff3d30dd15f7e0ce2229f1,false,false
+spatter-current,rtl/rebuild-gpu-stream-1/result.json,rtl/rebuild-gpu-stream-1,passed,1836,594171fb996d49b3be87c4ead7c2360896d51a23c06cc4315427d07140aa7da7,false,true
+spatter-current,rtl/rebuild-gpu-stream-1/trace_monitor_rockettile_0.encoded.trace,rtl/rebuild-gpu-stream-1,passed,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
+spatter-current,rtl/rebuild-gpu-stream-1/verilator.log,rtl/rebuild-gpu-stream-1,passed,28716,a78e28ffcec1ae669b25f91eba424166da36ace68155349cd51b810ceb92d2f2,false,true
+spatter-current,rtl/rebuild-gpu-stream-2/kernel.soc.elf,rtl/rebuild-gpu-stream-2,running,2133600,602d4208dc04ee58d24eff6a3566148e098f038e9261db3e0dcc03ca2d5deb45,false,false
+spatter-current,rtl/rebuild-gpu-stream-2/result.json,rtl/rebuild-gpu-stream-2,running,1794,fc80243ec5c72d6cb2e002923433a08d730573e9e28bcd9d7e3d3c28c55aee6b,false,true
+spatter-current,rtl/rebuild-gpu-stream-2/trace_monitor_rockettile_0.encoded.trace,rtl/rebuild-gpu-stream-2,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
+spatter-current,rtl/rebuild-gpu-stream-2/verilator.log,rtl/rebuild-gpu-stream-2,running,2383,f6dc5816a11c898019ec160b936aa988384dac73c801361711a451c5af6c4a41,false,true
 spatter-current,rtl-single/composed/kernel.soc.elf,rtl-single/composed,passed,36448,3b40f9d85ba2f3711d831fc9f0cf98b47ce990754787882ce28870ca6c02e86f,false,false
 spatter-current,rtl-single/composed/result.json,rtl-single/composed,passed,1719,a4da5f026270b366ec827228b169184750575dd0daed18e1f9a3327285933656,false,true
 spatter-current,rtl-single/composed/trace_monitor_rockettile_0.encoded.trace,rtl-single/composed,passed,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
@@ -433,7 +437,7 @@ stream-current,rtl/triad-256/verilator.log,rtl/triad-256,passed,5014,8100adebbec
 stream-current,rtl-full/copy-1048576/kernel.soc.elf,rtl-full/copy-1048576,running,8425056,f94cd8f10b5641151439d304097488043215d964deb36d78a6307cdfe387160c,false,false
 stream-current,rtl-full/copy-1048576/result.json,rtl-full/copy-1048576,running,1120,0407b2a726b9663e37045d96ef9c002bb66d2adb4e60d83a2cf8fe6165b63307,false,true
 stream-current,rtl-full/copy-1048576/trace_monitor_rockettile_0.encoded.trace,rtl-full/copy-1048576,running,0,e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,false,true
-stream-current,rtl-full/copy-1048576/verilator.log,rtl-full/copy-1048576,running,5064,3ced1b7ed5c2ce5ca5187a22b2146679e6d23de80d6f32cc2e69fdc40b393676,false,true
+stream-current,rtl-full/copy-1048576/verilator.log,rtl-full/copy-1048576,running,18957,4c82326cd0af5b7101722a39a1f0c52d5d770ba0eebe3e36933f4dc2080b2b36,false,true
 stream-current,scale-1048576/build.log,scale-1048576,built,30015,12566a00fbd7a3dbd8ecd1967033d010e772c743121438675d1bbf83fd78c607,false,true
 stream-current,scale-1048576/kernel.soc.elf,scale-1048576,built,8425056,0bc6aff29812600b308a2c4a190fce80b2580e8de538248a4b49f16e6cfa0113,false,false
 stream-current,scale-1048576/result.json,scale-1048576,built,840,a9ef327141a8c08ebde3857030bb181a678c157d405f47fd9bdc6498d0aa7457,false,true

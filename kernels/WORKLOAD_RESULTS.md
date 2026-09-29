@@ -97,10 +97,12 @@ both passed full digests. These scaled cycles are separate from the original
 LULESH counts above.
 An [earlier-build RTL table](spatter/evaluation/prior-build-results.csv) has
 original-size GPU STREAM cycles, but its embedded device segments differ from
-the current branch. The original-size current-build Gather has now passed a
-full SoC Verilator host check in 842,623 GPU cycles; the
+the current branch. The original-size current-build Gather passed a full SoC
+Verilator host check in 842,623 GPU cycles. Rebuilt Scatter passed its sampled
+host check in 1,247,066 RTL GPU cycles, versus 1,040,016 timing-model cycles
+with a complete output digest. The
 [paired table](spatter/evaluation/current-build-results.csv) records the
-byte-identical build, RTL, and model ELF checks. The remaining four rebuilt
+byte-identical build, RTL, and model ELF checks. The remaining three rebuilt
 GPU STREAM RTL cases are running sequentially.
 
 For the small equal-count composition case, fused GS and the materialized
