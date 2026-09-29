@@ -39,6 +39,8 @@ RESULT_TABLES = (
     ("stream-current", "stream/evaluation/current-build-smoke-results.csv", "model", "rtl"),
     ("spatter-current", "spatter/evaluation/app-trace-smoke-results.csv", "model", "rtl"),
     ("spatter-current", "spatter/evaluation/composition-ordered-pair.csv", "model", "rtl"),
+    ("spatter-current", "spatter/evaluation/mt8-smoke-pair.csv", "model", "rtl-mt-probe"),
+    ("spatter-current", "spatter/evaluation/mt16-smoke-pair.csv", "model", "rtl-mt16-probe"),
     ("spatter-current", "spatter/evaluation/composition-model-results.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/current-build-memory.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/gpu-stream-revision-memory.csv", "model", "model"),

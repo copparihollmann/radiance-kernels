@@ -74,6 +74,7 @@ spatter-current,rtl/rebuild-gpu-stream-2/kernel.soc.elf,elf-snapshot/spatter-cur
 spatter-current,rtl/rebuild-gpu-stream-3/kernel.soc.elf,elf-snapshot/spatter-current/rtl/rebuild-gpu-stream-3/kernel.soc.elf,40544,443812af97be71d5d45b3f5adf2cc8661f3e5d3f73f186000b9edbb5f9b430f6,true
 spatter-current,rtl/rebuild-gpu-stream-4/kernel.soc.elf,elf-snapshot/spatter-current/rtl/rebuild-gpu-stream-4/kernel.soc.elf,2133600,dee6b7bb4f245024b1399c26a61435815fa759afabaf24c619ebe90a5525926e,true
 spatter-current,rtl-mt-probe/smoke-1/kernel.soc.elf,elf-snapshot/spatter-current/rtl-mt-probe/smoke-1/kernel.soc.elf,36448,8b7100db622c7c785feeb2a31f65d6488dab2e797c96728dfa60a36d372fd051,true
+spatter-current,rtl-mt16-probe/smoke-1/kernel.soc.elf,elf-snapshot/spatter-current/rtl-mt16-probe/smoke-1/kernel.soc.elf,36448,8b7100db622c7c785feeb2a31f65d6488dab2e797c96728dfa60a36d372fd051,true
 spatter-current,rtl-single/composed/kernel.soc.elf,elf-snapshot/spatter-current/rtl-single/composed/kernel.soc.elf,36448,3b40f9d85ba2f3711d831fc9f0cf98b47ce990754787882ce28870ca6c02e86f,true
 spatter-current,rtl-single/composed-wrap/kernel.soc.elf,elf-snapshot/spatter-current/rtl-single/composed-wrap/kernel.soc.elf,36448,34d50ba7ef398cc3a692fb832e56df90dbc1d2f1bb3de7a03618f8a9eecf6417,true
 spatter-current,rtl-single/default/kernel.soc.elf,elf-snapshot/spatter-current/rtl-single/default/kernel.soc.elf,36448,a2093c6f945d64aaf48f618f00cb9d073bee72ee264acd3818283a244629be18,true
@@ -111,6 +112,7 @@ stream-current,rtl/scale-256/kernel.soc.elf,elf-snapshot/stream-current/rtl/scal
 stream-current,rtl/triad-256/kernel.soc.elf,elf-snapshot/stream-current/rtl/triad-256/kernel.soc.elf,36448,ca8d2b40568fc5e1566bbfabd08862695a84ca3a65ea20bed49d915cf8012b31,true
 stream-current,rtl-full/add-1048576/kernel.soc.elf,elf-snapshot/stream-current/rtl-full/add-1048576/kernel.soc.elf,8425056,ec998349f9f16e80cb02d633453e5efeaf769cde9ccb4b88dd21fc3f67a84996,true
 stream-current,rtl-full/copy-1048576/kernel.soc.elf,elf-snapshot/stream-current/rtl-full/copy-1048576/kernel.soc.elf,8425056,f94cd8f10b5641151439d304097488043215d964deb36d78a6307cdfe387160c,true
+stream-current,rtl-full/scale-1048576/kernel.soc.elf,elf-snapshot/stream-current/rtl-full/scale-1048576/kernel.soc.elf,8425056,0bc6aff29812600b308a2c4a190fce80b2580e8de538248a4b49f16e6cfa0113,true
 stream-current,rtl-full/triad-1048576/kernel.soc.elf,elf-snapshot/stream-current/rtl-full/triad-1048576/kernel.soc.elf,8425056,76e7ff2b743a2fc424c0d12937bb5f52c8436fa6a2f3b1ca79bed664c14be1de,true
 stream-current,scale-1048576/kernel.soc.elf,elf-snapshot/stream-current/scale-1048576/kernel.soc.elf,8425056,0bc6aff29812600b308a2c4a190fce80b2580e8de538248a4b49f16e6cfa0113,true
 stream-current,scale-256/kernel.soc.elf,elf-snapshot/stream-current/scale-256/kernel.soc.elf,36448,df51024be43454665e372488408c1055c5d5eadc577e05f03be6269ff44362e3,true
