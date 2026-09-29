@@ -32,6 +32,9 @@ must match the retained files in `spatter/tools`. It also verifies the committed
 [`workload-results.csv`](workload-results.csv), a consolidated table with cycle,
 traffic, correctness, and input/source/ELF/timing/checker provenance for all
 14 reported workloads.
+For each completed full-size RTL case, it regenerates the paired RTL/model CSV
+from the retained runs, checks the RTL log's finish signal and cycle count, and
+rejects a missing paired row.
 After intentional model-result changes, regenerate that table with
 `python3 kernels/evaluation/verify_report.py --write-csv`.
 The dependency snapshot covers 21 input/simulator path records (16 distinct

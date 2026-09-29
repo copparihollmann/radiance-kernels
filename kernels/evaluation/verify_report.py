@@ -47,6 +47,11 @@ REPORT_FIELDS = (
     "elf_sha256", "kernel_source_sha256", "suite_sha256",
     "timing_config_sha256", "checker_source_sha256",
 )
+RTL_CASES = {
+    "spatter": ("gpu-stream-0", "rebuild-gpu-stream-1", "rebuild-gpu-stream-2",
+                "rebuild-gpu-stream-3", "rebuild-gpu-stream-4"),
+    "stream": ("copy-1048576", "scale-1048576", "add-1048576", "triad-1048576"),
+}
 
 
 def indexed_csv(path: Path) -> dict[str, dict[str, str]]:
@@ -121,6 +126,55 @@ def verify_raw_runs(records: dict) -> None:
                                         ("memory", memory, actual_memory)):
             if reported != {field: str(value) for field, value in actual.items()}:
                 raise ValueError(f"{family}/{run}: {label} CSV differs from raw run")
+
+
+def verify_paired_rtl_tables() -> int:
+    validate = load_tool("spatter-validate.py")
+    summarize = load_tool("spatter-summarize.py")
+    verified = 0
+    for family, rtl_directory in (("spatter", "rtl"), ("stream", "rtl-full")):
+        table = KERNELS / family / "evaluation/current-build-results.csv"
+        reported = []
+        if table.exists():
+            with table.open(newline="") as source:
+                reported = list(csv.DictReader(source))
+            if not reported or len(reported) % 2:
+                raise ValueError(f"{table}: incomplete RTL/model pairs")
+        output = io.StringIO(newline="")
+        writer = csv.DictWriter(output, fieldnames=summarize.FIELDS, lineterminator="\n")
+        writer.writeheader()
+        root = KERNELS / family / "runs"
+        included = []
+        for position in range(0, len(reported), 2):
+            rtl_row, model_row = reported[position:position + 2]
+            name = rtl_row["run"]
+            included.append(name)
+            if (model_row["run"] != name or
+                    not rtl_row["simulator"].startswith("Verilator") or
+                    model_row["simulator"] != "Cyclotron timing model"):
+                raise ValueError(f"{table}: invalid RTL/model pair at row {position + 2}")
+            rtl_path = root / rtl_directory / name
+            log = (rtl_path / "verilator.log").read_text(errors="replace")
+            cycles = [int(value) for value in re.findall(r"\bCycles:\s*(\d+)", log)]
+            result = json.loads((rtl_path / "result.json").read_text())
+            if ("Verilog $finish" not in log or "*** FAILED ***" in log or
+                    "%Error" in log or not cycles or
+                    result["gpu_cycles"] != max(cycles)):
+                raise ValueError(f"{rtl_path}: RTL log differs from reported result")
+            writer.writerows(validate.inspect_run(
+                root, root / rtl_directory, root / "model", name, summarize))
+        completed = []
+        for name in RTL_CASES[family]:
+            result_path = root / rtl_directory / name / "result.json"
+            if (result_path.exists() and
+                    json.loads(result_path.read_text())["status"] == "passed"):
+                completed.append(name)
+        if included != completed:
+            raise ValueError(f"{table}: does not cover every completed full-size RTL case")
+        if reported and table.read_text() != output.getvalue():
+            raise ValueError(f"{table}: paired CSV differs from raw RTL/model runs")
+        verified += len(included)
+    return verified
 
 
 def report_csv(records: dict) -> str:
@@ -198,12 +252,13 @@ def main() -> None:
     if found != ROWS.keys() or len(records) != len(ROWS):
         raise ValueError("the report does not cover every current full-size model run")
     verify_raw_runs(records)
+    paired = verify_paired_rtl_tables()
     expected_csv = report_csv(records)
     if args.write_csv:
         REPORT_CSV.write_text(expected_csv)
     if REPORT_CSV.read_text() != expected_csv:
         raise ValueError(f"{REPORT_CSV} differs from verified model runs")
-    print(f"verified {len(found)} published workload rows and consolidated CSV")
+    print(f"verified {len(found)} workload rows, {paired} paired RTL cases, and consolidated CSV")
 
 
 if __name__ == "__main__":
