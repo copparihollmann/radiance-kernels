@@ -106,9 +106,11 @@ host check in 1,247,066 RTL GPU cycles, versus 1,040,016 timing-model cycles
 with a complete output digest. The
 [paired table](spatter/evaluation/current-build-results.csv) records the
 byte-identical build, RTL, and model ELF checks. The remaining three rebuilt
-GPU STREAM RTL cases are running sequentially.
-The four original-size STREAM RTL cases are running in a separate sequential
-queue. Their [paired table](stream/evaluation/current-build-results.csv) has no
+GPU STREAM RTL cases are running: GS and MultiScatter are in one queue, while
+MultiGather started in its own run directory.
+The four original-size STREAM RTL cases are running: Copy and Scale are in one
+queue, while Add and Triad started in their own run directories. Their
+[paired table](stream/evaluation/current-build-results.csv) has no
 result rows until the first case completes.
 
 For the small equal-count composition case, fused GS and the materialized
