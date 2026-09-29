@@ -86,8 +86,9 @@ were produced by that probe.
 `radiance-kernels` source and runtime. The current checkout changes the
 embedded RV32 startup and kernel segments, so its cycle counts require a
 separate simulation. The table below is retained as an explicit historical
-baseline, not a measurement of the current branch. The xRAGE RTL rows remain
-pending until their background simulations finish. Every completed GPU STREAM
+baseline, not a measurement of the current branch. The original-size xRAGE
+RTL attempts were interrupted; their partial logs are retained, but they
+provide no completed RTL cycle result. Every completed GPU STREAM
 row has a passing RTL host check and a separate complete-output Cyclotron
 check on identical GPU code. The three larger-output RTL checks sample 64
 output elements plus both guards. xRAGE9 checks a known-written destination
@@ -132,7 +133,9 @@ destinations make that result exploratory. Their cycles are in
 [current-build model results](current-build-model-results.csv). xRAGE5's full
 8,368,968-address input produced digest `2260887d7f6bc955` in 100,529,234
 modeled cycles. The two xRAGE9 mappings each used all 6,664,304 addresses.
-Parallel Scatter reported 99,547,352 exploratory model cycles; ordered
+The latest parallel Scatter build reported 98,895,114 exploratory model
+cycles. Its previous ELF reported 99,547,352; the
+[revision comparison](xrage9-revision-comparison.csv) keeps both. Ordered
 Scatter passed complete digest `215de6e81154b9c5` in 96,235,005 model
 cycles. Ordered Scatter issued 581,683,520 model global-memory bytes versus
 389,316,672 for parallel Scatter because it reads the generated conflict
@@ -196,11 +199,16 @@ timing model's issued global-memory transactions and bytes, including effects
 from index reads, cache lines, and transaction granularity. For example, the
 same 4,194,304 logical payload bytes produced 8,413,440 model global-memory
 bytes for Gather and 10,509,568 for GatherScatter. These are model counters,
-not measured HBM traffic. Regenerate them with:
+not measured HBM traffic. Regenerate the current cycle and memory tables with
+the exact same run names:
 
 ```sh
-python3 tools/spatter-memory-summary.py runs/model/gpu-stream-{0,1,2,3,4} \
-  runs/model/xrage5 runs/model/xrage9 runs/model/xrage9-ordered \
+python3 tools/spatter-summarize.py runs/model/rebuild-gpu-stream-{0,1,2,3,4} \
+  runs/model/xrage5 runs/model/rebuild-xrage9 runs/model/xrage9-ordered \
+  runs/model/lulesh-gather runs/model/lulesh-scatter-ordered \
+  > evaluation/current-build-model-results.csv
+python3 tools/spatter-memory-summary.py runs/model/rebuild-gpu-stream-{0,1,2,3,4} \
+  runs/model/xrage5 runs/model/rebuild-xrage9 runs/model/xrage9-ordered \
   runs/model/lulesh-gather runs/model/lulesh-scatter-ordered \
   > evaluation/current-build-memory.csv
 ```
@@ -211,7 +219,8 @@ Cyclotron output and ELF hash, then write the paired result table:
 ```sh
 python3 tools/spatter-validate.py --build-root runs --rtl-root runs/rtl \
   --model-root runs/model --output evaluation/current-build-results.csv \
-  gpu-stream-0 gpu-stream-1 gpu-stream-2 gpu-stream-3 gpu-stream-4
+  gpu-stream-0 rebuild-gpu-stream-1 rebuild-gpu-stream-2 \
+  rebuild-gpu-stream-3 rebuild-gpu-stream-4
 ```
 
 To validate the historical run artifacts in the Chipyard workspace and refresh
