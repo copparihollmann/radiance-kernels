@@ -134,7 +134,8 @@ complete output digest in 3,987,096 cycles. Triad passed its sampled host
 check in 7,750,785 RTL GPU cycles; its identical-ELF model run passed a
 complete output digest in 6,346,349 cycles. The full-size materialized
 Gather→Scatter composition passed its sampled host check in 2,294,139 RTL
-GPU cycles. The fused composition RTL run is in progress. Earlier STREAM
+GPU cycles. The full-size fused composition passed its sampled host check in
+1,457,400 RTL GPU cycles. Earlier STREAM
 partial attempts are
 retained as interrupted. Later Triad and Copy attempts were stopped during
 host CPU saturation, including a later Add attempt, and an 8-thread Copy
@@ -204,13 +205,17 @@ model and full SoC Verilator ELFs for two small cases:
 The [paired records](spatter/evaluation/composition-one-launch-pair.csv)
 include build, model, and RTL ELF hash checks. The full-size materialized
 chain passed a sampled host and guard check in 2,294,139 RTL GPU cycles on
-the identical ELF used by the 3,100,336-cycle model run. Its
-[paired record](spatter/evaluation/composition-fullsize-rtl-results.csv)
-contains per-core counters and correctness levels. The full-size fused GS
-RTL run is in progress.
+the identical ELF used by the 3,100,336-cycle model run. The fused GS passed
+its sampled host and guard check in 1,457,400 RTL GPU cycles on the identical
+ELF used by the 1,060,936-cycle model run. The
+[paired records](spatter/evaluation/composition-fullsize-rtl-results.csv)
+contain per-core counters and correctness levels. Fusing these two stages
+saved 836,739 RTL GPU cycles (36.5%) in this configuration; the model predicts
+a larger saving, so its relative speedup should not be substituted for RTL.
 
 | Composition mapping | RTL GPU cycles | Model GPU cycles | RTL host check |
 | --- | ---: | ---: | --- |
+| Fused GS | 1,457,400 | 1,060,936 | Samples and guards |
 | Materialized Gather→Scatter | 2,294,139 | 3,100,336 | Samples and guards |
 
 For an earlier small equal-count composition case, fused GS and the materialized

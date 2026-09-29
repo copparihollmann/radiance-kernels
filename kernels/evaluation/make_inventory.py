@@ -45,6 +45,7 @@ RESULT_TABLES = (
     ("spatter-current", "spatter/evaluation/composition-fullsize-model-results.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/composition-fullsize-memory.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/composition-one-launch-pair.csv", "model", "rtl-chain-regression"),
+    ("spatter-current", "spatter/evaluation/composition-fullsize-rtl-results.csv", "model", "rtl-full-composition"),
     ("spatter-current", "spatter/evaluation/current-build-memory.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/gpu-stream-revision-memory.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/xrage9-revision-memory.csv", "model", "model"),

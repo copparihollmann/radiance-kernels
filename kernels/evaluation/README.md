@@ -10,18 +10,18 @@ logs, and model counter summaries, along with both CSV inventories.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
 
-The current snapshot indexes 191 run records and 806 files across seven
-roots. It preserves 615 non-ELF files in the metadata archive. The 191 ELFs
+The current snapshot indexes 194 run records and 818 files across seven
+roots. It preserves 624 non-ELF files in the metadata archive. The 194 ELFs
 remain in the run roots and have local
 hardlinks under the ignored `elf-snapshot/` directory. The hardlinks preserve
 the binaries if a run directory is removed without copying the data blocks.
 Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
-against all 615 recorded file hashes.
+against all 624 recorded file hashes.
 `verify_artifact_snapshot.py` repeats that check and verifies the ELF and
 dependency snapshots, the run JSON records, and input/simulator references.
-The generator also checked 124 rows in the current-build cycle and memory
+The generator also checked 134 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
 `verify_report.py` checks the 15 workload rows and two full-size composition
 rows in `WORKLOAD_RESULTS.md`
@@ -36,9 +36,9 @@ input/source/ELF/timing/checker provenance for all
 15 reported workloads.
 For each completed full-size RTL case, it regenerates the paired RTL/model CSV
 from the retained runs, checks the RTL log's finish signal and cycle count, and
-rejects a missing paired row. It checks the five-case RTL/model cycle summary
-in `WORKLOAD_RESULTS.md` against those paired rows, including the stated RTL
-host check and cycle ratio.
+rejects a missing paired row. It checks all nine workload and two composition
+full-size RTL/model cycle summaries in `WORKLOAD_RESULTS.md` against those
+paired rows, including the stated RTL host checks and workload cycle ratios.
 It also regenerates all 22 small paired RTL/model cases across the STREAM and
 Spatter smoke, LULESH app-trace, ordered-composition, current single-launch
 chain regressions, and threaded Verilator
@@ -66,11 +66,10 @@ GPU STREAM, LULESH, and AMG are also tracked directly in
 | `prior-sampled-builds` | `spatter-sampled-builds` in the Chipyard workspace |
 
 `passed` and `exploratory` rows in the result tables are completed runs.
-`built`, `running`, and `interrupted` rows in this inventory preserve the
-history and should not be reported as completed performance results. Some RTL
-jobs are still running; their log hashes describe this snapshot and will
-change when the jobs finish. Refresh the inventory and archive after they
-complete:
+`built`, `failed`, and `interrupted` rows in this inventory preserve the
+history and should not be reported as completed performance results. No run
+is marked `running` in this snapshot. Refresh the inventory after any new
+simulation before reporting its results:
 
 ```sh
 python3 kernels/evaluation/make_inventory.py --workspace /path/to/chipyard
@@ -104,9 +103,9 @@ committed. **Keep `elf-snapshot/` and `dependency-snapshot/` with this checkout
 when preserving results for a paper. Git alone cannot restore the large ELF,
 xRAGE input, and simulator binaries.** The hardlinks under `elf-snapshot/` also
 share storage with the run roots, so deleting both removes the binaries.
-The archive and manifests are a point-in-time capture while some runs are
-active. Refresh them after those runs finish, then rerun both verifiers before
-extracting final numbers. A `running`, `built`, or `interrupted` record is
+The archive and manifests are a point-in-time capture. Refresh them after any
+new run, then rerun both verifiers before extracting final numbers. A
+`running`, `built`, `failed`, or `interrupted` record is
 never a completed performance measurement.
 
 The run index records
@@ -125,12 +124,13 @@ all 135 locally retained golden files. Run
 `kernels/spatter/golden-runs/` with the ELF and dependency snapshots when
 retaining raw inputs and outputs for publication.
 
-For a portable report archive after the live simulations finish, use
+For a portable report archive, use
 `export_report_bundle.py`. It verifies the report tables and both snapshot
 manifests, then packages the raw metadata, ELF, input, simulator, and golden
 files with Git bundles for this kernel branch and the pinned original Spatter
-source. It requires all five full-size Spatter GPU STREAM and all four
-full-size STREAM RTL cases to pass before labeling an archive complete. Any
+source. It requires all five full-size Spatter GPU STREAM, all four full-size
+STREAM, and both full-size fused/materialized composition RTL cases to pass
+before labeling an archive complete. Any
 running or missing case requires `--draft`, which marks the archive
 provisional. The resulting
 archive stays local and is not pushed:

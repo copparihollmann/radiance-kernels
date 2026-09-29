@@ -300,7 +300,10 @@ The original-size materialized GPU STREAM Gather→Scatter chain also passed
 the full SoC Verilator sampled host and guard check in 2,294,139 GPU cycles;
 its identical-ELF model run passed a complete digest in 3,100,336 cycles.
 The [full-size paired table](composition-fullsize-rtl-results.csv) retains
-both results. The fused RTL comparison is still in progress.
+both results. The fused GS also passed the sampled host and guard check in
+1,457,400 RTL GPU cycles versus 1,060,936 model cycles on an identical ELF.
+Both RTL results use the pinned `b83419e` simulator. The fused mapping saved
+836,739 RTL GPU cycles over the materialized chain in this configuration.
 
 [Current-build memory counters](current-build-memory.csv) record the
 timing model's issued global-memory transactions and bytes, including effects
