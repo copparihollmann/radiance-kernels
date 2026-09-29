@@ -29,9 +29,9 @@ RTL GPU cycles were 9,085, 8,434, 8,793, and 9,045 respectively. The paired
 ELF hashes, checks, and exact cycle values are in
 [smoke results](current-build-smoke-results.csv).
 
-The four original-size full SoC Verilator runs use separate directories under
-`../runs/rtl-full/`. Copy and Scale share a sequential queue; Add and Triad
-started separately. The [paired table](current-build-results.csv) has no
+The four original-size full SoC Verilator cases use separate directories under
+`../runs/rtl-full/`. Copy, Add, and Triad are active; Scale is queued behind
+Copy. The [paired table](current-build-results.csv) has no
 result rows until the first run completes. As each run completes, validate it
 against its build ELF and the complete Cyclotron output readback, then update
 the paired table from `kernels/stream`:

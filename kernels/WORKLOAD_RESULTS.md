@@ -118,8 +118,8 @@ RTL GPU cycles; its identical-ELF model run passed the same digest in
 [paired table](spatter/evaluation/current-build-results.csv) records the
 byte-identical build, RTL, and model ELF checks. MultiScatter is the remaining
 full-size GPU STREAM Spatter RTL case and is running in the sequential queue.
-The four original-size STREAM RTL cases are running: Copy and Scale are in one
-queue, while Add and Triad started in their own run directories. Their
+Full-size STREAM Copy, Add, and Triad RTL runs are active; Scale is queued
+behind Copy. Their
 [paired table](stream/evaluation/current-build-results.csv) has no
 result rows until the first case completes.
 
