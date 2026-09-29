@@ -1,6 +1,6 @@
 # STREAM on Radiance
 
-The [workload result summary](../WORKLOAD_RESULTS.md) combines these cycles
+The [workload result summary](../README.md) combines these cycles
 with the Spatter measurements.
 
 The four independent STREAM operations use float32 arrays: Copy `C=A`, Scale
