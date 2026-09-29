@@ -80,11 +80,17 @@ static void scatter_stage(void*, uint32_t tid, uint32_t threads_per_block,
 #endif
 }
 
+static void chain_body(void* arg, uint32_t tid, uint32_t threads_per_block,
+                       uint32_t block_id) {
+  gather_stage(arg, tid, threads_per_block, block_id);
+  // Keep both stages in one launch. A second mu_schedule lost some worker
+  // warps in timing simulation when the materialized transfer was large.
+  mu_barrier(1, SPATTER_NUM_WARPS * MU_NUM_CORES);
+  scatter_stage(arg, tid, threads_per_block, block_id);
+}
+
 int main() {
-  mu_schedule(gather_stage, nullptr, SPATTER_NUM_WARPS);
-  mu_fence();
-  mu_barrier(0, MU_NUM_CORES);
-  mu_schedule(scatter_stage, nullptr, SPATTER_NUM_WARPS);
+  mu_schedule(chain_body, nullptr, SPATTER_NUM_WARPS);
   mu_fence();
   return 0;
 }

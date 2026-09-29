@@ -41,9 +41,14 @@ LULESH traces. The [small comparison](upstream-golden-smoke-results.csv) adds
 four transfer-family checks and an overlapping ordered Scatter. The
 [scaled AMG comparison](upstream-golden-scaled-results.csv) checks 1,024
 repetitions of the original GPU Gather pattern. The
+[full-size composition comparison](upstream-golden-composition-results.csv)
+runs the pinned upstream serial Gather and then feeds its dense output to the
+pinned upstream serial Scatter. Its final digest matches both the fused and
+materialized Radiance mappings; the intermediate and final arrays have their
+own SHA-256 entries. The
 [artifact manifest](upstream-golden-artifacts.csv) records SHA-256 and byte
 size for every local golden input, output, parser record, log, and driver.
-Those 219 MB of raw files are retained under the ignored `../golden-runs/`;
+Those 223 MB of raw files are retained under the ignored `../golden-runs/`;
 keep that directory with the paper artifacts. The hashes and generation code
 are committed, but Git alone does not contain the raw golden arrays.
 
@@ -59,6 +64,7 @@ python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
   smoke-1 smoke-2 smoke-3 smoke-4 ordered-overlap
 python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
   --table evaluation/upstream-golden-scaled-results.csv amg-gpu-scaled-1024
+python3 tools/spatter-upstream-composition-golden.py --upstream /path/to/spatter
 python3 tools/verify-upstream-golden.py --upstream /path/to/spatter
 python3 tools/spatter-upstream-pattern-audit.py --upstream /path/to/spatter
 ```
@@ -250,6 +256,40 @@ for the chain. The fused kernel performs one transfer per task (96
 logical bytes), while the chain performs both stages (192 logical bytes).
 [Composition cycles](composition-model-results.csv) and
 [memory counters](composition-memory.csv) retain the exact measurements.
+
+### Full-size GPU STREAM composition
+
+The tracked `../inputs/composed-gpu-stream.json` fuses standard GPU STREAM
+Gather case 0 and Scatter case 1. The materialized chain uses the same two
+original cases, with a 256-element dense intermediate and 262,144 transfers
+per stage. Both complete Cyclotron output digests, their guards, and the
+[upstream serial two-stage golden](upstream-golden-composition-results.csv)
+agree at `7e49d79ec062db25`. The fused model takes 1,060,936 cycles,
+4,194,304 logical payload bytes, and 10,509,568 issued global-memory bytes.
+The materialized model takes 3,100,336 cycles, 8,388,608 logical payload
+bytes, and 17,850,624 issued global-memory bytes. The
+[cycle](composition-fullsize-model-results.csv) and
+[memory](composition-fullsize-memory.csv) tables retain the exact counters.
+These are generic DRAM model results, not HBM or full-size RTL measurements.
+
+The initial materialized ELF launched Gather and Scatter through separate
+`mu_schedule` calls. Its functional model passed, but two timing-model runs
+reproduced the same wrong digest `7369ef68db0db325` at 2,615,067 cycles.
+The [GPU memory probe](../tools/spatter_probe.rs) showed all 256 intermediate
+elements present while Scatter left output blocks 3, 5, 7, 11, 13, and 15
+unwritten. A producer-warp fence left the same wrong digest. The current
+kernel schedules both stages once and puts an all-warp barrier between them;
+the full-size timing-model digest then passes. The failed and diagnostic
+runs remain under `../runs/model/chain-gpu-stream*`, including
+`probe-timing.log` and its `probe-info.json` source/binary/hash record. They
+are excluded from passing performance comparisons.
+
+The final single-launch control path passed complete checks in both Cyclotron
+and the full SoC Verilator on identical ELFs. The distinct-destination chain
+took 3,985 model and 8,597 RTL GPU cycles; the ordered repeated-destination
+chain took 4,878 model and 9,306 RTL cycles. The
+[paired table](composition-one-launch-pair.csv) keeps both correctness
+levels, per-core RTL counters, and cycles. No RTL logic changed.
 
 [Current-build memory counters](current-build-memory.csv) record the
 timing model's issued global-memory transactions and bytes, including effects

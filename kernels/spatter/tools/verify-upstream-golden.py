@@ -103,6 +103,58 @@ def main() -> None:
                     (source_hash and row["upstream_source_sha256"] != source_hash)):
                 raise ValueError(f"golden check differs from Radiance/model: {name}")
             count += 1
+    composition_rows = rows(ROOT / "evaluation/upstream-golden-composition-results.csv")
+    if len(composition_rows) != 1:
+        raise ValueError("expected one upstream full-size composition comparison")
+    row = composition_rows[0]
+    name = "chain-gpu-stream-no-fence"
+    fused_name = "composed-gpu-stream-current"
+    raw = args.golden_root / "composition-fullsize"
+    record = json.loads((raw / "result.json").read_text())
+    chain_build = json.loads((args.source_root / name / "result.json").read_text())
+    chain_model = json.loads((args.model_root / name / "result.json").read_text())
+    fused_build = json.loads((args.source_root / fused_name / "result.json").read_text())
+    fused_model = json.loads((args.model_root / fused_name / "result.json").read_text())
+    digests = {row["golden_digest"], row["chain_expected_digest"],
+               row["chain_model_digest"], row["fused_expected_digest"],
+               row["fused_model_digest"], chain_build["expected_digest"],
+               chain_model["output_digest"], fused_build["expected_digest"],
+               fused_model["output_digest"], golden.fnv_file(raw / "output.bin")}
+    if (row["run"] != name or row["status"] != "passed" or
+            row["upstream_revision"] != golden.UPSTREAM_REVISION or
+            row["driver_script_sha256"] != golden.sha256(
+                TOOLS / "spatter-upstream-composition-golden.py") or
+            (source_hash and row["upstream_source_sha256"] != source_hash) or
+            {key: str(value) for key, value in record.items()} != row or
+            chain_model["status"] != "passed" or fused_model["status"] != "passed" or
+            len(digests) != 1 or
+            row["intermediate_digest"] != golden.fnv_file(raw / "intermediate.bin") or
+            row["original_suite_sha256"] != golden.sha256(
+                ROOT / "inputs/standard-suite/basic-tests/gpu-stream.json") or
+            row["fused_suite_sha256"] != golden.sha256(
+                ROOT / "inputs/composed-gpu-stream.json") or
+            row["chain_elf_sha256"] != golden.sha256(
+                args.source_root / name / "kernel.soc.elf") or
+            row["chain_elf_sha256"] != chain_model["elf_sha256"] or
+            row["fused_elf_sha256"] != golden.sha256(
+                args.source_root / fused_name / "kernel.soc.elf") or
+            row["fused_elf_sha256"] != fused_model["elf_sha256"] or
+            int(row["count"]) != chain_build["count"] or
+            int(row["pattern_length"]) != chain_build["pattern_length"] or
+            int(row["intermediate_elements"]) != chain_build["intermediate_elements"]):
+        raise ValueError("upstream composition golden differs from Radiance runs")
+    for filename, bytes_field, hash_field in (
+            ("source.bin", "source_bytes", "source_sha256"),
+            ("intermediate.bin", "intermediate_bytes", "intermediate_sha256"),
+            ("output.bin", "golden_output_bytes", "golden_output_sha256")):
+        path = raw / filename
+        if path.stat().st_size != int(row[bytes_field]) or golden.sha256(path) != row[hash_field]:
+            raise ValueError(f"upstream composition {filename} differs from manifest")
+    for filename, hash_field in (("gather-pattern.bin", "gather_pattern_sha256"),
+                                 ("scatter-pattern.bin", "scatter_pattern_sha256")):
+        if golden.sha256(raw / filename) != row[hash_field]:
+            raise ValueError(f"upstream composition {filename} differs from manifest")
+    count += 1
     coverage = "; pinned standard-suite coverage matched" if args.upstream else ""
     print(f"verified {count} upstream golden comparisons and "
           f"{len(artifact_rows)} local golden artifact hashes{coverage}")

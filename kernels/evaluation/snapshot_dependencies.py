@@ -33,7 +33,7 @@ def suite_paths(value: str) -> list[str]:
 def main() -> None:
     with (HERE / "runs.csv").open(newline="") as source:
         runs = list(csv.DictReader(source))
-    dependencies: set[tuple[str, str, str]] = set()
+    dependencies: dict[tuple[str, str], set[str]] = {}
     for run in runs:
         suite = run["suite"]
         paths = suite_paths(suite)
@@ -42,19 +42,21 @@ def main() -> None:
         for path in paths:
             if not Path(path).is_file():
                 raise FileNotFoundError(f"input suite missing: {path}")
-            dependencies.add(("input", path, suite_digest))
+            dependencies.setdefault(("input", path), set()).add(suite_digest)
         binary = run["simulator_path"]
         if binary and run["simulator_sha256"]:
-            dependencies.add(("simulator", binary, run["simulator_sha256"]))
+            dependencies.setdefault(("simulator", binary), set()).add(
+                run["simulator_sha256"])
 
     rows = []
-    for kind, path_text, declared in sorted(dependencies):
+    for (kind, path_text), declared_hashes in sorted(dependencies.items()):
         original = Path(path_text)
         if not original.is_file():
             raise FileNotFoundError(original)
         digest = sha256(original)
-        if declared and digest != declared:
-            raise ValueError(f"{kind} changed since the run: {original}")
+        for declared in declared_hashes:
+            if declared and digest != declared:
+                raise ValueError(f"{kind} changed since the run: {original}")
         snapshot = HERE / "dependency-snapshot" / kind / f"{digest}-{original.name}"
         snapshot.parent.mkdir(parents=True, exist_ok=True)
         if not snapshot.exists():

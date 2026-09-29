@@ -29,9 +29,12 @@ schedule independent transfers over `(iteration, pattern entry)`. The software
 reference can compose stages with `stitch_reference(stages, source)`: each stage
 materializes its output before the next stage reads it. The unit check compares
 a Gather -> Scatter chain with its fused GS equivalent. `run_chain.py` builds
-one ELF with a materialized dense intermediate, two Muon schedules, and a
-barrier between stages. It accepts different stage counts when their
-intermediate lengths match. Repeated Scatter destinations require the
+one ELF with a materialized dense intermediate. Both stages run in one Muon
+schedule, with an all-warp barrier before Scatter reads the intermediate.
+The separate-schedule mapping lost Scatter worker writes in the full-size timing
+model, so the stage boundary is explicit inside the kernel. The builder
+accepts different stage counts when their intermediate lengths match.
+Repeated Scatter destinations require the
 `ordered` policy, which assigns each destination to one lane:
 
 ```sh
@@ -66,6 +69,24 @@ generated GS case records `gather-final-wrap` so its address map reflects the
 final writer of each intermediate slot. `stitch_reference` independently
 models the two-stage materialization in software. The fused and materialized
 ELFs have separate cycle measurements.
+
+The tracked `inputs/composed-gpu-stream.json` is the fusion of standard GPU
+STREAM Gather case 0 and Scatter case 1. Build that case and its materialized
+counterpart from the same original decks with:
+
+```sh
+python3 run.py --suite inputs/composed-gpu-stream.json --case 0 \
+  --out runs/composed-gpu-stream-current --build-only
+python3 run_chain.py inputs/standard-suite/basic-tests/gpu-stream.json 0 \
+  inputs/standard-suite/basic-tests/gpu-stream.json 1 \
+  --out runs/chain-gpu-stream-no-fence
+```
+
+Their complete output digests match. The
+[full-size comparison](evaluation/composition-fullsize-model-results.csv) and
+[memory counters](evaluation/composition-fullsize-memory.csv) retain the model
+results; `run_chain.py` also records both stage maps and the intermediate
+length in its manifest.
 
 This implements Spatter's documented transfer equations and its serial
 backend's Gather writes. The upstream CUDA Gather and MultiGather kernels
@@ -181,8 +202,9 @@ compiles the pinned [original Spatter](https://github.com/hpcgarage/spatter)
 serial backend, runs it on the same deterministic inputs, and compares its
 complete output digest with the Radiance/Cyclotron result. The
 [golden record](evaluation/README.md#independent-upstream-correctness-oracle)
-documents the nine original-size and five small cases, raw artifact hashes,
-and reproduction commands.
+documents nine original-size single-family cases, five small cases, the
+scaled AMG case, and the full-size two-stage composition, with raw artifact
+hashes and reproduction commands.
 
 Run `python3 -m unittest -v test_run.py` for parser, address-map, and software
 composition checks.

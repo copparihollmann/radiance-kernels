@@ -62,6 +62,10 @@ SPATTER_RTL_NAMES = (
     ("rebuild-gpu-stream-3", "MultiScatter"),
     ("rebuild-gpu-stream-4", "MultiGather"),
 )
+COMPOSITION_FULLSIZE_NAMES = (
+    ("composed-gpu-stream-current", "Fused GS"),
+    ("chain-gpu-stream-no-fence", "Materialized Gather→Scatter"),
+)
 STREAM_RTL_NAMES = (
     ("copy-1048576", "Copy"),
     ("scale-1048576", "Scale"),
@@ -80,6 +84,8 @@ SMALL_RTL_TABLES = (
      ("materialized-chain-ordered", "composed-ordered")),
     ("spatter", "mt8-smoke-pair.csv", "rtl-mt-probe", ("smoke-1",)),
     ("spatter", "mt16-smoke-pair.csv", "rtl-mt16-probe", ("smoke-1",)),
+    ("spatter", "composition-one-launch-pair.csv", "rtl-chain-regression",
+     ("materialized-chain-no-fence", "materialized-chain-ordered-no-fence")),
 )
 
 
@@ -292,6 +298,65 @@ def verify_stream_rtl_summary(report: str) -> None:
         raise ValueError("the STREAM RTL/model cycle table differs from paired runs")
 
 
+def verify_composition_fullsize(report: str) -> None:
+    """Check the two-stage comparison against complete raw model readbacks."""
+    root = KERNELS / "spatter"
+    cycle_table = root / "evaluation/composition-fullsize-model-results.csv"
+    memory_table = root / "evaluation/composition-fullsize-memory.csv"
+    cycle = indexed_csv(cycle_table)
+    memory = indexed_csv(memory_table)
+    names = [name for name, _ in COMPOSITION_FULLSIZE_NAMES]
+    if list(cycle) != names or list(memory) != names:
+        raise ValueError("full-size composition tables differ from the planned pair")
+    records = {("spatter", name): (cycle[name], memory[name]) for name in names}
+    verify_raw_runs(records)
+    digests = [json.loads((root / "runs/model" / name / "result.json").read_text())[
+        "output_digest"] for name in names]
+    if len(set(digests)) != 1:
+        raise ValueError("full-size fused and materialized outputs differ")
+    header = ("| Composition mapping | Model GPU cycles | Logical payload bytes | "
+              "Model global-memory bytes issued | Output digest |")
+    block = report.split(header, 1)[1].split("\n\n", 1)[0]
+    reported = [tuple(field.strip() for field in line.strip("|").split("|"))
+                for line in block.splitlines()
+                if line.startswith("| ") and not line.startswith("| ---")]
+    expected = []
+    for name, label in COMPOSITION_FULLSIZE_NAMES:
+        c, m = cycle[name], memory[name]
+        expected.append((label, f"{int(c['gpu_cycles']):,}",
+                         f"{int(c['logical_payload_bytes']):,}",
+                         f"{int(m['model_gmem_bytes_issued']):,}", digests[0]))
+    if reported != expected:
+        raise ValueError("the full-size composition summary differs from paired runs")
+
+
+def verify_composition_rtl_summary(report: str) -> None:
+    table = KERNELS / "spatter/evaluation/composition-one-launch-pair.csv"
+    with table.open(newline="") as source:
+        rows = list(csv.DictReader(source))
+    names = (("materialized-chain-no-fence", "Distinct destinations"),
+             ("materialized-chain-ordered-no-fence", "Repeated destinations, ordered"))
+    if len(rows) != 2 * len(names):
+        raise ValueError(f"{table}: incomplete paired chain regressions")
+    header = ("| Materialized chain check | RTL GPU cycles | Model GPU cycles | "
+              "Output digest |")
+    block = report.split(header, 1)[1].split("\n\n", 1)[0]
+    reported = [tuple(field.strip() for field in line.strip("|").split("|"))
+                for line in block.splitlines()
+                if line.startswith("| ") and not line.startswith("| ---")]
+    expected = []
+    for (name, label), (rtl, model) in zip(names, zip(rows[::2], rows[1::2])):
+        result = json.loads((KERNELS / "spatter/runs/model" / name / "result.json").read_text())
+        if (rtl["run"] != name or model["run"] != name or
+                rtl["correctness"] != "digest-checked" or
+                model["correctness"] != "digest-checked"):
+            raise ValueError(f"{table}: unexpected chain regression row")
+        expected.append((label, f"{int(rtl['gpu_cycles']):,}",
+                         f"{int(model['gpu_cycles']):,}", result["output_digest"]))
+    if reported != expected:
+        raise ValueError("the materialized chain RTL summary differs from paired runs")
+
+
 def report_csv(records: dict) -> str:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=REPORT_FIELDS, lineterminator="\n")
@@ -373,13 +438,16 @@ def main() -> None:
     small_paired = verify_small_rtl_tables()
     verify_spatter_rtl_summary(report)
     verify_stream_rtl_summary(report)
+    verify_composition_fullsize(report)
+    verify_composition_rtl_summary(report)
     expected_csv = report_csv(records)
     if args.write_csv:
         REPORT_CSV.write_text(expected_csv)
     if REPORT_CSV.read_text() != expected_csv:
         raise ValueError(f"{REPORT_CSV} differs from verified model runs")
-    print(f"verified {len(found)} workload rows, {paired} full-size and "
-          f"{small_paired} small paired RTL cases, and consolidated CSV")
+    print(f"verified {len(found)} workload rows, 2 composition model rows, "
+          f"{paired} full-size and {small_paired} small paired RTL cases, "
+          "and consolidated CSV")
 
 
 if __name__ == "__main__":
