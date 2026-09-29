@@ -8,6 +8,9 @@
 
 #include <mu_schedule.h>
 #include <mu_intrinsics.h>
+#ifdef MU_TAPEOUT_EPILOGUE
+#include <rad_tapeout.h>
+#endif
 
 #define NUM_CORES_MAX 1024
 
@@ -55,6 +58,17 @@ static void __attribute__ ((noinline)) mu_schedule_standalone() {
     auto arg = context.arg;
 
     callback(arg, tid_in_threadblock, threads_per_threadblock, threadblock_id);
+
+#ifdef MU_TAPEOUT_EPILOGUE
+    // TAPEOUT EPILOGUE.  On the taped-out part a core that asserts `finished` fires the L0d/L0i
+    // flush unit (MuonTile.scala:371-374), which wedges the L0d; and at occupancy >= 2 the core
+    // never asserts finished at all, so nothing is ever written back and the whole output stays
+    // stranded in cache even though the kernel ran to completion.  Measured on both U250 boards
+    // 2026-09-21.  The epilogue drains L0d and L1 by capacity, parks warp 0 of each core in a
+    // spin so `finished` never rises, and hands off to the host through the printBuf postbox.
+    // NEVER RETURNS -- the host soft-resets the GPU once it sees the postbox.
+    rad_tapeout_epilogue(tid_in_threadblock, threads_per_threadblock / MU_NUM_THREADS);
+#endif
 }
 
 static void mu_schedule_workers() {
@@ -84,8 +98,18 @@ void mu_schedule(mu_schedule_callback callback, void *arg, const uint32_t occupa
     const auto core_id = vx_core_id();
     const auto thread_id = vx_thread_id();
     // update kernel launch context
-    // elect a single thread per cluster to prevent racy writes
-    if (core_id == 0 && thread_id == 0) {
+    // Elect one thread PER CORE, not one per cluster.  L0d is per-core and is not coherent
+    // across cores, and mu_fence() only retires the issuing warp's store queue -- it does not
+    // push the line to a shared level.  Writing from core 0 alone therefore left every other
+    // core reading whatever memory happened to hold at `schedule_context`, which is a NOBITS
+    // .bss symbol that nothing initialises: zeros under metasim (core 1 jalr'd to 0x0) and
+    // stale DRAM on the FPGA.  Whether the old code worked was a race between core 0's L0d
+    // eviction and core 1's read.
+    // Every core writes identical values -- callback, arg and occupancy are the same arguments
+    // on every core -- so there is no cross-core race, and each core ends up with a correct
+    // copy in its own L0d without any coherency requirement.
+    (void)core_id;
+    if (thread_id == 0) {
         schedule_context.callback = callback;
         schedule_context.arg = arg;
         schedule_context.occupancy = occupancy;

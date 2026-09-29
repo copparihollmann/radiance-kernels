@@ -37,7 +37,7 @@ source $KG/kernel-build-env.sh 2>/dev/null
 cd $KDIR
 
 echo "[1/4] gen data+goldens  Sq=$Sq Sk=$Sk d=$d bk=$bk seed=$seed"
-python3 gen_data.py    --Sq $Sq --Sk $Sk --d $d --block_n $bk --seed $seed >/tmp/fa_gen.log 2>&1 || { echo "  GEN(data) FAIL"; tail -20 /tmp/fa_gen.log; exit 1; }
+python3 fa_gen_data.py    --Sq $Sq --Sk $Sk --d $d --block_n $bk --seed $seed >/tmp/fa_gen.log 2>&1 || { echo "  GEN(data) FAIL"; tail -20 /tmp/fa_gen.log; exit 1; }
 python3 fa_gen_goldens.py --Sq $Sq --Sk $Sk --d $d --block_n $bk --seed $seed >>/tmp/fa_gen.log 2>&1 || { echo "  GEN(golden) FAIL"; tail -20 /tmp/fa_gen.log; exit 1; }
 
 echo "[2/4] build"

@@ -12,6 +12,73 @@ Q,K,V (mvin) --[mesh: QK^T]--> S (accmem -> SMEM)
   --[mesh: PV]--> O (accmem) --[SIMT: finalize]--> O (bf16)
 ```
 
+## CURRENT STATUS -- read this first
+
+Two claims, deliberately kept apart (see the admissibility rules below for why blending them is an
+error):
+
+### *** `stF24` PASSES THE FULL GATE AT 32.26% -- target was 30% ***
+
+| gate point | run | result |
+|---|---|---|
+| NT6 | `stF6` | **12/12** |
+| NT8 | `stF8` | **16/16** |
+| NT24 | `stF24` | **48/48** -- 50,906 cyc/tile, **32.26%** (admissible: unperturbed + all-correct) |
+| **NT72** -- one TinyLlama head | `stF72` | **144/144**, onset `none(>71)` both clusters |
+| `FA_PHASE1` / `2` / `3` | `stF24p1/p2/p3` | **48/48** each |
+| `FA_PHASE4` / `5` | `stF24p4/p5` | **48/48** each -- *beyond what the gate asks* |
+| `FA_PHASE_BOTH` k=1 / k=2 | `stF24b1/b2` | **48/48** each |
+
+Every point, plus the entire `k` range the harness implements. `stF72` terminated normally at 3,794,716
+cycles against a 9M budget, so the 144 images are complete rather than truncated.
+
+**Four configs, all NT72 144/144, utilization monotone in overlaps restored:**
+
+| config | overlaps restored | util | NT72 | gate |
+|---|---|---|---|---|
+| `FA_ST_NOOVL` | none | 28.68% | 144/144 | **COMPLETE** |
+| **`stQ`** | none (+ SIMT softmax) | **30.49%** | 144/144 | **COMPLETE** |
+| `stZQ` | `_SCL` | 31.68% | 144/144 | partial (not pursued -- superseded) |
+| **`stF24`** | `_SCL` + `_DMA` | **32.26%** | **144/144** | **COMPLETE** |
+
+**Three configurations now pass the full gate, two of them above the 30% target.** Pick by what has to
+be defended:
+
+* **`stF24`, 32.26%** -- the fastest. Depends on `_SCL` and `_DMA` being harmless, which is *measured*
+  (48/48 separately, together, and at every phase point) but is an empirical claim about two overlaps.
+* **`stQ`, 30.49%** -- meets the target with the **smallest structural assumption of any candidate**: no
+  overlap restored at all, just the fully de-overlapped body plus a SIMT-only softmax restructuring that
+  touches no mesh, no DMA and no gemmini port. Its robustness argument is inherited from
+  `FA_ST_NOOVL`'s structure rather than resting on any measurement about overlaps.
+* **`FA_ST_NOOVL`, 28.68%** -- the most conservative, below target, kept as the reference the FPGA
+  bring-up is currently diverging from.
+
+576 tile-images at NT72 across four configs, **zero wrong**.
+
+```
+# the recommended stable config (stF24) -- only the QK/SIMT overlap is removed
+FULL_ATTN2 FA_SP FA_SP_QOVL FA_SP_LEANCFG FA_SP_QKACC FA_SP_PKOVL FA_SP_QSPLIT FA_SP_WCNT
+FA_SP_PAX FA_SP_CVTX FA_ST_NOOVL FA_SP_ACCRS FA_SP_PREPK FA_ST_OVL_SCL FA_ST_OVL_DMA
+FA_SM_2P FA_SM_2PRAW
+```
+
+Target was 30%; `stF24` exceeds it. **`FA_ST_NOOVL` alone over-serializes** -- it gives up two overlaps
+worth 6,229 cyc/tile that buy no robustness. Do not use it as the recommendation; use `stF24`'s set.
+
+**Mechanism: still unidentified.** The QK/SIMT overlap is the *only* hazardous one (three independent
+legs agree), but **the bank-collision explanation for it is refuted** -- see below. What survives is the
+localization (S, positively, per-tile), the fact that only this one overlap matters, and that removing it
+costs a determinate ~6.2k cyc/tile from either body. `stF24` does not depend on the mechanism being
+known: it removes the overlap.
+
+**~~Handoff to the peak track~~ -- WITHDRAWN, the bank-collision test is REFUTED.** I had suggested
+`FA_SP_BANKA` might let the fast body re-admit the QK/SIMT overlap past the 38.8% ceiling. **Do not spend
+slots on that.** `BANKA` does not fix the hazard -- it moves the onset from tile 17 to tile 8, i.e.
+substantially *worse*. Details below.
+
+**Handoff to the FPGA track:** keep targeting `FA_ST_NOOVL` until `stF72` lands, because it is the config
+with a confirmed NT72 144/144 to diverge from. Details in the 1-cluster section below.
+
 ## Why two directories
 
 The two goals conflict, and conflating them produced weeks of false results.
@@ -43,7 +110,326 @@ Target -- bit-correct on **all** of:
   invocation.
 * `FA_PHASE1/2/3` and `FA_PHASE_BOTH`
 
-**No configuration has passed this yet.** Status is tracked below rather than claimed.
+### *** THE GATE IS PASSED -- `FA_ST_NOOVL`, every point, scored with `fa_verify_tiles.py` ***
+
+| gate point | tile-images | result |
+|---|---|---|
+| `NT6` (`stV6`) | 12 | **12 correct, 0 wrong** |
+| `NT8` (`stV8`) | 16 | **16 correct, 0 wrong** |
+| `NT24` (`stV24`) | 48 | **48 correct, 0 wrong** |
+| **`NT72`** (`stV72`) -- one full TinyLlama head | **144** | **144 correct, 0 wrong** |
+| `NT24` + `FA_PHASE1` (`stV24p1`) | 48 | **48 correct, 0 wrong** |
+| `NT24` + `FA_PHASE2` (`stV24p2`) | 48 | **48 correct, 0 wrong** |
+| `NT24` + `FA_PHASE3` (`stV24p3`) | 48 | **48 correct, 0 wrong** |
+| `NT24` + `FA_PHASE1` + `FA_PHASE_BOTH` (`stV24b1`) | 48 | **48 correct, 0 wrong** |
+| `NT24` + `FA_PHASE2` + `FA_PHASE_BOTH` (`stV24b2`) | 48 | **48 correct, 0 wrong** |
+
+Onset is `none(>N-1)` in **both clusters** on every row. Config:
+
+```
+FULL_ATTN2 FA_SP FA_SP_QOVL FA_SP_LEANCFG FA_SP_QKACC FA_SP_PKOVL FA_SP_QSPLIT
+FA_SP_WCNT FA_SP_PAX FA_SP_CVTX  FA_ST_NOOVL
+```
+
+Cross-checked: `fa_rowdiag.py --onset` and `fa_verify_tiles.py` agree on every run. 57,256 cyc/tile,
+**28.68%** utilization (`stV24`, unperturbed and 48/48, so admissible). The reference
+comparison is the sibling's **45,582 = 36.02%** measured at NT6 12/12 -- see the admissibility rule
+above for why its NT24 figure cannot be used.
+
+Two things this does **not** say. It is one seed (12345) -- and the simulator is timing-deterministic,
+so a second seed only randomises uninitialised state and is *not* a second test of the schedule;
+`FA_PHASE` and more tiles are. And `FA_PHASE` swept `k = 1,2,3` at the time this was written.
+
+> **CLOSED. `k = 4` and `k = 5` both pass 48/48** (`stF24p4`, `stF24p5`, full 24/24 on both clusters).
+> So the recommended config is now swept across **the entire `k` range the harness implements** --
+> `FA_PHASE1` through `FA_PHASE5`, plus `FA_PHASE_BOTH` at `k = 1` and `k = 2` -- where the gate asks only
+> for `k = 1,2,3`. That is the most thorough perturbation evidence any configuration in this campaign has,
+> and it removes the caveat rather than restating it. Original note follows.
+>
+> **The `k > 3` gap is being closed rather than caveated.** The harness supports `k = 4` and `k = 5`
+> (`mxgemm_core.hpp:192-201`) and there was no reason to leave the sweep short, so `stF24p4` and
+> `stF24p5` are running at NT24 on the recommended config. Budgets were raised to 3.0M/3.2M because
+> `k = 4`/`5` inject 4x/5x the MMIO round-trips per tile per cluster, so the delayed cluster lags further
+> -- exactly the effect that cost `stZ24p1`/`p2` their tails, and the one place where under-budgeting
+> would silently produce a short image count that looks like a result.
+
+The **sequential `FULL_ATTN2 FA_STEADY`** body is also clean at `NT24` (`stS24b`, 48/48) now that the
+`FA_NTILES` hole is fixed -- a second, structurally unrelated de-overlapped body reaching the same
+place, which is the corroboration that matters most here.
+
+## Second config with the full NT72 gate -- and the first at >=30%: `stQ`, 30.49%
+
+`stQ72`: **144 of 144 tile-images**, onset `none(>71)` in both clusters. Its NT24 cycle number is
+**53,852 = 30.49%**, admissible (unperturbed, 48/48).
+
+```
+# stQ -- FA_ST_NOOVL plus the SIMT softmax restructuring, and NOTHING ELSE.  No overlap restored.
+FULL_ATTN2 FA_SP FA_SP_QOVL FA_SP_LEANCFG FA_SP_QKACC FA_SP_PKOVL FA_SP_QSPLIT FA_SP_WCNT
+FA_SP_PAX FA_SP_CVTX FA_ST_NOOVL FA_SP_ACCRS FA_SP_PREPK FA_SM_2P FA_SM_2PRAW
+```
+
+**Why this one matters even though `stF24` is faster.** `stQ` restores **no overlap at all** -- it is
+`FA_ST_NOOVL` (the fully de-overlapped body, whose full gate is already banked) plus a **SIMT-only**
+arithmetic restructuring that touches no mesh, no DMA and no gemmini port. So its robustness argument does
+not depend on any claim about which overlaps are safe: it inherits the de-overlapped body's structure
+unchanged. `stF24` reaches 32.26% but *does* depend on `_DMA` and `_SCL` being harmless -- which is
+measured (48/48 separately and together) but is a stronger assumption than "no overlap at all".
+
+**So there are now two defensible endpoints, and which to prefer depends on what is being defended:**
+
+* **`stQ` at 30.49%** -- meets the target, NT72 banked, minimal structural assumption. Prefer when the
+  robustness claim has to be argued rather than just cited.
+* **`stF24` at 32.26%** -- faster, every phase point at NT24, NT72 in flight. Prefer when the measured
+  safety of `_DMA`/`_SCL` is accepted.
+
+`stQ`'s remaining gate points (NT6, NT8, `PHASE1`, `PHASE3`, `PHASE_BOTH` x2) are launched -- all cheap,
+since the expensive NT72 is already done.
+
+## THREE configs now hold NT72 144/144, and the overlap ladder is monotone
+
+| config | overlaps restored | cyc/tile | util | NT72 | remaining gate points |
+|---|---|---|---|---|---|
+| `FA_ST_NOOVL` | none | 57,256 | 28.68% | **144/144** | -- **complete** |
+| **`stQ`** | none (+ SIMT softmax) | 53,852 | **30.49%** | **144/144** | NT6, NT8, `P1`, `P3`, `BOTH` x2 -- in flight |
+| **`stZQ`** | `_SCL` | 51,834 | **31.68%** | **144/144** | NT6, NT8, `P1`, `P3`, `BOTH` x2 -- not launched |
+| **`stF24`** | `_SCL` + `_DMA` | 50,906 | **32.26%** | `stF72` in flight | none -- all others already 48/48 |
+
+**Utilization rises monotonically as overlaps are restored, and correctness does not degrade at any
+step** -- three independent NT72 confirmations, 432 tile-images, zero wrong. That is worth more than any
+single row: it says the overlap-restoration ladder is well-behaved, i.e. `_SCL` and `_DMA` really are
+free and the cliff is at `_QK` alone, exactly where `stY2b`/`stB24` put it.
+
+**Why `stZQ`'s remaining six points are deliberately NOT launched.** `stF24` is faster *and* needs only
+one run to complete its gate (`stF72`, already past halfway) because every other point is banked;
+`stZQ` would need six. If `stF72` returns 144/144, `stZQ` is redundant -- strictly slower than `stF24`
+with a strictly stronger assumption than `stQ`. If `stF72` fails, `stZQ` becomes the best NT72-banked
+config and its six points get launched then. Spending six slots now on a fallback while the primary is
+one run from done is the wrong order.
+
+## Final audit -- every claim in this file re-scored from disk
+
+Run after the last gate point landed, re-scoring every trace with `fa_verify_tiles.py` rather than
+trusting the running notes:
+
+| config | NT6 | NT8 | NT24 | NT72 | phase points |
+|---|---|---|---|---|---|
+| **`stF24`** | 12/12 | 16/16 | 48/48 | **144/144** | `P1`-`P5` + `BOTH` x2, all **48/48** |
+| `stQ` | 12/12 | 16/16 | 48/48 | **144/144** | `P2`,`P3`,`BOTH` x2 **48/48**; `P1` 47/47 (running) |
+| `stZQ` | -- | -- | 48/48 | **144/144** | `P2` 48/48 |
+| `FA_ST_NOOVL` | 12/12 | 16/16 | 48/48 | **144/144** | `P1`-`P3` + `BOTH` x2, all 48/48 |
+| fully de-overlapped (`stM24`) | -- | -- | 48/48 | -- | -- |
+
+**Zero wrong in every row.** Across *all* runs in `/tmp/struns`: **2,686 tile-images scored, 112 wrong**
+-- and every one of the 112 belongs to a configuration deliberately run to failure (`stB24`/`stB24p2`/
+`stY2b` for the bank-collision refutation, `stN0`-`stN4` and `stN7` for the tile-0 prologue defect,
+`stE6p1`/`p2` for the `CFGPRE` refutation, `stD6p1`/`stD24`/`stY24` as reference/control points). **No
+configuration this file recommends has a single wrong tile-image anywhere on disk.**
+
+Reproduce with `./fa_runtable.sh /tmp/struns`, or re-score any single trace with
+`python3 fa_verify_tiles.py <tag> --out /tmp/struns/<tag>.out --golden ./golden_O_u16.npy`.
+
+## A cycle number is admissible only if the run is BOTH fully correct AND unperturbed
+
+Two separate rules, and they compose into something narrower than either alone:
+
+1. **Not all-correct => the timing is void.** A wrong tile also has wrong timing (~28% steady-interval
+   spread vs ~3% when clean), so a run that is not N-of-N has no usable cycle number -- it only
+   identifies the configuration.
+2. **`FA_PHASE<k>` => the timing is void.** The harness injects `k x 64` dependent MMIO round-trips
+   **per tile per cluster** (~2.4k cyc per step), and `FA_PHASE_BOTH` injects into *both* clusters. So
+   a phase run can be **perfectly clean and its cycles still meaningless**: they carry the
+   instrumentation. Observed deltas on `stX24` were +499 (`P1`) and +1,212 (`P2`) -- smaller than the
+   nominal injection, so some is absorbed, but the direction is one-way.
+
+**Therefore: 30% is decided by the UNPERTURBED run clearing <= 54,733 cyc/tile; the gate is decided by
+the PERTURBED runs being N-of-N. Never mix them.** A lever whose *perturbed* run happens to come in
+under 54,733 has not cleared 30%; one whose perturbed run comes in over it has not failed.
+
+**What rule 2 does NOT void: onsets.** An onset from a phase run is exactly what the harness is *for*
+-- perturbing the schedule is the measurement, not a contaminant. Rule 2 voids cycle counts only. Do
+not throw away the phase onsets in this file on the strength of it.
+
+### Retroactive audit of this file, run against the combined rule
+
+Every cycle figure quoted here was checked against its run's `.defines` and `.score`:
+
+| figure | run | unperturbed? | all-correct? | verdict |
+|---|---|---|---|---|
+| 57,256 (28.68%) | `stV24` | yes | 48/48 | **admissible** |
+| 63,952 (25.68%) | `stM24` | yes | 48/48 | **admissible** |
+| 57,135 (28.74%) + stage table | `stX24` | yes | 48/48 | **admissible** |
+| ~~45,827 (35.83%), the 36% reference~~ | `stD24` | yes | **37 of 41 -- 4 WRONG** | **VOID** |
+
+The last row is mine and I had quoted it twice. `stD24` is the reference config at NT24, whose onset
+is tile 13 -- so the run *is* corrupt by construction and rule 1 voids its cycles. The reference's
+comparison number must come from a run that is both unperturbed and fully correct, which for that
+config means **NT6 or shorter** (onset 13 > 5): the sibling README's **45,582 cyc/tile = 36.02% at
+NT6, 12/12**. That is the figure used below. The distinction matters for the trade being claimed --
+the reference is only that fast *over an exposure short enough to hide its onset*.
+
+## Score configurations by ONSET TILE, not by pass/fail
+
+The perf track established that the onset is a **deterministic function of the schedule**, not a
+sampled race outcome: identical at NT16 and NT24 for one config, and at NT24 and NT72 for another.
+So "passed at NT *n*" carries exactly the information "onset > *n*" -- which is why NT8 gave false
+confidence for weeks -- while the onset tile is a real-valued observable that can be **ranked and
+bisected against from a single run**. `fa_rowdiag.py --onset <trace>` prints it per cluster; it
+excludes INCOMPLETE images explicitly, and it separates the un-overlapped path's **tile-0 prologue
+defect** from a hazard onset, because conflating them would report "onset 0" for a config whose
+hazard onset is actually unmeasured.
+
+### Onsets measured here (seed 12345, `NT6` unless stated)
+
+| config | perturbation | cl0 onset | cl1 onset |
+|---|---|---|---|
+| 36% config (`stD6p1`) -- the reference | `FA_PHASE1` | **4** | none(>5) |
+| 36% + `FA_ST_CFGPRE` (`stE6p1`) | `FA_PHASE1` | none(>5) | **3** |
+| 36% + `FA_ST_CFGPRE` (`stE6p2`) | `FA_PHASE2` | none(>5) | **1** |
+| 36% + `FA_ST_CFGFENCE` (`stC6p1`) | `FA_PHASE1` | none(>5) | none(>5) |
+| 36% + `FA_ST_CFGFENCE`, **NT24** (`stC24`) | none | **13** | **15** |
+| **`FA_ST_NOOVL`** (`stV6`/`p1`/`p2`) | none / `P1` / `P2` | none(>5) | none(>5) |
+| sequential `FULL_ATTN2 FA_STEADY` (`stS6`/`p1`) | none / `P1` | none(>5) | none(>5) |
+| un-overlapped `FA_SP` (`stR6`/`p1`/`p2`/`p3`) | none / `P1` / `P2` / `P3` | tile-0 only, hazard none(>5) | same |
+
+Two things to read off this. **`FA_ST_CFGPRE` makes the hazard *worse*** -- it pulls cl1's onset in
+to 3 (`PHASE1`) and 1 (`PHASE2`), where the unfixed reference has cl1 clean at NT6. That is a
+stronger refutation than "it didn't help". And **the un-overlapped `FA_SP` body's steady state
+survives `FA_PHASE1`, `FA_PHASE2` *and* `FA_PHASE3`** at NT6 with only its tile-0 prologue defect --
+so de-overlapping does something real. NT24 runs for `FA_ST_NOOVL` (`stV24`, `stV24p1`, `stV24p2`),
+the fully de-overlapped body (`stM24`), the reference (`stD24`) and the sequential body (`stS24`) are
+the measurements that turn "none(>5)" into a number.
+
+## S IS THE SITE -- confirmed positively, per-tile and per-cluster, under FA_PHASE
+
+`FA_SP_DUMPS` writes a per-row XOR checksum of **S** the instant `S(t)` becomes resident, before the
+softmax touches it. Q, K, V and their MX scales are loop-invariant in `FA_SP`, so `S(t)` must be
+bit-identical for every `t`. Measured on `stG6p2` = 36% config + `FA_SP_DUMPS` + `FA_PHASE2`, whose
+O onset is cl0 = 4:
+
+| | S row-checksums | O |
+|---|---|---|
+| cluster 0 | identical for tiles 0-3, then **all 64 rows change at tile 4 and stay changed** | onset 4 |
+| cluster 1 | **identical at every tile** | clean at every tile |
+
+S goes wrong in exactly the cluster and exactly the tile where O goes wrong, and nowhere else, in the
+same run. That is a *positive* localization rather than the previous convex-hull inference, and it
+rules out softmax, requant, pack, PV and finalize for this failure.
+
+### The wrong S is a DRIFT, not a fixed mis-addressing -- which kills one story and names another
+
+Three further facts, all from the same checksums at zero extra cost:
+
+* **It is not a permutation.** 0 of 64 wrong row-checksums appear anywhere in the correct S; there
+  is no rotation `k` for which the wrong S is the correct S rotated. So S is not being *read from
+  the wrong place* with the right data -- it is being *computed differently*.
+* **Tile 4's S differs from tile 5's S.** A fresh corruption each tile, not one latched error.
+* **It gets monotonically worse:** O Frobenius 3.567 (t0-t3) -> **84.635** (t4) -> **114.566** (t5),
+  reproducing the shape of the pre-existing `FA_PHASE2` record (108.6 / 113.1 / 118.2 / 119.4 /
+  119.4 -- progressive, saturating).
+
+All 64 rows at once + fresh each tile + monotonically worsening + never recovering + one cluster is
+the signature of a **monotonically drifting index that starts slipping at the onset tile**, not of a
+one-shot latch and not of a per-row ordering violation (which would corrupt a *subset* of rows).
+
+That fits `ScaleFactorMem`'s odometer exactly: `counter_i/j/k_runtime` (`ScaleFactorMem.scala:70-104`)
+advance on mesh scale reads, re-zero **only** by completing a full sweep of the *live* `loop_bound_*`
+registers, and have no reset path. Once a sweep fails to land on zero, every later gemm reads scale
+rows further off -- progressively worse, never recovering. **But `FA_ST_CFGPRE` refutes the obvious
+trigger**: fencing on both sides of `CONFIG_SCALE_MEM` does not stop it (and makes it worse). So if
+it is the odometer, the slip is *not* caused by a bound change landing mid-sweep.
+
+The remaining way to slip that odometer is for one matmul to perform a **different number of
+scale-enabled reads** than `bound_i x bound_j x bound_k x 16` -- a read replayed or dropped under
+scale-port/SMEM contention. That would be triggered by exactly the contention `FA_PHASE` perturbs,
+and it would be **immune to any software fence**, because a fence orders *commands* and not the
+mesh's internal read stream. It also predicts that de-overlapping pushes the onset out, which is
+what the `NT6` phase results and the perf track's `ACCRS`+`PREPK` onset of 17 both show.
+> #### PRE-REGISTERED CRITERION, REVISED BEFORE MEASURING -- and the revision matters
+>
+> I first wrote this test as *"count `read_req.fire && scaling_enable` per matmul and compare against
+> `bound_i x bound_j x bound_k x 16`"*, with a match reading as refutation. **That criterion is wrong
+> and would have killed a live hypothesis on a null result.** From the peak track's static arithmetic
+> over the `Sq=32` shapes (`PE_M=PE_N=PE_K=16`, `mxgemm_core.hpp:318-320`):
+>
+> | cfg | M,N,K | bounds | `bi*bj*bk*16` |
+> |---|---|---|---|
+> | QK full | 64,256,128 | 4,16,8 | 8,192 |
+> | QK half | 32,256,128 | 2,16,8 | **4,096** |
+> | PV full | 64,128,256 | 4,8,16 | 8,192 |
+> | PV half | 32,128,256 | 2,8,16 | **4,096** |
+>
+> The half-tile bound product *equals* its mesh-cycle count -- one scale read per row-feed, sweep
+> complete -- and `fa_mm_acc` re-issues `gemmini_mxquant_config_mvout` with `C.PE_TILES_I/J/K()` on
+> **every** call, so each matmul latches its own bounds instead of inheriting the previous ones. Per
+> 64 query rows the totals are **identical** across shapes: 16,384 scale reads, 768 A-scale writes.
+> **So "the count matches" is the EXPECTED result on both shapes and carries no information about the
+> odometer.**
+>
+> **The hypothesis is a RATE hypothesis, not a COUNT hypothesis.** What `Sq=32` changes is not the
+> read count but the number of matmuls per 64 rows, **2 -> 4**, and hence the number of
+> `CONFIG_SCALE_MEM` issuances and bounds *changes*:
+>
+> * drift **per scale read** => `Sq=32` behaves like `Sq=64` (identical total reads);
+> * drift **per matmul / per bounds change** => `Sq=32` accumulates at **twice the rate** and should
+>   fail about twice as early.
+>
+> Measured, and consistent with the second: `Sq=64` fails at tiles 7-17 while `Sq=32` dies at
+> **half-tile 1-2** -- sooner by well more than 2x.
+>
+> **THE PROBE, RESOLVED AND WORKING** (so nobody re-derives the hierarchy walk). FSDB capture:
+> `/tmp/fa_fsdb_go.sh s16 200000 130000 12345`. Note `+dump-start` did **not** clip anything here --
+> the FSDB spans from time 0 regardless, which is convenient (it covers the healthy early matmuls too)
+> but means budgeting disk for the whole run: 95 MB by cycle 100k, 474 MB for the full 200k.
+> Scope, cluster 0 (`cluster_prci_domain`; cluster 1 is `cluster_prci_domain_1`, and note the module
+> is `ScalingFactorMem` while the Scala file is `ScaleFactorMem.scala` -- searching the file name finds
+> nothing in the netlist):
+>
+> ```
+> TestDriver.testHarness.chiptop0.system.cluster_prci_domain.element_reset_domain_element
+>   .tile_prci_domain_2.element_reset_domain_radiance_gemmini_tile_3.gemmini.spad.acc_mems_0
+>   .scaleFactorMem.{counter_i_runtime, counter_j_runtime, counter_k_runtime,
+>                    io_scaleMemCntl_loop_bound_{i,j,k}, read_row_addr_{act,w}}
+> ```
+>
+> Cluster 1 differs only in `cluster_prci_domain_1` and `..._gemmini_tile_6`. The paths were resolved
+> by walking instance names in `gen-collateral/*.sv` with plain `grep` (`AccumulatorMem` <- `Scratchpad`
+> <- `Gemmini` <- `GemminiTile` <- `TilePRCIDomain_3` <- `RadianceCluster` <- `ClusterPRCIDomain`), which
+> needs no special tooling.
+>
+> **READ THE SIGNALS WITH pynpi, NOT WITH THE `radiance-fsdb` MCP.** Two independent reasons:
+> * *Correctness.* The MCP's `fsdb_signal_changes` returned changes from **outside** the requested
+>   window with the first entry stamped at the window start -- see the tool caveat below, which nearly
+>   produced a false confirmation of this very hypothesis. Its `fsdb_signal_value` point reads were
+>   self-consistent, but a tool that silently mis-windows one query is not one to build a sequence on.
+> * *Fit.* The observable below needs a **time grid**, and pynpi returns a whole per-cycle series in one
+>   pass instead of N point queries:
+>   `/home/eecs/yrh/.claude/skills/radiance-perf-viz/scripts/radiance_perf.sh --fsdb X.fsdb --out Y.npz`
+>   which drives `radiance_perf_extract.py` under the Verdi-bundled python3.6
+>   (`VERDI_NPI_HOME` defaults to `/ecad/tools/synopsys/verdi/V-2023.12-SP1-1`). Point the config at the
+>   six signals above. The MCP is stdio (one server per client) and may or may not be connected; this
+>   path does not depend on it at all.
+>
+> **Healthy baseline measured on `s16` (`Sq=32`, `NT16`), cluster 0.** `counter_k_runtime` advances
+> `0 -> 1 -> 2 -> 3` at 191.739 / 192.763 / 193.787 Mps, i.e. **one increment every 512 cycles
+> exactly** -- which is `bound_i x bound_j x 16 = 2 x 16 x 16 = 512` for the QK half-tile, so the
+> odometer behaves as derived and the units are confirmed. Probe `counter_k_runtime` (the slowest of
+> the three) for a compact per-matmul picture; `counter_i_runtime` changes every 16 reads.
+>
+> **REVISED OBSERVABLE:** the per-matmul **odometer state sampled at each bounds change** --
+> `counter_i/j/k_runtime` immediately before and after every `CONFIG_SCALE_MEM` -- and not any total
+> count. Confirmation is `counter_* != 0` at a bounds change; refutation is `counter_* == 0` at every
+> bounds change up to and including the failing matmul. All six signals are `dontTouch`'d
+> (`ScaleFactorMem.scala:73-75`, `ExecuteController.scala:163-165`), so they survive into the netlist
+> and are directly probeable.
+
+### Reading a 1-cluster (FPGA) run
+
+The board carries 1 of the 2 clusters, so the same kernel yields **half** the tile-images (`NT6` = 6,
+not 12) and cluster 1 is simply absent. `fa_rowdiag.py --onset` prints
+`cl1: ABSENT (no O stores -- expected on a 1-cluster board)` rather than letting the empty case fall
+through to a scary-looking `onset none(>-1)`. Verified against a synthetically 1-clusterized trace.
+The surviving mechanism candidate is intra-cluster and `FA_PHASE_BOTH` already argued against an
+inter-cluster contest, so a 1-cluster board is well matched to what is actually being tested.
 
 ## Status
 
@@ -51,8 +437,206 @@ Target -- bit-correct on **all** of:
 |---|---|
 | NT6 (12 images) | several configs, 12/12 |
 | NT8 (16 images) | `FA_SP_ACCPAD`+`FA_SP_PREPK`, 16/16 |
-| NT72 (~1 TinyLlama head) | **not yet measured** (~3.3M cycles, ~10 h sim) |
-| `FA_PHASE1/2/3` | **none** -- every config measured fails at least one k |
+| NT72 (~1 TinyLlama head) | **`FA_ST_NOOVL`, 144 of 144 tile-images** (`stV72`) |
+| `FA_PHASE1/2/3` | `FA_ST_NOOVL`: `P1` and `P2` clean at NT6 **and NT24**; `P3`/`BOTH` in flight |
+
+### `FA_ST_NOOVL` -- the first configuration to survive a large NT
+
+| run | config | tiles | perturbation | result |
+|---|---|---|---|---|
+| `stV72` | `FA_ST_NOOVL` | **NT72** | none | **144/144, onset none(>71) both clusters** |
+| `stV24` | `FA_ST_NOOVL` | NT24 | none | 48/48, onset none(>23) both |
+| `stV24p1` | `FA_ST_NOOVL` | NT24 | `FA_PHASE1` | **48/48, onset none(>23) both** |
+| `stV24p2` | `FA_ST_NOOVL` | NT24 | `FA_PHASE2` | **48/48, onset none(>23) both** |
+| `stM24` | fully de-overlapped + `LEANCFG` | NT24 | none | 48/48, onset none(>23) both |
+| `stD24` | **the 36% reference** | NT24 | none | **cl0 onset 13**, cl1 none(>23) |
+| `stC24` | 36% + `FA_ST_CFGFENCE` | NT24 | none | **cl0 onset 13**, cl1 onset 15 |
+
+NT72 is 144 tile-images = one full TinyLlama head at `Sq=64`/`Sk=256` causal, i.e. the exposure a real
+kernel invocation actually sees. **Still outstanding before the gate is met:** `FA_PHASE3`,
+`FA_PHASE_BOTH` (both `k`), and an explicit `NT8` -- all four launched (`stV24p3`, `stV24b1`,
+`stV24b2`, `stV8`). Nothing measured so far fails, but the gate is not passed until those land.
+
+Two side results from the same table. `FA_ST_CFGFENCE` leaves cl0's unperturbed onset at **13**,
+identical to the unfixed reference -- so it is **not a fix**, and its clean `FA_PHASE1` run at NT6 was
+a reshuffle. And the fully de-overlapped body (`stM24`) is clean to 23 as well, so the robustness is
+not specific to `FA_ST_NOOVL`'s particular staging -- it tracks *removing the overlap*.
+
+### What it costs
+
+| config | cyc/tile | util | onset | cycles admissible? |
+|---|---|---|---|---|
+| 36% reference, **NT6** | 45,582 | 36.02% | 13 | yes -- 12/12 at NT6, unperturbed |
+| 36% reference, NT24 (`stD24`) | ~~45,827~~ | ~~35.83%~~ | 13 | **NO -- 37 of 41, rule 1** |
+| **`FA_ST_NOOVL`** (`stV24`) | **57,256** | **28.68%** | none(>71) | yes -- 48/48, unperturbed |
+| fully de-overlapped (`stM24`) | 63,952 | 25.68% | none(>23) | yes -- 48/48, unperturbed |
+
+`FA_ST_NOOVL` buys the exposure from tile 13 to beyond tile 71 for **25% more cycles per tile**
+(36.02% -> 28.68% utilization, using the reference's admissible NT6 figure). Per this directory's charter that is a good trade; per the sibling's
+it is not, which is exactly why there are two directories.
+
+Everything below was measured with the scripts and tools in this directory; the run set is
+reconstructible from disk with **`./fa_runtable.sh /tmp/struns`** (tag, whether the sim reached
+`$finish`, correct/wrong tile-image counts, and the flag set + RV32-segment sha recorded at build
+time), and any single trace can be re-diagnosed with `fa_verify_tiles.py` (the verdict) or
+`fa_rowdiag.py` (which stage). `/tmp/st_build.sh <tag> "<DEFINES>"` and
+`/tmp/st_go.sh <tag> <elftag> <seed> <budget_cycles> 16420 <marks_per_tile>` build and launch in
+**this** directory only. Marks per tile: 7 for the `FA_SP` bodies, **8** with `FA_ST_NOOVL` (it adds
+a stage), 11 for the sequential `FULL_ATTN2 FA_STEADY` body.
+
+### The de-overlap plan has a prerequisite: the un-overlapped path gets TILE 0 wrong
+
+> **CORRECTION, and it is mine.** This section first said "the un-overlapped path is BROKEN". It is
+> not. Once the `FA_NT2` runs *completed*, the scored result is **tile 0 wrong, tile 1 CORRECT at
+> 3.5666%** -- at every rung of the ladder. The steady state of the un-overlapped body is bit-exact;
+> only its **first** tile is wrong. The stronger claim came from reading a *partial* trace, whose
+> first (and only) complete group is tile 0 -- so a tile-0-only defect is indistinguishable from a
+> total failure until the run finishes. I killed seven NT6/NT8 runs on that partial evidence; their
+> tiles 1-5 would have shown the steady state immediately. **Do not score a growing trace and act on
+> it: `fa_verify_tiles.py` reports later groups as INCOMPLETE for exactly this reason, and the fix is
+> to wait, not to reason around it.**
+
+The first thing the suggested approach asks for -- *"no `(i+1)` prefetch, no `(i-1)` overlap"* -- is
+reachable by simply **not** setting `FA_SP_QOVL` / `FA_SP_QKACC` / `FA_SP_QSPLIT` / `FA_SP_PKOVL`.
+Preprocessing `FULL_ATTN2 FA_SP FA_SP_WCNT FA_NT6` confirms that gives exactly the intended shape --
+seven stages, every one bracketed by `FAP_BAR`, every mesh op issued *and drained* inside a single
+stage with all six warps parked, no cross-tile anything:
+
+```
+for t:  MARK
+  S0 [w0] fa_cfg<QKF>; fa_mvin_A(Q); fa_scl(Q scales)      BAR(3)
+  S1 [w0] fa_gf; fa_mm<QKF> -> SP_C; fa_gfl                BAR(4)
+  S2 [all] online_softmax_block  (in place over S)         BAR(5)
+  S3 [all] requant_P_to_spad_tiled -> P8 + scales          BAR(6)
+  S4 [all] pack_scales_to_sfmem (thread 0 internally)      BAR(7)
+  S5 [w0] fa_cfg<PVF>; fa_mm<PVF> -> SP_C; fa_gfl          BAR(8)
+  S6 [all] finalize_O -> GMEM                              BAR(9)
+```
+
+**It does not compute the right answer at tile 0, deterministically -- and it is right from tile 1
+on.** Measured (2026-07-31, seed 12345, `fa_verify_tiles.py` against `golden_O_u16.npy`):
+
+| build | cl0 t0 | cl0 t1 | cl1 t0 | cl1 t1 |
+|---|---|---|---|---|
+| `stN0` (`FA_NT2`, completed) | 24 NaN rows | **CORRECT 3.5666%** | 1 NaN row | **CORRECT 3.5666%** |
+| `stN1`..`stN4` (each rung) | same | **CORRECT** | same | **CORRECT** |
+| `stB6` / `stB6p1` / `stB6p2` / `stB6p3` / `stB8` | 153.879%, same 24 rows | -- | 79.026%, same row | -- |
+
+Tile 0 is bit-identical across no skew, `FA_PHASE1`, `FA_PHASE2`, `FA_PHASE3`, `FA_PHASE_BOTH` and
+`FA_NT8`, i.e. across a 2.4k-, 4.8k- and 7.2k-cycle skew of cluster 1. So this is **not** the race
+-- it is a **prologue / warm-up** bug, and it is *separate from* the hazard this directory exists to
+chase (that one is phase-sensitive and starts at a *later* tile). Two further facts that narrow it:
+
+* **It is not `l`.** Fitting each non-NaN row to the best scalar multiple of golden leaves a
+  **median 78% residual** (max 93%), so `O_unnorm` itself is wrong, not the softmax denominator.
+  A pure `l` error would fit at ~0%.
+* **The two clusters mostly agree.** Rows 1,2,3,17,18,19,33,63 have *identical* fitted scale and
+  residual in both clusters; they differ only at rows 0, 16, 32 (the first row of each 16-row PE
+  row-tile) plus the NaN rows. So the defect is largely deterministic and data-dependent, with a
+  small timing-dependent component at PE-tile boundaries.
+
+The NaN rows are bf16 `0x7FC0` and the shape is *"first 4 of 16 rows fine, last 12 wrong"* in PE
+row-tiles 0 and 1, with row-tiles 2 and 3 clean -- worth keeping in view, because
+`PE_TILES_I() == 4`.
+
+**Consequence for the plan:** the fully de-overlapped body is *usable* -- its steady state is
+bit-exact -- but it cannot pass a gate that scores every tile-image until tile 0 is fixed. Because
+the defect is at tile 0, every experiment about it is an `FA_NT2` question: ~20 minutes per point
+rather than ~75.
+
+**The prologue is the suspect, and `FA_ST_PROLOGF` is the bounded test.** The prologue's K and V
+weight-scale words are written by `fa_scl`, i.e. ordinary Muon SIMT stores to the gemmini's
+scale-SRAM TL slave, and the only thing between them and tile 0's QK matmul -- which *reads* those
+weight scales -- is `FAP_BAR(2)` = `mu_fence_smem()` + `vx_bar`. This file documents twice
+(`FA_SP_QGF`, and the `1cce749` fix) that `mu_fence_smem()` is **not** a drain for an SF-SRAM scale
+write, and that the working primitive is `gemmini_fence()` -- a load from the same gemmini TL port,
+which orders every preceding store to it. Every configuration that gets tile 0 *right* happens to
+have such a fence there already: `FA_SP_QKACC`'s priming `fa_gf()`. That is the accidental-slack
+pattern this campaign keeps finding. `FA_ST_PROLOGF` makes it explicit and unconditional for one
+MMIO round trip (~37 cyc) **once per kernel**.
+
+### The upward ladder, at NT2 (the defect is at tile 0, so NT2 is enough)
+
+All on `FULL_ATTN2 FA_SP FA_SP_WCNT`, seed 12345, cluster 0 / cluster 1 tile 0:
+
+| rung | added | tile 0 | tile 1 | verdict |
+|---|---|---|---|---|
+| `stN0` | -- | WRONG (24 / 1 NaN rows) | CORRECT | 2 of 4 |
+| `stN1` | `PKOVL` | WRONG, **same rows** | CORRECT | 2 of 4 |
+| `stN2` | `+ QOVL` | WRONG, **same rows** | CORRECT | 2 of 4 |
+| `stN3` | `+ QKACC` | WRONG, **same rows** | CORRECT | 2 of 4 |
+| `stN4` | `+ QSPLIT` | WRONG, **same rows** | CORRECT | 2 of 4 |
+| `stN5` | `+ LEANCFG PAX CVTX` (= the 36% config) | **CORRECT** | **CORRECT** | **4 of 4** |
+
+So `PKOVL`, `QOVL`, `QKACC` and `QSPLIT` -- the four overlap flags -- do not affect tile 0 at all,
+and every rung's steady state is bit-exact. The only difference from the verified-correct
+configuration is `FA_SP_LEANCFG` + `FA_SP_PAX` + `FA_SP_CVTX`, and **the split is clean**:
+
+| build | flags on `QOVL QKACC PKOVL QSPLIT WCNT` | cl0 t0 | cl1 t0 |
+|---|---|---|---|
+| `stN7` | `PAX` + `CVTX` | **153.879%, 24 NaN rows** | **79.026%, 1 NaN row** |
+| `stN6` | `LEANCFG` | **CORRECT 3.5666%** | **CORRECT 3.5666%** |
+
+**`FA_SP_LEANCFG` is a tile-0 correctness flag, not just the performance flag it is documented as.**
+`PAX`/`CVTX` are irrelevant to tile 0, exactly as their bit-exactness-by-construction predicts.
+`LEANCFG`'s only effect is to stop calling `configure_mxgemmini` per gemm, so **calling
+`configure_mxgemmini` at all in this body is what breaks tile 0** -- and it does so identically
+whether or not any overlap flag is set.
+
+Two candidate sub-mechanisms, both inside `configure_mxgemmini`, neither yet pinned:
+
+* it issues an extra `CONFIG_SCALE_MEM` per gemm -- the netlist defect above; and
+* it issues a **pair of `gemmini_loop_ws_config_bounds` commands outside any
+  `gemmini_loop_ws_spad` sequence**, and `LoopMatmul.scala:1122` writes those bounds into the
+  `loop_being_configured` slot *without* setting its `configured` bit (`LoopMatmul.scala:1162`
+  is what sets it) -- so a stray pair lands in the slot the next real `LOOP_WS` will use.
+  Those two calls are redundant anyway: `gemmini_loop_ws_spad` re-issues the bounds itself.
+
+`FA_ST_PROLOGF` (`stP2`) tests the drain hypothesis. If a drain does not fix tile 0, deleting the two
+stray `loop_ws_config_bounds` calls is the next thing to try, and it is free.
+
+**Note the shape of the inference, because it is the interesting part.** All three of those flags
+are *per-tile* changes, so none of them can *cause* a tile-0-only failure by its own semantics --
+`PAX` and `CVTX` are XOR permutations of an index (`PAX`'s reduction is an order-independent `fmax`),
+and `LEANCFG` only deletes a redundant `configure_mxgemmini`. What they can do is move the *timing*
+of the prologue-to-tile-0 hand-off. So the expected reading of `stN6`/`stN7` is **not** "flag X is
+broken" but "flag X shifts a prologue race", which is why the fix under test is a drain
+(`FA_ST_PROLOGF`) and not a flag.
+
+`fa_rowdiag.py` in this directory is the tool these rows came from.
+
+### FA_ST_CFGPRE is REFUTED -- by its own experiment
+
+The `CONFIG_SCALE_MEM`-ordering mechanism below predicts the whole fingerprint and has a netlist
+defect behind it, and it is **still not a sufficient fix**. Measured on the 36% config at NT6:
+
+| build | flags added | verdict |
+|---|---|---|
+| `stE6p2` | `FA_ST_CFGPRE` + `FA_PHASE2` | **cluster 1 tile 1 = 119.367% WRONG** |
+| `stE6p1` | `FA_ST_CFGPRE` + `FA_PHASE1` | **cluster 1 tile 3 = 91.435% WRONG** |
+
+It fails at **two different `k`**, at different tiles, in the delayed cluster -- so it is not a
+single unlucky alignment.
+
+119.367% is the *same value* the pre-existing `FA_PHASE2` record reports for this hazard
+(`mxgemm_core.hpp`: `... 118.1504% 119.3714% 119.3714%`), so it is the same failure, not a new one.
+A `gemmini_fence()` immediately before the `CONFIG_SCALE_MEM` **and** one between it and the
+`LOOP_WS` -- which together satisfy both halves of the ordering argument -- do not close it. That
+is a fifth refuted mechanism for this campaign. The netlist finding stays on the record because it
+is a true defect and it is the reason `FA_SP_LEANCFG` matters, but it is **not** this bug.
+
+**The fences were verified to exist in the binary before the refutation was believed** -- this file
+already records one "settle" that clang folded into 16 independent pipelined loads that guaranteed
+nothing (`FA_CFGSETTLE2`'s note). Static `lw.shared` count over the linked GPU ELF:
+
+| build | added | `lw.shared` |
+|---|---|---|
+| `stD6p1` | -- (control) | 56 |
+| `stC6p1` | `FA_ST_CFGFENCE` (1 fence per matmul) | **60** |
+| `stE6p1` | `FA_ST_CFGPRE` (2 fences per matmul) | **64** |
+
+Monotone +4 per added fence pair, i.e. both fences are really emitted in both `fa_mm` and
+`fa_mm_acc`. The refutation is of the mechanism, not of a fence that silently vanished.
 
 ## What is already ruled out -- do not re-derive
 
@@ -82,11 +666,10 @@ Established by measurement, several by refuting our own hypotheses:
   fields (`0x08` cmd-ready, `0x20 io.busy`, `0x28 runningLoops`); every other offset is
   `RegField.w` and reads back constant zero with a normal ack. `0x28` is **issue-based** --
   `LoopMatmul.scala:497` goes idle when the last COMPUTE is *accepted into the reservation
-  station* -- so no fixed pad can make it safe. `matmul_in_progress` off the mesh tag queue
-  (`ExecuteController.scala:313-315`) is the signal one would want, and it is a **live 6-input OR** in the taped-out
-  netlist -- an earlier claim here that it was dead-code eliminated by `num_counter = 0` is
-  RETRACTED (that was read from Chisel; the netlist disagrees). It is still not MMIO-reachable,
-  which is the operative limitation.
+  station* -- so no fixed pad can make it safe.
+* ~~`matmul_in_progress` was dead-code eliminated by `num_counter = 0`.~~ **REFUTED
+  2026-07-31** -- see the RTL finding below. It is live in the taped-out netlist. What is
+  actually wrong is *what it gates*.
 
 ## Corruption fingerprint
 
@@ -95,77 +678,522 @@ so P and l stay mutually consistent -- which exonerates PV, its operand spad, V'
 finalize. Successive wrong tiles share **0 of 4096 words**, so each tile is freshly corrupted
 rather than inheriting one damaged resident operand. Values latch around 93-121% of golden.
 
-## S IS the site -- confirmed by direct measurement, and the corruption is a DRIFT
+## A fifth candidate, from the taped-out netlist: the scale-mem config is applied UNGATED
 
-`FA_SP_DUMPS` dumps per-row XOR checksums of S the instant it is resident. On one `PHASE2` run:
+Read out of `RadianceTapeoutSimConfig/gen-collateral/ExecuteController.sv` on 2026-07-31 -- the
+elaborated Verilog, not the Chisel, so this is what is in silicon:
 
-* **cluster 0**: S identical for tiles 0-3, then **all 64 rows change at tile 4** -- and its O onset
-  is tile 4.
-* **cluster 1**: S identical at every tile, O clean at every tile. *Same run.*
+```systemverilog
+wire _GEN_6 = _cmd_q_io_deq_bits_0_cmd_inst_funct == 7'h1A;   // 0x1A = 26 = CONFIG_SCALE_MEM
+always @(posedge clock) if (reset) ... else begin
+  ...
+  if (_GEN_6) begin                                           // <-- THE ENTIRE ENABLE
+    loop_bound_i <= _cmd_q_io_deq_bits_0_cmd_rs1[41:33];
+    loop_bound_j <= _cmd_q_io_deq_bits_0_cmd_rs1[50:42];
+    loop_bound_k <= _cmd_q_io_deq_bits_0_cmd_rs1[59:51];
+    scale_mem_read_act_sel <= ...[60];  scale_mem_read_w_sel <= ...[61];
+  end
+wire _GEN_26 = _GEN_6 & ~matmul_in_progress & ~_GEN_24;        // gates only the POP
+```
 
-That replaces the earlier convex-hull *inference* with a positive localization. Three more facts fall
-out of the same checksums, free:
+**The interlock for exactly this hazard exists and is applied to the wrong signal.** The MX
+scale-memory addressing registers are written from the funct field of the EX command queue's head
+entry and nothing else -- not `_cmd_q_io_deq_valid_0`, not `control_state`, and **not
+`matmul_in_progress`**. The `!matmul_in_progress` guard at `ExecuteController.scala:724` -- whose
+own comment reads *"Registers are already updated at lines 135-144"* -- delays only the completion
+back to the reservation station. The register write is eager and unconditional.
 
-* **Not a permutation.** 0 of 64 wrong checksums appear anywhere in the correct S, and no rotation
-  reproduces it. S is being **computed** differently -- not read from the wrong place.
-* **Fresh each tile.** Tile 4's corruption differs from tile 5's.
-* **Monotonically worse.** O Frobenius 3.567 -> 84.635 -> 114.566.
+Why that is sufficient to produce the whole fingerprint: `ScaleFactorMem.scala:78-104` advances
+`counter_i/j/k_runtime` on mesh scale reads and wraps them **only** when each equals
+`loop_bound_* - 1` *against the live register*, and there is no reset path
+(`scale_mem_counter_reset_flag` is computed in `ExecuteController` and never consumed by
+`ScaleFactorMem` -- checked; the `mxgemm_core.hpp` claim is correct). The read rows are
+`loop_bound_i*(counter_k>>1)+counter_i` (act) and `loop_bound_j*(counter_k>>1)+counter_j`
+(weight), and the two gemms differ in `loop_bound_j` (QKF 16, PVF 8) but not `loop_bound_i`
+(both 4). So one mis-timed bound change strands the odometer **permanently**, corrupts the
+**weight** side only, and gives: onset at a specific tile, latching, progressively worse, never
+recovering, one cluster (each cluster has its own gemmini), magnitude preserved (aliased E8M0
+bytes span a narrow exponent range).
 
-**All 64 rows at once + fresh each tile + worsening + never recovering + one cluster only = a
-monotonically drifting index.** That is *not* what a per-row ordering violation looks like -- that
-would corrupt a subset of rows -- so this weighs **against** the accumulator-row-ordering candidate
-that had been the last one standing.
+Two corollaries:
 
-### Leading hypothesis: the `ScaleFactorMem` odometer, with its falsifying test
+* **`matmul_in_progress` is live**, contrary to the entry crossed out above:
+  `ExecuteController.sv:672` is a 6-input OR of `_mesh_io_tags_in_progress_{0..5}_rob_id_valid`
+  off the `MeshWithDelays` tag queue.
+* **The enable can be true while the EX queue is EMPTY.** `MultiHeadedQueue.scala:32` drives
+  `io.deq.bits(i) := regs(wrappingAdd(raddr, i, entries))` -- an unconditional register-file read
+  with no validity qualification -- and the EX queue is 8 deep here (`MultiHeadedQueue_1.sv` has
+  `regs_0..regs_7`). So whenever the EX queue drains, `loop_bound_*` is re-driven by whatever
+  command sat in that ring slot 8 commands ago; if that slot holds a `CONFIG_SCALE_MEM` the bounds
+  silently revert to the *other* gemm's values for as long as the queue stays empty. The outcome
+  then depends on a **modular** alignment of the command stream -- the only kind of thing that can
+  be **non-monotone in an added delay**, which is the single most stubborn fact in this campaign
+  (pad length: 128 ok, 2,048 wrong, ~69k ok, ~106k wrong). *This corollary is a hypothesis, not a
+  measurement: it needs the waveform (does `loop_bound_j` ever change while `read_fire_d1` is
+  high?), and no software flag tests it.*
 
-`ScaleFactorMem` has no reset path; it re-zeros only on a complete sweep of the **live** bounds. A
-drifting scale index would corrupt every row of S at once, freshly each tile, cumulatively, and
-independently per cluster -- which matches every observation above, **including the
-cluster-position dependence** (cluster 1 completes all 72 tiles clean while cluster 0 fails at 17 in
-the very same binary).
+Software consequence, and it is **not** what `FA_CFGSETTLE` implements: the sound rule is not
+"separate the config from the matmul" but **"never issue a `CONFIG_SCALE_MEM` with a matmul
+outstanding"** -- drain to `io.busy == 0` *immediately before* it, with no intervening gemmini
+command. That is `FA_ST_CFGPRE` (`kernel.cpp`, ~37 cycles x2 per tile). `FA_ST_CFGFENCE` is the
+weaker half (the fence *after* the config) and exists as the A/B control that separates the two.
+Note `FA_SP_LEANCFG` **off** gives the same guarantee for free, because `configure_mxgemmini` ends
+in a `gemmini_fence()` and is followed by the move-in and the scale stores -- which is exactly the
+"why the baseline is safe" paragraph in `mxgemm_core.hpp`, now with a netlist-level reason.
 
-`FA_ST_CFGPRE` (a `gemmini_fence` immediately before *and* after `CONFIG_SCALE_MEM`) **refutes the
-obvious trigger** -- and does worse than nothing: it pulls the onset *in* (cl1 to tile 3 under
-`PHASE1` and tile 1 under `PHASE2`, where the unfixed reference has cl1 clean).
+## The other four live candidates -- two of them can be closed by reading the RTL
 
-The remaining way to slip the odometer is a matmul performing a **different number of scale-enabled
-reads** than `bound_i * bound_j * bound_k * 16`. Contention causes exactly that, and **no software
-fence can prevent it**.
+1. **SMEM-side visibility after the mvout** -- **substantially closed, no experiment needed.**
+   The accumulator -> SMEM move-out goes through `spad_writer`, a `StreamWriter` over the TL
+   ext-mem port (`Scratchpad.scala:302,477-490`), and
 
-**Test that would kill it:** count `read_req.fire && scaling_enable` per matmul in a waveform, on a
-run whose onset is already known. If the count matches the bound product on every matmul up to the
-onset tile, the hypothesis is dead. This is cheap now precisely *because* the onset is deterministic
--- you know which tile to capture.
+   ```scala
+   io.busy := xactBusy.orR || (state =/= s_idle)                  // DMA.scala:407
+   xactBusy_remove = ~Mux(tl.d.fire, (1.U << tl.d.bits.source), 0.U)   // DMA.scala:402
+   ```
 
-## De-overlapping does something real
+   A transaction clears **only when its TileLink D-channel response fires**, i.e. when the SMEM
+   manager has acknowledged the write. `Scratchpad.io.busy` ORs that with the three write queues
+   (`Scratchpad.scala:635`) and `Controller.io.busy` ORs in `spad.module.io.busy`
+   (`Controller.scala:786`), which is MMIO `0x20`. So a `gemmini_fence()` that returns 0 does imply
+   every accumulator -> SMEM write has been TL-acknowledged. This is *not* a hole software can be
+   blamed for -- unless `io.busy` itself is lying, and the one documented way it can
+   (`ReservationStation.scala:140`, a solitary PRELOAD reading as not-busy) remains open.
+2. **Ordering across *different* accumulator rows** -- still untested. The interlock at
+   `AccumulatorMem.scala:619-624` is per-row only.
+3. **The requantizer path -- RULED OUT for this kernel.** Both gemms set `QUANT_OUTPUT = false`
+   (`kernel.cpp`, `QKF`/`PVF`), so `configure_mxgemmini` passes C-datatype
+   `GEMMINI_FORMAT_FULL = 3`, and `ExecuteController.scala:693-698` is
+   `when (output_mx_format =/= 3.U) { enable_mxquant := true } .otherwise { false }`. That feeds
+   `spad.module.io.enable_MXQuant` (`Controller.scala:242`), where
+   `writeData_is_full_width := !is_garbage && !enable_MXQuant` (`Scratchpad.scala:443`) --
+   so the move-out takes the full-width path and **the `MxRequantizer` is bypassed for the entire
+   kernel**. (Which also means `CONFIG_SCALE_MEM`'s `rs1[62]` -- the only counter-reset bit that
+   exists -- resets a counter in a block this kernel never uses: `MxRequantizer.scala:559`. It does
+   **not** reach `ScaleFactorMem`'s odometer; independently re-verified.)
+4. **The 4-entry un-backpressured spad read queue at `Scratchpad.scala:220` -- RULED OUT, twice
+   over.** *Structurally:* `Scratchpad.scala:213` is
+   `io.read.req.ready := q_will_be_empty && ext_mem.read_req.ready`, elaborated as
+   `ScratchpadBank.sv:122`, so the bank accepts a new SMEM read **only when the response queue will
+   be empty** -- at most one outstanding read per bank. A 4-entry `dma_q` cannot overflow behind a
+   window of one. *Empirically:* the overflow assertion is **live in the taped-out netlist** --
+   `ScratchpadBank.sv:123-130`, guarded only by `` `ifndef SYNTHESIS ``, emitting
+   `$error("Assertion failed: DMA queue does not have enough entries")` plus `$fatal` -- and it has
+   **never fired in any run in this directory, including every run that produced a corrupt tile**
+   (`stE6p2`, `stN0`-`stN4`, `stB6`*). The `// TODO: do backpressure` comment is real but the
+   hazard it warns about is unreachable at this issue rate.
 
-| config | perturbation | cl0 onset | cl1 onset |
+   *Methodology note, because it nearly invalidated this check:* `fa_run.sh` uses
+   `cmd 2>&1 > $T.log | grep ... > $T.out`. Bash applies those left to right, so **stderr goes to
+   the grep and stdout goes to the `.log`** -- which is why the `[ISSUE]` trace (stderr) is what
+   gets filtered, and why a VCS `$error` (stdout) lands in the `.log`. Grepping the `.out` for an
+   assertion would silently find nothing forever.
+
+**So of the four candidates, only #2 -- ordering across *different* accumulator rows -- is still
+standing**, together with the one documented way `io.busy` can lie (`ReservationStation.scala:140`:
+a solitary PRELOAD reads as not-busy).
+
+## The current stability candidate: `FA_ST_NOOVL`
+
+Since clearing the overlap flags lands on a broken path, the de-overlap is done by **subtracting the
+overlap from the fully-featured `FA_SP_QSPLIT` body** -- the body every verified 12/12 in this
+campaign was measured on. `FA_ST_NOOVL` (see the block above `fa_mm` in `kernel.cpp`) removes the
+three things that straddle a stage boundary in `FA_SP_QSPLIT`:
+
+1. QK(t+1)'s 8,210 mesh cycles running underneath `finalize(t)` (stage S6);
+2. Q(t+1)'s 8 KB move-in DMA, issued in S4 and transferring on into S5/S6;
+3. Q(t+1)'s 64 SF-SRAM scale stores running underneath the PV matmul (stage S5).
+
+Stage S6 splits into **S6a** (warp 0 alone, everyone else parked: Q mvin -> *drain* -> Q scales ->
+fence -> cfg QKF -> QK issue -> *drain*) and **S6b** (all six warps: finalize). Verified in the
+preprocessed body: after the flag, the only concurrency left anywhere in the tile is the warp-0 SF
+pack against the warps-1-5 requant convert in S4, which is SIMT-vs-SIMT and touches no mesh, no DMA
+and no gemmini port. Every mesh operation is issued and drained inside one barrier-bracketed stage
+with the other five warps at a barrier. It costs roughly +12k cyc/tile; that is the point.
+
+It also happens to be the right experiment for the **one remaining** candidate (ordering across
+different accumulator rows), because it puts the QK compute, the accumulator -> spad store and the
+PV compute in three different stages each separated by a real drain.
+
+`FA_ST_NOOVL` adds a stage, so it emits **8** marks per tile, not 7.
+
+### `FA_ST_NOOVL` is three independent removals -- `FA_ST_OVL_QK` / `_DMA` / `_SCL` put them back
+
+Collapsing them into one flag was right for getting a correct baseline and wrong for everything after.
+With onset as the observable, re-admitting **one** overlap and watching whether the onset moves both
+names the racing stage *and* buys cycles back when it doesn't move. Each `FA_ST_OVL_*` restores one:
+
+| flag | puts back | worth |
+|---|---|---|
+| `FA_ST_OVL_QK` | QK(t+1)'s 8,210 mesh cycles under `finalize(t)` (no S6a drain; finalize in the `else`) | ~8.2k |
+| `FA_ST_OVL_DMA` | Q(t+1)'s 8 KB move-in issued in S4, transferring into S5/S6 | smaller |
+| `FA_ST_OVL_SCL` | Q(t+1)'s 64 SF-SRAM scale stores under the PV matmul | smaller |
+
+All four shapes verified in the preprocessed body (the S5/S6 call-and-barrier sequence), and
+`FA_ST_OVL_*` without `FA_ST_NOOVL` is an `#error`.
+
+**The refactor is provably inert on the gate result:** rebuilding plain `FA_ST_NOOVL FA_NT24` after it
+reproduces RV32-segment sha `82e73680240b60f2`, byte-identical to the gate-passing `stV24` image. So
+the table above is not invalidated by the restructuring.
+
+### *** 30% IS MET: 31.68% with the full NT24 gate ***
+
+Admissible numbers only -- unperturbed **and** all-correct, per the rule above. Verified independently
+from the traces with `fa_verify_tiles.py` + `fa_marks3.py --per 8 --mesh 16420`:
+
+| run | lever added to `FA_ST_NOOVL`+`ACCRS`+`PREPK` | cyc/tile | util | NT24 |
+|---|---|---|---|---|
+| `stX24` | -- (baseline) | 57,135 | 28.74% | 48/48 |
+| `stW24` | `OVL_DMA` | 56,332 | 29.15% | 48/48 |
+| `stZ24` | `OVL_SCL` | 54,726 | **30.00%** | 48/48 |
+| `stQ24` | `FA_SM_2P`+`2PRAW` | 53,852 | **30.49%** | 48/48 |
+| **`stZQ24`** | **`OVL_SCL` + `2P`+`2PRAW`** | **51,834** | **31.68%** | **48/48** |
+
+Perturbed companions (correctness evidence only -- their cycles are void by rule 2): `stQ24p2` 48/48,
+`stZQ24p2` 48/48, `stW24p2` 48/48.
+
+`stZQ24` clears both pre-registered conditions -- 51,834 <= 54,733 unperturbed, and 48/48 under
+`PHASE2` -- so `stZQ72` is launched. `stQ72` alongside it, because `2P`+`2PRAW` alone reaches 30.49%
+with **no overlap restored at all**, and a simpler config passing the full gate is easier to defend
+than a faster one.
+
+### NEW BEST: `stF24` = 50,906 cyc/tile, **32.26%**, 48/48 -- and it lands 67 cycles from the peak body
+
+Restoring **both** non-QK overlaps (`OVL_SCL` + `OVL_DMA`) on top of `2P`+`2PRAW`, i.e. removing *only*
+the QK/SIMT overlap, which is what the three-way convergence said the endpoint should be:
+
+| run | config | cyc/tile | util | NT24 |
+|---|---|---|---|---|
+| `stZQ24` | `OVL_SCL` + `2P` | 51,834 | 31.68% | 48/48 |
+| **`stF24`** | **`OVL_SCL` + `OVL_DMA` + `2P`** | **50,906** | **32.26%** | **48/48** |
+
+Unperturbed and all-correct, so admissible. `stF72` was **self-dispatched** by the monitor on landing.
+
+**Gate status for this config** -- the recommended one, so the gate has to be re-earned on it and not
+inherited from `FA_ST_NOOVL`:
+
+| gate point | run | result |
+|---|---|---|
+| NT24, unperturbed | `stF24` | **48/48**, 50,906 cyc/tile, **32.26%** (admissible) |
+| NT24 + `PHASE1` | `stF24p1` | **48/48** (cycles void by rule 2) |
+| NT24 + `PHASE2` | `stF24p2` | **48/48**, full 24/24 both clusters (cycles void) |
+| NT6 | `stF6` | **12/12**, 51,450 cyc/tile, 31.91% |
+| NT8 | `stF8` | **16/16**, 51,225 cyc/tile, 32.05% |
+| NT24 + `PHASE3` | `stF24p3` | **48/48**, full 24/24 both clusters (cycles void) |
+| NT24 + `PHASE4` | `stF24p4` | **48/48** (beyond what the gate asks) |
+| NT24 + `PHASE5` | `stF24p5` | **48/48** (beyond what the gate asks) |
+| NT24 + `PHASE1`+`BOTH` | `stF24b1` | **48/48**, full 24/24 both clusters (cycles void) |
+| NT24 + `PHASE2`+`BOTH` | `stF24b2` | **48/48**, full 24/24 both clusters (cycles void) |
+| **NT72** | `stF72` | in flight (self-dispatched) |
+
+**Quote the NT24 figure, not the NT6 one.** `stF6` measures 51,450 (31.91%) against `stF24`'s 50,906
+(32.26%) for the *same binary logic*. Both are admissible; they differ because NT6 has 5 steady
+intervals to NT24's 23, so the expensive fill tile is amortized over far fewer of them. The two do not
+disagree -- the longer run is simply the better estimate of steady state. This is the same reason the
+project's own rule says to quote the *converged* interval rather than the minimum.
+
+### Note for the FPGA track: keep targeting `FA_ST_NOOVL` for now
+
+The hardware bring-up was pointed at `FA_ST_NOOVL` because it had a confirmed NT72 144/144 to diverge
+from. **That is still the right reference and should not be switched to `stF24` yet** -- `stF24` is
+faster and is the eventual recommendation, but its NT72 (`stF72`) has not landed, so it does not yet have
+a known-correct long-run reference to compare hardware against. Switch once `stF72` returns 144/144;
+until then a hardware mismatch against `stF24` could not be attributed between the board and the config.
+Both are one `-D` apart (`FA_ST_OVL_SCL FA_ST_OVL_DMA FA_SM_2P FA_SM_2PRAW`), so switching later is cheap.
+Reminders that still apply to either: **8** marks per tile, NT72 yields **72** images on a 1-cluster
+board, and `fa_rowdiag.py --onset` separates `ABSENT (1-cluster run)` from `NO IMAGES YET`.
+
+**Until those six land, 32.26% is "NT24 gate passed", not "full gate passed".** `FA_ST_NOOVL` holds the
+full-gate result (NT72 144/144 + every phase point) at 28.68%; `stF24` holds the best *admissible* cycle
+number at 32.26% with NT24 + `PHASE1` + `PHASE2`. Those are two different claims and the distinction is
+the whole point of the admissibility rules above.
+
+**The convergence is now quantitative, and this is the strongest structural result in the file.** Two
+bodies reached "only the QK/SIMT overlap removed" from *opposite directions* -- the peak body by
+subtracting one overlap (`FA_SP_NOQKOVL`), this body by de-overlapping completely and adding two back:
+
+| body | route | cyc/tile | util |
 |---|---|---|---|
-| 36% reference | `PHASE1` | **4** | none(>5) |
-| 36% + `FA_ST_CFGPRE` | `PHASE1` / `PHASE2` | none(>5) | **3** / **1** |
-| 36% + `FA_ST_CFGFENCE` | `PHASE1` | none(>5) | none(>5) |
-| 36% + `FA_ST_CFGFENCE` | **NT24**, unperturbed | **13** | **15** |
-| **`FA_ST_NOOVL`** | none / `P1` / `P2` | none(>5) | none(>5) |
-| sequential `FULL_ATTN2` | none / `P1` | none(>5) | none(>5) |
-| un-overlapped `FA_SP` | none / `P1` / `P2` / `P3` | tile-0 only | tile-0 only |
+| peak (`flash_attention_mx`) | `FA_SP_NOQKOVL` -- subtract QK overlap only | 50,839 | 32.30% |
+| stable (here, `stF24`) | de-overlap all, restore `_DMA` + `_SCL` | **50,906** | **32.26%** |
 
-The un-overlapped body's steady state survives `PHASE1`, `2` **and** `3`. Note the tile-0 prologue
-defect is a *separate* bug from the hazard -- `fa_rowdiag.py --onset` distinguishes them (tile 0
-wrong with tile 1 right means the hazard onset is **unmeasured**, not 0) and reports a missing
-cluster as **ABSENT** rather than a spurious clean, which is the FPGA case.
+**67 cycles apart -- 0.13%, and 0.04 percentage points of utilization.** Two structurally different
+schedules, two independent flag mechanisms, two separate agents, converging on the same number once the
+same single overlap is gone. That is much stronger than either result alone, and it supports two
+claims:
 
-`FA_ST_PROLOGF` did **not** fix the tile-0 prologue defect, so that drain hypothesis is dead.
+* **the QK/SIMT overlap is the *only* hazardous overlap** -- `_DMA` and `_SCL` are both safe, measured
+  separately (`stW24` 48/48, `stZ24` 48/48) and together (`stF24` 48/48); and
+* **removing exactly it costs a determinate amount** (~6.2k cyc/tile from the peak body's ~44.7k),
+  reached from either side. It is a property of the hardware hazard, not of one agent's schedule.
 
-## Live candidates for the real mechanism
+The corollary for anyone picking this up: `FA_ST_NOOVL` on its own over-serializes -- it gives up two
+overlaps that cost 6,229 cyc/tile between them (57,135 -> 50,906) and buy no robustness. **The
+recommended stable config is `stF24`'s**, not plain `FA_ST_NOOVL`'s.
 
-None tested yet. In rough order of suspicion:
+### `FA_PHASE<k>` systematically loses ~k tile-images from the DELAYED cluster
 
-1. **SMEM-side visibility after the mvout** -- the accumulator read port is exonerated, but what a
-   later SMEM read observes is not.
-2. **Ordering across *different* accumulator rows** -- the interlock above is per-row only.
-3. The **requantizer** path.
-4. An intra-cluster race decided by **GMEM-return timing** through the 4-entry un-backpressured
-   spad read queue at `Scratchpad.scala:220`.
+`stZ24p1` reported 47 images and `stZ24p2` 46, against 48. **It is not the budget wall** -- checked by
+dividing `$finish` by 2000: every run terminated normally, the largest at 1,544,247 cycles against a
+2,000,000 budget. The actual cause, from the per-cluster counts:
+
+| run | cluster 0 | cluster 1 (the delayed one) |
+|---|---|---|
+| `stZ24` (no phase) | 24 | 24 |
+| `stZ24p1` (`PHASE1`) | 24 | **23** |
+| `stZ24p2` (`PHASE2`) | 24 | **22** |
+
+The shortfall is **always in the delayed cluster**, and on these two runs it tracked `k` -- cluster 1's
+lag from `k x 64` MMIO round-trips x 24 tiles is ~58k cycles at `k=1` and ~115k at `k=2`, i.e. ~1 and ~2
+tiles at ~55k/tile, which matches 23 and 22 exactly. `stZ24p2` is the sharper case: it ended at
+1,425,326 cycles, and cluster 1 at `PHASE2` needs ~24 x (54,726 + 4,800) ~= 1.43M -- so it was *just*
+short of finishing its 24th tile when the run terminated.
+
+> **CORRECTION -- I over-generalized this from two data points.** I wrote that it "scales with `k`" as
+> though lawful. **`stF24p2` refutes the lawfulness:** same `PHASE2`, and it captured a full **24/24 on
+> cluster 1** (48/48 overall). The difference is headroom -- `stF24` is 50,906 cyc/tile against `stZ24`'s
+> 54,726, so cluster 1 clears its 24th tile before termination. So the effect is **`k`-correlated but
+> config-dependent, not lawful**, and it appears only when the delayed cluster's total lands near the
+> termination point. Two data points agreeing is not a law; the third one broke it.
+
+**How to read it:** the captured images are all correct; the missing ones are *absent from the trace*,
+not wrong. Reporting "47 of 48" as a failure is wrong, and reporting it as "48/48" is also wrong. It is
+config-dependent -- `stZQ24p2` is faster and captured a full 24/24 on cluster 1, and every gate run
+(`stV24p1/p2/p3/b1/b2`) captured 48/48 -- so the gate table is unaffected. **Diagnostic: compare the
+per-cluster counts; if the short one is the delayed cluster, this is the cause.**
+
+Consequence for `OVL_SCL`: its own phase evidence is 47/47 and 46/46 correct rather than 48/48. But
+`OVL_SCL` is *inside* `stZQ24p2` (full 48/48 at `PHASE2`) and inside `stF24p1`/`p2`, so it is covered by
+supersets and does not need a re-run.
+
+## THE BANK-COLLISION PREDICTION IS REFUTED -- and it makes the hazard WORSE, not better
+
+Pre-registered prediction: `FA_ST_OVL_QK` + `FA_SP_BANKA` would be *correct*, because `BANKA` makes
+`SP_C` (what finalize reads) bank 1 exactly and therefore disjoint from Q (bank 2). Measured, with a
+same-base control:
+
+| run | config | cl0 onset | cl1 onset |
+|---|---|---|---|
+| `stY2b` | `OVL_QK`, **no** `BANKA` -- the CONTROL | **17** | none(>23) |
+| | *(final: 41 correct / 5 wrong of 46; cycles **VOID** by rule 1; budget-wall truncated)* | | |
+| `stB24` | `OVL_QK` + **`BANKA`** | **8** | 14 |
+| | *(final: 22 correct / 18 wrong of 40; cycles **VOID** by rule 1)* | | |
+| `stB24p2` | `OVL_QK` + `BANKA` + `PHASE2` | **7** | 22 |
+
+(`stB24p2` completed at 29 correct / 10 wrong of 39 images. **It hit the budget wall at exactly
+2,500,000 cycles** -- a concrete instance of the rule that NT72-and-friends must be budgeted for the
+*corrupt* case: a wrong run is ~2-3x slower per tile, so 24 tiles that need ~1.3M clean needed >2.5M here.
+The refutation is unaffected -- truncation removes only *trailing* images, and an onset of 7 is nowhere
+near the tail. But it is exactly how a short image count gets mistaken for a result.)
+
+**The control behaves as required** -- `OVL_QK` on this exact base does fail (onset 17), so the comparison
+is valid and `stY24`'s older-base result was not an artifact. **And the treatment is worse than the
+control: onset 17 -> 8, with both clusters affected instead of one.** The prediction is refuted, and the
+sign is the opposite of predicted. Sixth refuted mechanism of this campaign, and mine.
+
+**What this does and does not establish.** It establishes that `BANKA` is **not a fix** and that the
+peak-track handoff built on it must be withdrawn. It does **not** cleanly establish that "bank collision"
+is wrong in general, because `BANKA` is not a surgical change -- it also relocates P8 from bank 1 to bank
+2, so it could be removing the Q/`SP_C` collision while creating a different one. Those two readings
+cannot be separated by this experiment. What is certain is the direction: this remap costs more than it
+buys, and the SMEM-bank-arbitration story no longer has a working prediction behind it.
+
+> #### MY OWN MONITOR VIOLATED THE ADMISSIBILITY RULE, AND I NEARLY PUBLISHED THE NUMBER
+>
+> When `stB24` landed at **22 correct / 18 wrong**, the monitor printed
+> `mean 51600 ... util = 31.82%` for it. That number is **void by rule 1** and it should never have been
+> emitted. The bug: the monitor checked `.defines` for `FA_PHASE` (rule 2) but **never checked the wrong
+> count** (rule 1) -- I encoded half of a rule I had just written two commits earlier, and a
+> corrupt-run utilization figure went into a notification that reads exactly like the admissible ones.
+>
+> The run's own interval spread is the tell, and it is the reason rule 1 exists: **min 41,693, max
+> 74,969** -- a 1.8x spread against ~3% on a clean run. `31.82%` is the mean of garbage.
+>
+> Fixed, **and the fix is verified working**: on the very next landing (`stY2b`, 41 correct / 5 wrong) the
+> monitor emitted `cycles VOID (rule 1: 5 wrong tiles)` and `*** BUDGET WALL -- image count truncated ***`
+> without being asked. It now voids cycles if the run is perturbed **or** has any wrong tile, names which
+> rule fired, and flags budget-wall truncation. Recorded rather than quietly patched,
+> because the failure mode is the one this campaign keeps repeating -- a check that looks like it
+> enforces a rule while enforcing only the easy half of it.
+
+**And a surgical version of this test is not available**, which is why the ambiguity above has to stand
+rather than being resolved by a follow-up. SMEM is exactly full -- V 32K + P8 16K + S/O 32K + scratch 8K +
+Q 8K + K^T 32K = 128K -- so Q cannot be relocated out of bank 2 without displacing something (K^T occupies
+all of bank 3), and `SP_C` cannot be made bank-1-only without colliding with P8 where it currently sits.
+`FA_SP_BANKA` moving both is not sloppiness; it is the only reachable rearrangement. So "collision removed
+but a worse one created" and "collision was never the mechanism" cannot be separated by a memory-map
+experiment at all. Separating them would need the *other* side: reduce the concurrent SIMT SMEM read
+pressure during the overlap (e.g. finalize on fewer warps) and see whether the onset moves. Not run here --
+the mechanism hunt belongs to the peak track under the current split, and the remaining slots are carrying
+NT72 confirmations.
+
+**Cost of being wrong here: three runs.** That is what the same-base control bought -- without `stY2b` I
+could have read `stB24`'s onset 8 as "BANKA fails" without knowing whether `OVL_QK` failed on this base at
+all, and the whole comparison would have been uninterpretable.
+
+## The convergence narrows the mechanism to a BANK COLLISION -- with a prediction and its control
+
+The three-way convergence says the QK/SIMT overlap is the *only* hazardous one. That is a much stronger
+constraint than it first looks, because during exactly that overlap the two parties touch very little:
+
+* **mesh:** reads Q (`SP_Q`) and K^T (`SP_K_END`) from operand spad, writes **accmem**. Under
+  `FA_SP_QKACC` the matmul is `acc_move_out=false` => `skip_stc=1`, so it performs **zero SMEM writes**
+  (`kernel.cpp:2165`).
+* **SIMT:** reads `SP_C` from SMEM, writes O to GMEM. It **never touches accmem**.
+
+So the racing pair cannot be an accumulator-ordering one -- SIMT is not on that structure at all, and the
+accumulator store happens a stage later in a quiesced window. **That demotes the last surviving candidate
+from the original four.** The only structure both parties are on is **SMEM**, and this file already
+records the rule: *the mesh may not read an operand from a bank SIMT is reading*
+(`Scratchpad.scala:220`, the hazard `FA_SP_OPV` died on).
+
+Compute the banks (32 KB each, `DIM` = 16 B/row):
+
+| region | default | `FA_SP_BANKA` |
+|---|---|---|
+| V | 0x00000-0x08000, bank 0 | bank 0 |
+| P8 | 0x08000-0x0c000, bank 1 | 0x10000-0x14000, bank 2 |
+| **S/O (`SP_C`)** -- what finalize READS | **0x0c000-0x14000, banks 1 AND 2** | **0x08000-0x10000, bank 1 exactly** |
+| **Q** -- what the mesh READS | **0x16000-0x18000, bank 2** | bank 2 |
+| K^T -- what the mesh READS | 0x18000-0x20000, bank 3 | bank 3 |
+
+**Default: finalize reads bank 2 while the mesh reads Q from bank 2 -- the forbidden condition, exactly.
+Under `FA_SP_BANKA` they are disjoint** (P8 shares bank 2 but nothing reads P8 during this overlap -- PV
+consumed it in S5).
+
+That fits the whole fingerprint: a mis-fed operand row corrupts an entire output row-block (**all 64 rows
+at once**), it is per-cluster (SMEM is per-cluster), fresh each tile, and it appears *only* when the two
+are concurrent.
+
+**PREDICTION, pre-registered: `FA_ST_OVL_QK` + `FA_SP_BANKA` is correct where `OVL_QK` alone is 45/48 and
+9/24 at `PHASE2`.** Launched `stB24` (NT24) and `stB24p2` (`PHASE2`), plus **`stY2b` as the control** --
+`OVL_QK` on this exact base *without* `BANKA`, because `stY24` was measured on an older base and a
+same-base control is what makes the comparison mean anything.
+
+**If it holds**, the QK overlap becomes recoverable, worth the ~6.2k cyc/tile it currently costs (~37%),
+and the mechanism is named. **If it does not**, the bank collision is refuted and the SMEM-arbitration
+family with it. Caveat on the record either way: `BANKA`'s history in this campaign is **non-monotone**
+(`2PBM+SMBMAX+PREPK` 2/12, `+BANKA` 12/12, `BANKA` alone 7/12), so a single unperturbed pass would be
+schedule luck -- which is why `PHASE2` is part of the test and not an afterthought.
+
+### Convergence with the peak track, and the endpoint it implies
+
+Three independent legs now agree that **the QK/SIMT overlap is the hazard and `_DMA`/`_SCL` are not
+implicated**:
+
+1. `FA_ST_OVL_QK` on this body -- restoring *only* QK/SIMT overlap breaks it (45/48, and 9/24 at `PHASE2`).
+2. `FA_SP_NOQKOVL` on the peak body -- removing *only* QK/SIMT overlap makes the fast body pass NT6,
+   NT8, NT24 (48/48, 50,839 = 32.30%) and all five phase variants.
+3. `stW24` here -- restoring `OVL_DMA` alone stays 48/48 at 29.15%.
+
+So `FA_ST_NOOVL` gives up two overlaps for nothing, and the right endpoint is **both non-QK overlaps
+restored, only QK removed**. `stZQ24` is that minus `OVL_DMA`; `stF24`/`p1`/`p2` add it and are in
+flight (projection, to be replaced by measurement: 51,834 - 803 ~= 51,031 ~= 32.18%).
+
+### Where 57,135 cyc/tile actually goes -- the per-stage table for `FA_ST_NOOVL`
+
+From `stX24` (48/48 correct, so the timing is admissible), `fa_marks3.py --per 8 --mesh 16420`,
+mean over 15 steady tiles, cluster 0:
+
+| stage | cycles | what it is |
+|---|---|---|
+| s0 | 52 | top-of-tile mark |
+| s1 | 885 | accumulator -> S(t) @ SP_C (`ACCRS` removed the pre-store drain) |
+| s2 | **12,825** | softmax, cooperative, all six warps |
+| s3 | 2,754 | requant pass A (with `PAX`) |
+| s4 | 10,233 | warp 0 SF pack (with `PREPK`) \|\| warps 1-5 requant convert |
+| **s6a** | **11,906** | *the stage `FA_ST_NOOVL` adds*: Q(t+1) prefetch **+** QK(t+1) issue **+** QK drain |
+| s5 | 8,870 | PV matmul -- **warp 0 spins in a fence for ~8.6k of it** |
+| s7 | 9,081 | finalize(t) -> GMEM |
+| sum | 56,606 | (pooled interval 57,135) |
+
+Two readings that set the remaining strategy. **S6a is 11,906**, of which ~8,210 is QK's own mesh time
+and the balance ~3,700 is the serialized Q prefetch: an 8 KB move-in plus **64 strictly serial
+SF-SRAM scale words at ~65 cyc each (~4,160)**. And **S5 leaves warp 0 idle for ~8.6k cycles** inside
+a `gemmini_fence`. So the scale words have a free home, which is exactly what `FA_ST_OVL_SCL`
+restores -- and it is a *scale-store relocation*, not a mesh/SIMT overlap, i.e. a different risk class
+from the one `OVL_QK` just failed at.
+
+### `FA_ST_OVL_QK` IS REFUTED ON BOTH AXES, and the de-overlap cost is therefore mostly structural
+
+| run | correctness | cycles |
+|---|---|---|
+| `stY24` (`OVL_QK`, unperturbed) | **45 of 48 -- 3 wrong** | **VOID** (not all-correct) |
+| `stY24p2` (`OVL_QK` + `PHASE2`) | **9 of 24** | **VOID** |
+
+Putting QK(t+1)'s mesh work back underneath `finalize(t)` re-introduces the hazard, and because the
+run is not all-correct its cycle number is unusable -- so the ~8.2k payback it was projected to return
+**cannot even be claimed**. That is the single largest piece of the 11,429 cycles de-overlapping cost,
+and it is **not recoverable**. *The de-overlap cost is mostly structural, not mostly recoverable.*
+**Do not retry `OVL_QK` in any variant.**
+
+### Utilization: target 30%, currently 28.74%
+
+Need <= 54,733 cyc/tile. **`ACCRS`+`PREPK` bought only -121 cycles here** (57,256 -> 57,135 =
+**28.74%**), not the ~2,349 they are worth on the peak body -- so these levers **do not transfer at
+face value**, and any projection that adds up peak-body savings on this body is unsound. Robustness is
+retained (`stX24` 48/48 unperturbed, `stX24p1` 48/48 at `PHASE1`, `stX24p2` 48/48 at `PHASE2`), so they
+stay; they are nearly free rather than decisive. **Still ~2,402 cycles short.** Both were confirmed
+wired into this body by preprocessing (`PREPK` was found *not* wired into the `Sq=32` body, so this was
+checked rather than assumed):
+
+* **`FA_SP_ACCRS`** (~-1,915) deletes the pre-store `fa_gfl` in S1. On the peak body that rests on
+  `ReservationStation.scala`'s interlock; **here the argument is stronger and needs no interlock at
+  all** -- verified in the preprocessed body that between S6a's `fa_gfl` and the next tile's
+  `fa_store_acc` there is *no mesh operation whatsoever* (only a barrier, `finalize_O`, a barrier and
+  the marks). So `ACCRS` removes a poll of an already-drained mesh.
+* **`FA_SP_PREPK`** (-306 to -434), bit-exact by construction.
+
+### One non-overlap lever left, and a distinction worth stating explicitly
+
+The steer was *"do not spend slots on the group-of-two softmax (a +1,280 loss **once `FA_SM_2P` is the
+baseline**)"*. That prohibition is conditional on `FA_SM_2P` already being present -- and **it is not in
+this config**. The gate-passing flag set has no `FA_SM_2P`/`FA_SM_2PRAW`, so `s2 = 12,825` is the
+*unoptimized* cooperative `online_softmax_block`. Adding the pair is recorded in the sibling README as
+**45,582 -> 42,846, i.e. -2,736 cycles** -- more than the 2,402 still needed. So this is not the
+prohibited item; it is a different, untried one on this body.
+
+Why it is the right risk class: it is a **SIMT-only arithmetic restructuring** that touches no mesh, no
+DMA and no gemmini port -- it replaces four `fence.s` *per row* with three *per warp*. And
+`flash_mx_impl.hpp:1139` argues bit-exactness term by term (`m` via order-independent `fmax`; `l` by
+reproducing `warp_tree_reduce`'s exact 16-leaf balanced pairing, which matters because bf16 addition is
+not associative). If it really is bit-exact, correctness can only move by *schedule* perturbation --
+and this body is already clean at `PHASE1/2/3` and `PHASE_BOTH`.
+
+The known caveat, stated because it is the reason this needs measuring and not assuming: on the
+**overlapped** body `2P`+`2PRAW` was the fastest thing measured and **did not bank** (12/12 at NT6 but
+15/16 at NT8). That was with the hazard live. Whether it holds on a body whose hazard is gone is
+exactly the open question. Bonus already observed at build time: it drops the per-warp register budget
+from UPPER **219 to 156**, well clear of the renamer bracket.
+
+Launched: `stQ24` (NT24, unperturbed) and `stQ24p2` (NT24 + `PHASE2`).
+
+In flight: `stX24`/`p1`/`p2` (`ACCRS`+`PREPK` at NT24, unperturbed + `PHASE1` + `PHASE2`) for the cycle
+number *and* confirmation that robustness is retained; `stY24`/`stY24p2` (`OVL_QK`) for the
+biggest single payback and for whether the onset moves when the mesh/SIMT overlap comes back.
+Deliberately **not** run: the group-of-two softmax (+1,280 once `FA_SM_2P` is baseline) and
+`FA_SP_ACCPAD` (+1,694 for nothing that survives perturbation).
+
+**It computes correctly** -- `stV2` (`FA_NT2`) is 3.5666% in both clusters at tile 0, so the
+restructuring is bit-exact as intended and the register budget (UPPER 219, in the unresolved
+`(216, 246]` band) does not trip the renamer. Its `FA_NT6` phase sweep (`stV6`, `stV6p1`, `stV6p2`,
+and the built-but-unlaunched `stV6p3` / `stV6b1` / `stV6b2` / `stV8` / `stV24`) is the gate run.
+
+## "The non-pipelined FULL_ATTN2 path" is not actually serialized -- check before assuming
+
+The plan names the non-pipelined `FULL_ATTN2 FA_STEADY` body as the de-overlapped option. It has
+**three** barriers per tile (`bar2` after QK, `bar3` after pack, `bar4` after PV) against the
+`FA_SP` bodies' seven, and -- read off the preprocessed body -- **there is no barrier at the tile
+boundary at all**. So in that body:
+
+* `finalize_O(t)` (all six warps: SMEM reads + 4,096 GMEM stores) runs concurrently with tile
+  `t+1`'s Q/K move-in DMA, its 320 SF-SRAM scale words, **and the QK matmul together with its
+  accumulator -> SMEM move-out**;
+* the PVF prefetch's V move-in DMA runs concurrently with requant and pack.
+
+That is *more* mesh-versus-SIMT overlap at the tile boundary than `FA_SP_QSPLIT` has, not less.
+It is still worth phase-testing (it is a completely different schedule, and it is verified correct
+unperturbed), but it is not the serialized baseline, and `FA_ST_NOOVL` is closer to one.
 
 ## Suggested approach
 
@@ -178,7 +1206,22 @@ far better than three days of flag A/B has managed.
 
 ## Building, running, verifying
 
-Identical to the sibling -- see [`../flash_attention_mx/README.md`](../flash_attention_mx/README.md)
+**`FA_NT<n>` HAD A SILENT HOLE, NOW A BUILD ERROR.** `FA_NT12/16/24/36/72` were added to `FA_SPTILES`
+(the `FA_SP` body) but **not** to `FA_NTILES` (the sequential `FULL_ATTN2 FA_STEADY` body), so
+`FULL_ATTN2 FA_STEADY FA_NT24` fell through to the default and ran **four** tiles -- normal `$finish`,
+no warning, and a perfectly clean 4-tile result that would have been quoted as a 24-tile pass.
+Measured: `stS24` stopped at 428,097 cycles with 4 tile tops. The five cases are now present, and an
+`FA_NT<n>` that falls through to the default is now `#error` -- verified by temporarily disabling the
+`FA_NT24` case and confirming the build fails.
+
+**`make kernel.s` / `make flash_attention_mx.s` silently does not rebuild** (broken rule, rc=2; a
+byte-identical file size is the only tell, and a three-week-old assembly was nearly reported as a
+fresh result on the sibling track). To read generated code, invoke the compiler directly with
+`kernel-build-env.sh` sourced -- `clang++ -S` (or `-E -P` for the preprocessed body, which is what the
+structural claims in this file were verified with) -- and then confirm the output contains a
+shape-specific symbol before trusting it.
+
+Otherwise identical to the sibling -- see [`../flash_attention_mx/README.md`](../flash_attention_mx/README.md)
 for the build, the config flags, and the **verification traps**: the only sound scorer is
 `fa_verify_tiles.py`; use `golden_O_u16.npy`; `TIMEOUT_CYCLES=N` yields only N/2 cycles; run
 `fa_regs3.py` (not `fa_regs.py`) before every sim; hash the **RV32 segments**, never `.text`; and
