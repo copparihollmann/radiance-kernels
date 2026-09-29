@@ -80,6 +80,8 @@ def hash_file(path: Path) -> str:
 def verify_raw_runs(records: dict) -> None:
     summarize = load_tool("spatter-summarize.py")
     memory_summary = load_tool("spatter-memory-summary.py")
+    config_hash = hash_file(TOOLS / "spatter-config.toml")
+    checker_hash = hash_file(TOOLS / "spatter_check.rs")
     for (family, run), (cycle, memory) in records.items():
         build_path = KERNELS / family / "runs" / run
         model_path = KERNELS / family / "runs/model" / run
@@ -90,6 +92,9 @@ def verify_raw_runs(records: dict) -> None:
                 "guards-and-nonzero-exploratory" if status == "exploratory"
                 else "digest-checked"):
             raise ValueError(f"{family}/{run}: unsupported completion status")
+        if (model["timing_config_sha256"] != config_hash or
+                model["checker_source_sha256"] != checker_hash):
+            raise ValueError(f"{family}/{run}: retained timing config or checker differs")
         for field in ("suite_sha256", "kernel_source_sha256", "expected_digest",
                       "case", "address_plan"):
             if build[field] != model[field]:

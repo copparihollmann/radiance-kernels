@@ -27,7 +27,8 @@ tables against the indexed result JSON status and cycle fields.
 against the model cycle and memory tables, then regenerates every table row
 from its raw Cyclotron log and memory summary. It also checks build/model ELF
 hashes, complete output digests and guards, and the exploratory status of
-parallel xRAGE9 Scatter. It also verifies the committed
+parallel xRAGE9 Scatter. The recorded timing-config and checker-source hashes
+must match the retained files in `spatter/tools`. It also verifies the committed
 [`workload-results.csv`](workload-results.csv), a consolidated table with cycle,
 traffic, correctness, and input/source/ELF/timing/checker provenance for all
 14 reported workloads.
