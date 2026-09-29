@@ -55,6 +55,13 @@ RTL_CASES = {
                 "rebuild-gpu-stream-3", "rebuild-gpu-stream-4"),
     "stream": ("copy-1048576", "scale-1048576", "add-1048576", "triad-1048576"),
 }
+SPATTER_RTL_NAMES = (
+    ("gpu-stream-0", "Gather"),
+    ("rebuild-gpu-stream-1", "Scatter"),
+    ("rebuild-gpu-stream-2", "GatherScatter"),
+    ("rebuild-gpu-stream-3", "MultiScatter"),
+    ("rebuild-gpu-stream-4", "MultiGather"),
+)
 SMALL_RTL_TABLES = (
     ("spatter", "current-build-smoke-results.csv", "rtl-single",
      ("default", "smoke-1", "smoke-2", "smoke-3", "smoke-4", "smoke-5",
@@ -220,6 +227,36 @@ def verify_small_rtl_tables() -> int:
     return verified
 
 
+def verify_spatter_rtl_summary(report: str) -> None:
+    """Check the human-readable cycle comparison against validated paired runs."""
+    table = KERNELS / "spatter/evaluation/current-build-results.csv"
+    with table.open(newline="") as source:
+        rows = list(csv.DictReader(source))
+    if len(rows) != 2 * len(SPATTER_RTL_NAMES):
+        raise ValueError(f"{table}: incomplete full-size Spatter RTL comparison")
+    header = ("| GPU STREAM operation | RTL GPU cycles | Model GPU cycles | "
+              "RTL/model cycles | RTL host check |")
+    block = report.split(header, 1)[1].split("\n\n", 1)[0]
+    reported = []
+    for line in block.splitlines():
+        if line.startswith("| ") and not line.startswith("| ---"):
+            reported.append(tuple(field.strip() for field in line.strip("|").split("|")))
+    expected = []
+    for (name, label), (rtl, model) in zip(SPATTER_RTL_NAMES,
+                                            zip(rows[::2], rows[1::2])):
+        if rtl["run"] != name or model["run"] != name:
+            raise ValueError(f"{table}: full-size Spatter case order differs")
+        check = {"digest-checked": "Complete digest",
+                 "sample-checked": "Samples and guards"}.get(rtl["correctness"])
+        if check is None:
+            raise ValueError(f"{table}: unsupported RTL host check for {name}")
+        rtl_cycles, model_cycles = int(rtl["gpu_cycles"]), int(model["gpu_cycles"])
+        expected.append((label, f"{rtl_cycles:,}", f"{model_cycles:,}",
+                         f"{rtl_cycles / model_cycles:.3f}", check))
+    if reported != expected:
+        raise ValueError("the Spatter RTL/model cycle table differs from paired runs")
+
+
 def report_csv(records: dict) -> str:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=REPORT_FIELDS, lineterminator="\n")
@@ -299,6 +336,7 @@ def main() -> None:
     verify_raw_runs(records)
     paired = verify_paired_rtl_tables()
     small_paired = verify_small_rtl_tables()
+    verify_spatter_rtl_summary(report)
     expected_csv = report_csv(records)
     if args.write_csv:
         REPORT_CSV.write_text(expected_csv)

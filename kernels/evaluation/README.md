@@ -35,7 +35,9 @@ input/source/ELF/timing/checker provenance for all
 15 reported workloads.
 For each completed full-size RTL case, it regenerates the paired RTL/model CSV
 from the retained runs, checks the RTL log's finish signal and cycle count, and
-rejects a missing paired row.
+rejects a missing paired row. It checks the five-case RTL/model cycle summary
+in `WORKLOAD_RESULTS.md` against those paired rows, including the stated RTL
+host check and cycle ratio.
 It also regenerates all 20 small paired RTL/model cases across the STREAM and
 Spatter smoke, LULESH app-trace, ordered-composition, and threaded Verilator
 probe tables. These checks

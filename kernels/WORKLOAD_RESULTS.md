@@ -128,6 +128,21 @@ simulator threading; none produced a completed cycle result. The
 [paired table](stream/evaluation/current-build-results.csv) has no
 result rows until the first case completes.
 
+The completed original-size GPU STREAM Spatter pairs, each using the same ELF
+for RTL and model, are:
+
+| GPU STREAM operation | RTL GPU cycles | Model GPU cycles | RTL/model cycles | RTL host check |
+| --- | ---: | ---: | ---: | --- |
+| Gather | 842,623 | 1,998,857 | 0.422 | Complete digest |
+| Scatter | 1,247,066 | 1,040,016 | 1.199 | Samples and guards |
+| GatherScatter | 2,158,179 | 2,038,053 | 1.059 | Samples and guards |
+| MultiScatter | 1,360,268 | 1,046,089 | 1.300 | Samples and guards |
+| MultiGather | 945,962 | 1,999,593 | 0.473 | Complete digest |
+
+The timing model is not calibrated to RTL or HBM; the ratios describe these
+paired runs and should not be used as a general correction factor. All five
+model runs checked their complete output digests.
+
 For the small equal-count composition case, fused GS and the materialized
 two-stage chain have the same output digest. The model reports 3,189 and
 4,839 cycles respectively; the chain also moves more data. The
