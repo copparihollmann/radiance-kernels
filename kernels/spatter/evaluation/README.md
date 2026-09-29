@@ -120,7 +120,7 @@ and guards because duplicate destinations race without atomic stores.
 `standard-suite-coverage.csv` comes from
 `python3 tools/spatter-audit-suite.py STANDARD_SUITE_DIR`. Of 114 upstream
 standard configurations, 38 fit the current address window at original size;
-75 exceed that window and one exceeds the RV32 task range. All 114 families
+75 exceed that window and one exceeds the RV32 task range. All 114 configurations
 can be mapped with a reduced count of at most 1024, but these scaled cases
 are not original benchmark workloads. The
 [current-build scaled AMG result](current-build-model-results.csv) uses 1,024
