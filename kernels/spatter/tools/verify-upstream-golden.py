@@ -55,7 +55,8 @@ def main() -> None:
 
     seen = set()
     count = 0
-    for table in ("upstream-golden-results.csv", "upstream-golden-smoke-results.csv"):
+    for table in ("upstream-golden-results.csv", "upstream-golden-smoke-results.csv",
+                  "upstream-golden-scaled-results.csv"):
         for row in rows(ROOT / "evaluation" / table):
             name = row["run"]
             if name in seen:

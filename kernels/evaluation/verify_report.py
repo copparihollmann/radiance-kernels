@@ -37,6 +37,8 @@ ROWS = {
     "LULESH app trace case 1, Gather": ("spatter", "lulesh-gather", "passed"),
     "LULESH app trace case 3, ordered Scatter":
         ("spatter", "lulesh-scatter-ordered", "passed"),
+    "AMG GPU Gather, scaled to 1,024 repetitions":
+        ("spatter", "amg-gpu-scaled-1024", "passed"),
 }
 REPORT_CSV = KERNELS / "evaluation/workload-results.csv"
 REPORT_FIELDS = (

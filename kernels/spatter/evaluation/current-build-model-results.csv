@@ -9,3 +9,4 @@ rebuild-xrage9,Cyclotron timing model,exploratory,guards-and-nonzero-exploratory
 xrage9-ordered,Cyclotron timing model,passed,digest-checked,scatter,6664304,1,106628864,96235005,,,1.108005,0.554002,,
 lulesh-gather,Cyclotron timing model,passed,digest-checked,gather,16,231198,59186688,74419767,,,0.795309,0.397654,,
 lulesh-scatter-ordered,Cyclotron timing model,passed,digest-checked,scatter,16,128002,32768512,74611507,,,0.439188,0.219594,,
+amg-gpu-scaled-1024,Cyclotron timing model,passed,digest-checked,gather,256,1024,4194304,1156957,,,3.625289,1.812645,,

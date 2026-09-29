@@ -49,6 +49,13 @@ until corresponding RTL measurements or calibration are available.
 | xRAGE asteroid pattern 9, ordered Scatter | 6,664,304 | 96,235,005 | 106,628,864 | 581,683,520 |
 | LULESH app trace case 1, Gather | 3,699,168 | 74,419,767 | 59,186,688 | 532,704,064 |
 | LULESH app trace case 3, ordered Scatter | 2,048,032 | 74,611,507 | 32,768,512 | 536,606,144 |
+| AMG GPU Gather, scaled to 1,024 repetitions | 262,144 | 1,156,957 | 4,194,304 | 19,423,488 |
+
+The AMG row uses the original address pattern but reduces its 14,705,882
+repetitions to 1,024 to fit the current GPU address range. It is a scaled
+mapping and correctness check, not an original-size AMG benchmark result.
+Its complete digest `32ae72ce80378661` agrees with the
+[unmodified upstream Spatter serial kernel](spatter/evaluation/upstream-golden-scaled-results.csv).
 
 The xRAGE9 parallel Scatter row is exploratory: repeated destinations race,
 so its output check covers guards and a nonzero probe. Ordered Scatter
@@ -76,7 +83,7 @@ See the exact [STREAM cycle](stream/evaluation/current-build-model-results.csv),
 [Spatter memory](spatter/evaluation/current-build-memory.csv) CSVs. Logical
 payload counts reads and writes required by each kernel. Model global-memory
 bytes include index traffic, cache lines, and transaction granularity.
-The [consolidated result CSV](evaluation/workload-results.csv) puts all 14
+The [consolidated result CSV](evaluation/workload-results.csv) puts all 15
 rows, normalized bytes per model cycle, correctness status, output digest,
 modeled global load and store queue issue counts, and
 input/source/ELF/timing/checker hashes in one machine-readable table. The load

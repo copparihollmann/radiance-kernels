@@ -10,20 +10,20 @@ logs, and model counter summaries, along with both CSV inventories.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
 
-The current snapshot indexes 152 run records and 632 files across seven
-roots. It preserves 480 non-ELF files in the metadata archive. The 152 ELFs
+The current snapshot indexes 157 run records and 652 files across seven
+roots. It preserves 495 non-ELF files in the metadata archive. The 157 ELFs
 remain in the run roots and have local
 hardlinks under the ignored `elf-snapshot/` directory. The hardlinks preserve
 the binaries if a run directory is removed without copying the data blocks.
 Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
-against all 480 recorded file hashes.
+against all 495 recorded file hashes.
 `verify_artifact_snapshot.py` repeats that check and verifies the ELF and
 dependency snapshots, the run JSON records, and input/simulator references.
-The generator also checked 102 rows in the current-build cycle and memory
+The generator also checked 104 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
-`verify_report.py` checks the 14 workload rows in `WORKLOAD_RESULTS.md`
+`verify_report.py` checks the 15 workload rows in `WORKLOAD_RESULTS.md`
 against the model cycle and memory tables, then regenerates every table row
 from its raw Cyclotron log and memory summary. It also checks build/model ELF
 hashes, complete output digests and guards, and the exploratory status of
@@ -32,13 +32,13 @@ must match the retained files in `spatter/tools`. It also verifies the committed
 [`workload-results.csv`](workload-results.csv), a consolidated table with cycle,
 traffic, directional GPU LSU issue counts, correctness, and
 input/source/ELF/timing/checker provenance for all
-14 reported workloads.
+15 reported workloads.
 For each completed full-size RTL case, it regenerates the paired RTL/model CSV
 from the retained runs, checks the RTL log's finish signal and cycle count, and
 rejects a missing paired row.
 After intentional model-result changes, regenerate that table with
 `python3 kernels/evaluation/verify_report.py --write-csv`.
-The dependency snapshot covers 21 input/simulator path records (16 distinct
+The dependency snapshot covers 22 input/simulator path records (16 distinct
 contents). It includes the 517,377,170-byte xRAGE input deck and the four
 referenced simulator binaries. Hardlinks avoid copying data where permitted;
 the sandbox required a verified local copy of the xRAGE deck. These snapshots
@@ -91,8 +91,9 @@ checks, and exploratory overlapping Scatter results.
 
 The independent upstream Spatter golden records are kept separately in
 [`spatter/evaluation`](../spatter/evaluation/README.md). The committed
-comparison tables cover 14 deterministic cases, and the committed artifact
-manifest hashes all 118 locally retained golden files. Run
+comparison tables cover 15 deterministic cases, including one scaled AMG
+mapping, and the committed artifact manifest hashes all 126 locally retained
+golden files. Run
 `python3 kernels/spatter/tools/verify-upstream-golden.py --upstream
 /path/to/spatter` to verify them against the pinned upstream source. Keep
 `kernels/spatter/golden-runs/` with the ELF and dependency snapshots when

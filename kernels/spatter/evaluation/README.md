@@ -30,6 +30,8 @@ The [original-size comparison](upstream-golden-results.csv) passes all five
 GPU STREAM Spatter families, xRAGE5 Gather, ordered xRAGE9 Scatter, and two
 LULESH traces. The [small comparison](upstream-golden-smoke-results.csv) adds
 four transfer-family checks and an overlapping ordered Scatter. The
+[scaled AMG comparison](upstream-golden-scaled-results.csv) checks 1,024
+repetitions of the original GPU Gather pattern. The
 [artifact manifest](upstream-golden-artifacts.csv) records SHA-256 and byte
 size for every local golden input, output, parser record, log, and driver.
 Those 219 MB of raw files are retained under the ignored `../golden-runs/`;
@@ -46,6 +48,8 @@ python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
 python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
   --table evaluation/upstream-golden-smoke-results.csv \
   smoke-1 smoke-2 smoke-3 smoke-4 ordered-overlap
+python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
+  --table evaluation/upstream-golden-scaled-results.csv amg-gpu-scaled-1024
 python3 tools/verify-upstream-golden.py --upstream /path/to/spatter
 python3 tools/spatter-upstream-pattern-audit.py --upstream /path/to/spatter
 ```
@@ -118,9 +122,23 @@ and guards because duplicate destinations race without atomic stores.
 standard configurations, 38 fit the current address window at original size;
 75 exceed that window and one exceeds the RV32 task range. All 114 families
 can be mapped with a reduced count of at most 1024, but these scaled cases
-are not original benchmark workloads. The [scaled AMG result](prior-scaled-results.csv)
-uses 1024 repetitions rather than its original 14,705,882 and validates the
-address mapping only.
+are not original benchmark workloads. The
+[current-build scaled AMG result](current-build-model-results.csv) uses 1,024
+repetitions rather than its original 14,705,882. It passed a complete output
+check against [upstream Spatter](upstream-golden-scaled-results.csv) in
+1,156,957 timing-model GPU cycles, issuing 19,423,488 model global-memory
+bytes. The [earlier-build result](prior-scaled-results.csv) remains a separate
+historical record. Neither is original-size AMG throughput.
+
+From `kernels/spatter`, reproduce the current scaled case with the documented
+toolchain environment:
+
+```sh
+python3 run.py --suite inputs/standard-suite/app-traces/amg_gpu.json \
+  --case 0 --count 1024 --out runs/amg-gpu-scaled-1024 --build-only
+python3 tools/spatter-cyclotron-run.py --cyclotron /path/to/radiance/cyclotron \
+  --source-root runs --output-root runs/model amg-gpu-scaled-1024
+```
 
 The simulator reports GPU cycles. There is no measured GPU clock or calibrated
 HBM model, so these numbers should not be converted to GB/s. Logical payload
