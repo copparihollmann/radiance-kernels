@@ -25,3 +25,18 @@ on both the full SoC RTL simulator and Cyclotron using identical ELFs. Their
 RTL GPU cycles were 9,085, 8,434, 8,793, and 9,045 respectively. The paired
 ELF hashes, checks, and exact cycle values are in
 [smoke results](current-build-smoke-results.csv).
+
+The four original-size full SoC Verilator runs are queued under
+`../runs/rtl-full/`. After they complete, validate each against its build
+ELF and the complete Cyclotron output readback, then write the paired table
+from `kernels/stream`:
+
+```sh
+python3 ../spatter/tools/spatter-validate.py --build-root runs \
+  --rtl-root runs/rtl-full --model-root runs/model \
+  --output evaluation/current-build-results.csv \
+  copy-1048576 scale-1048576 add-1048576 triad-1048576
+```
+
+The same validator was rerun on all four existing 256-element paired checks
+and reproduced the committed smoke CSV byte for byte.
