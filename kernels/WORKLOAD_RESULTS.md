@@ -121,7 +121,7 @@ output digest in 1,046,089 cycles. The
 byte-identical build, RTL, and model ELF checks for all five full-size GPU
 STREAM Spatter cases. The earlier partial MultiScatter attempt is retained as
 interrupted. Full-size STREAM Scale is running on the 16-thread Verilator
-binary and Copy on the 8-thread binary; Add and Triad are queued. Their earlier
+binary and Copy and Add on the 8-thread binary; Triad is queued. Their earlier
 partial attempts are
 retained as interrupted. Later Triad and Copy attempts were stopped during
 host CPU saturation, and an 8-thread Copy attempt was stopped to switch
