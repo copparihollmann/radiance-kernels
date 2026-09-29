@@ -62,6 +62,12 @@ SPATTER_RTL_NAMES = (
     ("rebuild-gpu-stream-3", "MultiScatter"),
     ("rebuild-gpu-stream-4", "MultiGather"),
 )
+STREAM_RTL_NAMES = (
+    ("copy-1048576", "Copy"),
+    ("scale-1048576", "Scale"),
+    ("add-1048576", "Add"),
+    ("triad-1048576", "Triad"),
+)
 SMALL_RTL_TABLES = (
     ("spatter", "current-build-smoke-results.csv", "rtl-single",
      ("default", "smoke-1", "smoke-2", "smoke-3", "smoke-4", "smoke-5",
@@ -257,6 +263,35 @@ def verify_spatter_rtl_summary(report: str) -> None:
         raise ValueError("the Spatter RTL/model cycle table differs from paired runs")
 
 
+def verify_stream_rtl_summary(report: str) -> None:
+    """Check every completed full-size STREAM cycle row in the report."""
+    table = KERNELS / "stream/evaluation/current-build-results.csv"
+    with table.open(newline="") as source:
+        rows = list(csv.DictReader(source))
+    header = ("| STREAM operation | RTL GPU cycles | Model GPU cycles | "
+              "RTL/model cycles | RTL host check |")
+    block = report.split(header, 1)[1].split("\n\n", 1)[0]
+    reported = []
+    for line in block.splitlines():
+        if line.startswith("| ") and not line.startswith("| ---"):
+            reported.append(tuple(field.strip() for field in line.strip("|").split("|")))
+    expected = []
+    names = dict(STREAM_RTL_NAMES)
+    for rtl, model in zip(rows[::2], rows[1::2]):
+        name = rtl["run"]
+        if model["run"] != name or name not in names:
+            raise ValueError(f"{table}: invalid full-size STREAM pair")
+        check = {"digest-checked": "Complete digest",
+                 "sample-checked": "Samples and guards"}.get(rtl["correctness"])
+        if check is None:
+            raise ValueError(f"{table}: unsupported RTL host check for {name}")
+        rtl_cycles, model_cycles = int(rtl["gpu_cycles"]), int(model["gpu_cycles"])
+        expected.append((names[name], f"{rtl_cycles:,}", f"{model_cycles:,}",
+                         f"{rtl_cycles / model_cycles:.3f}", check))
+    if reported != expected:
+        raise ValueError("the STREAM RTL/model cycle table differs from paired runs")
+
+
 def report_csv(records: dict) -> str:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=REPORT_FIELDS, lineterminator="\n")
@@ -337,6 +372,7 @@ def main() -> None:
     paired = verify_paired_rtl_tables()
     small_paired = verify_small_rtl_tables()
     verify_spatter_rtl_summary(report)
+    verify_stream_rtl_summary(report)
     expected_csv = report_csv(records)
     if args.write_csv:
         REPORT_CSV.write_text(expected_csv)

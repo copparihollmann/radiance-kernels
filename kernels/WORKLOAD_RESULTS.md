@@ -147,6 +147,14 @@ The timing model is not calibrated to RTL or HBM; the ratios describe these
 paired runs and should not be used as a general correction factor. All five
 model runs checked their complete output digests.
 
+The completed original-size STREAM pair is:
+
+| STREAM operation | RTL GPU cycles | Model GPU cycles | RTL/model cycles | RTL host check |
+| --- | ---: | ---: | ---: | --- |
+| Scale | 3,971,774 | 4,024,544 | 0.987 | Samples and guards |
+
+The STREAM table will include Copy, Add, and Triad after their RTL runs pass.
+
 For the small equal-count composition case, fused GS and the materialized
 two-stage chain have the same output digest. The model reports 3,189 and
 4,839 cycles respectively; the chain also moves more data. The
