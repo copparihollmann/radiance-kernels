@@ -40,11 +40,12 @@ ROWS = {
 }
 REPORT_CSV = KERNELS / "evaluation/workload-results.csv"
 REPORT_FIELDS = (
-    "workload", "family", "run", "status", "correctness", "elements_or_transfers",
+    "workload", "family", "run", "simulator", "status", "correctness", "elements_or_transfers",
     "gpu_cycles", "logical_payload_bytes", "payload_bytes_per_cycle",
     "model_gmem_bytes_issued", "model_gmem_transactions",
     "model_gmem_bytes_per_cycle", "output_digest", "expected_digest",
     "elf_sha256", "kernel_source_sha256", "suite_sha256",
+    "timing_config_sha256", "checker_source_sha256",
 )
 
 
@@ -128,6 +129,7 @@ def report_csv(records: dict) -> str:
             raise ValueError(f"{family}/{run}: model status differs from report")
         writer.writerow({
             "workload": workload, "family": family, "run": run,
+            "simulator": model["simulator"],
             "status": status, "correctness": model["correctness"],
             "elements_or_transfers": int(cycle["pattern_length"]) * int(cycle["count"]),
             "gpu_cycles": cycle["gpu_cycles"],
@@ -141,6 +143,8 @@ def report_csv(records: dict) -> str:
             "elf_sha256": model["elf_sha256"],
             "kernel_source_sha256": model["kernel_source_sha256"],
             "suite_sha256": model["suite_sha256"],
+            "timing_config_sha256": model["timing_config_sha256"],
+            "checker_source_sha256": model["checker_source_sha256"],
         })
     return output.getvalue()
 

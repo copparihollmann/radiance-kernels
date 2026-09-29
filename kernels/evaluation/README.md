@@ -29,7 +29,8 @@ from its raw Cyclotron log and memory summary. It also checks build/model ELF
 hashes, complete output digests and guards, and the exploratory status of
 parallel xRAGE9 Scatter. It also verifies the committed
 [`workload-results.csv`](workload-results.csv), a consolidated table with cycle,
-traffic, correctness, and provenance fields for all 14 reported workloads.
+traffic, correctness, and input/source/ELF/timing/checker provenance for all
+14 reported workloads.
 After intentional model-result changes, regenerate that table with
 `python3 kernels/evaluation/verify_report.py --write-csv`.
 The dependency snapshot covers 21 input/simulator path records (16 distinct
