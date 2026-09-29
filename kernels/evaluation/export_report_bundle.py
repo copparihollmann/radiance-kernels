@@ -23,7 +23,7 @@ import tarfile
 import tempfile
 
 from make_inventory import HERE, KERNELS, PRIOR_ROOTS, sha256
-from verify_report import RTL_CASES
+from verify_report import COMPOSITION_FULLSIZE_NAMES, RTL_CASES
 
 REPO = KERNELS.parent
 SPATTER = KERNELS / "spatter"
@@ -96,6 +96,11 @@ def pending_required_rtl(runs: list[dict[str, str]]) -> list[str]:
             status = statuses.get((root, path), "missing")
             if status != "passed":
                 pending.append(f"{root}/{path}: {status}")
+    for case, _ in COMPOSITION_FULLSIZE_NAMES:
+        path = f"rtl-full-composition/{case}"
+        status = statuses.get(("spatter-current", path), "missing")
+        if status != "passed":
+            pending.append(f"spatter-current/{path}: {status}")
     return pending
 
 
