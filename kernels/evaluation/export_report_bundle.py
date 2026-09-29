@@ -4,7 +4,7 @@
 The bundle supports later reporting from another machine. It includes Git
 bundles for the kernel branch and pinned upstream Spatter, plus local ELF,
 input, simulator, log, and golden-output snapshots. A draft is explicitly
-labeled when simulations are still running.
+labeled while required full-size RTL cases are missing or incomplete.
 """
 
 from __future__ import annotations
@@ -23,10 +23,15 @@ import tarfile
 import tempfile
 
 from make_inventory import HERE, KERNELS, PRIOR_ROOTS, sha256
+from verify_report import RTL_CASES
 
 REPO = KERNELS.parent
 SPATTER = KERNELS / "spatter"
 PINNED_SPATTER = "ec8923711f8dc21eedff7189f12b02eb06845d2f"
+RTL_ROOTS = {
+    "spatter": ("spatter-current", "rtl"),
+    "stream": ("stream-current", "rtl-full"),
+}
 
 
 def command(*args: str, cwd: Path = REPO) -> str:
@@ -81,12 +86,25 @@ def verify_current_run_roots(files: list[dict[str, str]]) -> None:
             raise ValueError(f"run file changed since the inventory: {key}")
 
 
+def pending_required_rtl(runs: list[dict[str, str]]) -> list[str]:
+    statuses = {(row["root"], row["run"]): row["status"] for row in runs}
+    pending = []
+    for family, cases in RTL_CASES.items():
+        root, directory = RTL_ROOTS[family]
+        for case in cases:
+            path = f"{directory}/{case}"
+            status = statuses.get((root, path), "missing")
+            if status != "passed":
+                pending.append(f"{root}/{path}: {status}")
+    return pending
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--upstream", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--draft", action="store_true",
-                        help="allow an explicitly incomplete bundle while runs are live")
+                        help="allow an explicitly incomplete bundle while required RTL runs remain")
     parser.add_argument("--dry-run", action="store_true",
                         help="verify contents and report bundle scope without writing it")
     args = parser.parse_args()
@@ -102,21 +120,24 @@ def main() -> None:
     runs = table("runs.csv")
     running = [f"{row['root']}/{row['run']}" for row in runs
                if row["status"] == "running"]
-    if running and not args.draft:
-        raise ValueError(f"simulations still running; use --draft only for a "
-                         f"clearly provisional archive: {running}")
+    pending_rtl = pending_required_rtl(runs)
+    if (running or pending_rtl) and not args.draft:
+        raise ValueError("full-size RTL evaluation is incomplete; use --draft "
+                         "for a provisional archive: "
+                         f"running={running}, required_rtl={pending_rtl}")
     if not args.output and not args.dry_run:
         parser.error("--output is required unless --dry-run is set")
     files = table("artifacts.csv")
-    if not running:
+    if not running and not pending_rtl:
         verify_current_run_roots(files)
     goldens = []
     with (SPATTER / "evaluation/upstream-golden-artifacts.csv").open(newline="") as source:
         goldens = list(csv.DictReader(source))
     info = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
-        "status": "draft" if running else "complete-snapshot",
+        "status": "draft" if running or pending_rtl else "complete-snapshot",
         "running": running,
+        "pending_required_rtl": pending_rtl,
         "radiance_kernels_commit": command("git", "rev-parse", "HEAD"),
         "upstream_spatter_commit": PINNED_SPATTER,
         "runs": len(runs), "indexed_run_files": len(files),

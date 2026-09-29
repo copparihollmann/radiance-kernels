@@ -103,8 +103,10 @@ For a portable report archive after the live simulations finish, use
 `export_report_bundle.py`. It verifies the report tables and both snapshot
 manifests, then packages the raw metadata, ELF, input, simulator, and golden
 files with Git bundles for this kernel branch and the pinned original Spatter
-source. It refuses to label an archive complete while any run is still
-`running`; `--draft` creates an explicitly provisional copy. The resulting
+source. It requires all five full-size Spatter GPU STREAM and all four
+full-size STREAM RTL cases to pass before labeling an archive complete. Any
+running or missing case requires `--draft`, which marks the archive
+provisional. The resulting
 archive stays local and is not pushed:
 
 ```sh
