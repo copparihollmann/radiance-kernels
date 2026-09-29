@@ -21,6 +21,10 @@ For generated patterns, the runner also compares Radiance's expanded indices
 and delta with Spatter's own pattern parser. Explicit JSON index arrays are
 passed unchanged. It checks the golden output digest against the build's
 expected digest and Cyclotron's complete GPU output readback.
+The [pattern parser audit](upstream-pattern-parser-results.csv) separately
+checks all 16 distinct generator strings in the upstream standard suite, plus
+MS1, Laplacian, and explicit-list examples. All 19 expansions and deltas
+match Spatter's parser.
 
 The [original-size comparison](upstream-golden-results.csv) passes all five
 GPU STREAM Spatter families, xRAGE5 Gather, ordered xRAGE9 Scatter, and two
@@ -43,6 +47,7 @@ python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
   --table evaluation/upstream-golden-smoke-results.csv \
   smoke-1 smoke-2 smoke-3 smoke-4 ordered-overlap
 python3 tools/verify-upstream-golden.py --upstream /path/to/spatter
+python3 tools/spatter-upstream-pattern-audit.py --upstream /path/to/spatter
 ```
 
 This is a semantic check against upstream's serial backend. Upstream CUDA
