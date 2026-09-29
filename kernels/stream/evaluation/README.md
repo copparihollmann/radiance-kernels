@@ -34,10 +34,9 @@ The four original-size full SoC Verilator cases use separate directories under
 3,971,774 GPU cycles on the 16-thread simulator. Its identical-ELF Cyclotron
 run passed the complete output digest in 4,024,544 model cycles. Copy is
 active on the 8-thread simulator and Add on the 16-thread simulator; Triad is
-queued. The earlier partial attempts
-are archived under `../runs/rtl-full-lost-session-20260929/` with interrupted
-status. The
-later Triad attempt was stopped during host CPU saturation and is retained
+queued. The earlier partial attempts are archived under
+`../runs/rtl-full-lost-session-20260929/` with interrupted status. A later
+Triad attempt was stopped during host CPU saturation and is retained
 under `../runs/rtl-full-interrupted-load-20260929/` without a cycle result.
 An 8-thread Copy attempt was stopped to switch to the verified 16-thread
 simulator; its partial files remain under
@@ -46,16 +45,19 @@ Later Copy and Add attempts were stopped when host CPU pressure rose;
 their partial files remain under
 `../runs/rtl-full-interrupted-overload-20260929/` without a cycle result.
 The [paired table](current-build-results.csv) records completed cases. As each
-run completes, validate it
-against its build ELF and the complete Cyclotron output readback, then update
-the paired table from `kernels/stream`:
+run completes, validate it against its build ELF and the complete Cyclotron
+output readback, then update the paired table from `kernels/stream`. Pass only
+completed case names in Copy, Scale, Add, Triad order. The current table is
+reproduced by:
 
 ```sh
 python3 ../spatter/tools/spatter-validate.py --build-root runs \
   --rtl-root runs/rtl-full --model-root runs/model \
-  --output evaluation/current-build-results.csv \
-  copy-1048576 scale-1048576 add-1048576 triad-1048576
+  --output evaluation/current-build-results.csv scale-1048576
 ```
+
+After all four finish, pass `copy-1048576 scale-1048576 add-1048576
+triad-1048576` instead.
 
 The same validator was rerun on all four existing 256-element paired checks
 and reproduced the committed smoke CSV byte for byte.
