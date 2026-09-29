@@ -34,6 +34,7 @@ RESULT_TABLES = (
     ("spatter-current", "spatter/evaluation/gpu-stream-revision-comparison.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/xrage9-revision-comparison.csv", "model", "model"),
     ("stream-current", "stream/evaluation/current-build-model-results.csv", "model", "model"),
+    ("stream-current", "stream/evaluation/current-build-results.csv", "model", "rtl-full"),
     ("spatter-current", "spatter/evaluation/current-build-smoke-results.csv", "model", "rtl-single"),
     ("stream-current", "stream/evaluation/current-build-smoke-results.csv", "model", "rtl"),
     ("spatter-current", "spatter/evaluation/app-trace-smoke-results.csv", "model", "rtl"),

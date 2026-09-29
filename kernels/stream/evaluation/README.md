@@ -27,9 +27,10 @@ ELF hashes, checks, and exact cycle values are in
 [smoke results](current-build-smoke-results.csv).
 
 The four original-size full SoC Verilator runs are queued under
-`../runs/rtl-full/`. After they complete, validate each against its build
-ELF and the complete Cyclotron output readback, then write the paired table
-from `kernels/stream`:
+`../runs/rtl-full/`. The [paired table](current-build-results.csv) has no
+result rows until the first run completes. As each run completes, validate it
+against its build ELF and the complete Cyclotron output readback, then update
+the paired table from `kernels/stream`:
 
 ```sh
 python3 ../spatter/tools/spatter-validate.py --build-root runs \

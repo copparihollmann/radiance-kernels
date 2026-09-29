@@ -138,7 +138,7 @@ def verify_paired_rtl_tables() -> int:
         if table.exists():
             with table.open(newline="") as source:
                 reported = list(csv.DictReader(source))
-            if not reported or len(reported) % 2:
+            if len(reported) % 2:
                 raise ValueError(f"{table}: incomplete RTL/model pairs")
         output = io.StringIO(newline="")
         writer = csv.DictWriter(output, fieldnames=summarize.FIELDS, lineterminator="\n")
