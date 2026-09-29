@@ -3,7 +3,10 @@
 The kernels, generators, simulation commands, and result records are in
 [`stream`](stream/README.md) and [`spatter`](spatter/README.md). All results
 below are from the local `spatter-workloads` branch of `radiance-kernels`.
-The branch has not been pushed.
+The [PR-style STREAM and Spatter summary](evaluation/STREAM_SPATTER_SUMMARY.md)
+reports workload equivalence, latency, derived issue utilization, and the
+limits of the measurements. The branch is published on the
+`copparihollmann/radiance-kernels` fork as `spatter-workloads`.
 The [artifact inventory](evaluation/README.md) indexes run status, provenance,
 ELF and input hashes, raw logs, and simulator files for later reporting.
 These RTL cycles use the pinned Radiance `b83419e` build. Upstream Radiance

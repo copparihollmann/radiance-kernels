@@ -1,5 +1,9 @@
 # Radiance STREAM and Spatter: presentation brief
 
+The [full STREAM and Spatter summary](STREAM_SPATTER_SUMMARY.md) includes the
+measurement method, derived Muon issue utilization, workload equivalence, and
+application-pattern results.
+
 ## What was measured
 
 - Four independent float32 STREAM kernels (Copy, Scale, Add, Triad) on

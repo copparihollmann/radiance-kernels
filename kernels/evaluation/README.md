@@ -1,7 +1,9 @@
 # Workload artifact inventory
 
 This directory preserves the provenance behind the [reported workload
-results](../WORKLOAD_RESULTS.md). `runs.csv` indexes every discovered run and
+results](../WORKLOAD_RESULTS.md). The [STREAM and Spatter summary](STREAM_SPATTER_SUMMARY.md)
+gives the PR-style methodology, utilization and latency metrics, workload
+equivalence, results, and limits. `runs.csv` indexes every discovered run and
 records its status, input and source hashes, simulator binary hash, output
 digest, and cycle count. `artifacts.csv` indexes every file in the run roots
 with its size and SHA-256. `raw-metadata.tar.gz` contains the indexed JSON,
