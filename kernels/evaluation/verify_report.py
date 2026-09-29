@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import csv
+import argparse
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import re
@@ -36,6 +38,14 @@ ROWS = {
     "LULESH app trace case 3, ordered Scatter":
         ("spatter", "lulesh-scatter-ordered", "passed"),
 }
+REPORT_CSV = KERNELS / "evaluation/workload-results.csv"
+REPORT_FIELDS = (
+    "workload", "family", "run", "status", "correctness", "elements_or_transfers",
+    "gpu_cycles", "logical_payload_bytes", "payload_bytes_per_cycle",
+    "model_gmem_bytes_issued", "model_gmem_transactions",
+    "model_gmem_bytes_per_cycle", "output_digest", "expected_digest",
+    "elf_sha256", "kernel_source_sha256", "suite_sha256",
+)
 
 
 def indexed_csv(path: Path) -> dict[str, dict[str, str]]:
@@ -107,7 +117,39 @@ def verify_raw_runs(records: dict) -> None:
                 raise ValueError(f"{family}/{run}: {label} CSV differs from raw run")
 
 
+def report_csv(records: dict) -> str:
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=REPORT_FIELDS, lineterminator="\n")
+    writer.writeheader()
+    for workload, (family, run, status) in ROWS.items():
+        cycle, memory = records[(family, run)]
+        model = json.loads((KERNELS / family / "runs/model" / run / "result.json").read_text())
+        if model["status"] != status:
+            raise ValueError(f"{family}/{run}: model status differs from report")
+        writer.writerow({
+            "workload": workload, "family": family, "run": run,
+            "status": status, "correctness": model["correctness"],
+            "elements_or_transfers": int(cycle["pattern_length"]) * int(cycle["count"]),
+            "gpu_cycles": cycle["gpu_cycles"],
+            "logical_payload_bytes": cycle["logical_payload_bytes"],
+            "payload_bytes_per_cycle": cycle["payload_bytes_per_cycle"],
+            "model_gmem_bytes_issued": memory["model_gmem_bytes_issued"],
+            "model_gmem_transactions": memory["model_gmem_transactions"],
+            "model_gmem_bytes_per_cycle": memory["model_gmem_bytes_per_cycle"],
+            "output_digest": model["output_digest"],
+            "expected_digest": model["expected_digest"],
+            "elf_sha256": model["elf_sha256"],
+            "kernel_source_sha256": model["kernel_source_sha256"],
+            "suite_sha256": model["suite_sha256"],
+        })
+    return output.getvalue()
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--write-csv", action="store_true",
+                        help="regenerate the consolidated model result CSV after verification")
+    args = parser.parse_args()
     records = {}
     for family in ("stream", "spatter"):
         directory = KERNELS / family / "evaluation"
@@ -147,7 +189,12 @@ def main() -> None:
     if found != ROWS.keys() or len(records) != len(ROWS):
         raise ValueError("the report does not cover every current full-size model run")
     verify_raw_runs(records)
-    print(f"verified {len(found)} published workload rows")
+    expected_csv = report_csv(records)
+    if args.write_csv:
+        REPORT_CSV.write_text(expected_csv)
+    if REPORT_CSV.read_text() != expected_csv:
+        raise ValueError(f"{REPORT_CSV} differs from verified model runs")
+    print(f"verified {len(found)} published workload rows and consolidated CSV")
 
 
 if __name__ == "__main__":

@@ -27,7 +27,11 @@ tables against the indexed result JSON status and cycle fields.
 against the model cycle and memory tables, then regenerates every table row
 from its raw Cyclotron log and memory summary. It also checks build/model ELF
 hashes, complete output digests and guards, and the exploratory status of
-parallel xRAGE9 Scatter.
+parallel xRAGE9 Scatter. It also verifies the committed
+[`workload-results.csv`](workload-results.csv), a consolidated table with cycle,
+traffic, correctness, and provenance fields for all 14 reported workloads.
+After intentional model-result changes, regenerate that table with
+`python3 kernels/evaluation/verify_report.py --write-csv`.
 The dependency snapshot covers 21 input/simulator path records (16 distinct
 contents). It includes the 517,377,170-byte xRAGE input deck and the four
 referenced simulator binaries. Hardlinks avoid copying data where permitted;

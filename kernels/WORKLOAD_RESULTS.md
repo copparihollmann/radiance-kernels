@@ -76,6 +76,11 @@ See the exact [STREAM cycle](stream/evaluation/current-build-model-results.csv),
 [Spatter memory](spatter/evaluation/current-build-memory.csv) CSVs. Logical
 payload counts reads and writes required by each kernel. Model global-memory
 bytes include index traffic, cache lines, and transaction granularity.
+The [consolidated result CSV](evaluation/workload-results.csv) puts all 14
+rows, normalized bytes per model cycle, correctness status, output digest,
+and input/source/ELF hashes in one machine-readable table. Regenerate it
+with `python3 kernels/evaluation/verify_report.py --write-csv` from the
+repository root; the normal verifier checks it against the raw model runs.
 
 ## Full SoC checks and composition
 
