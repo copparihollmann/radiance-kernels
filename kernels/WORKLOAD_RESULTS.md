@@ -6,6 +6,10 @@ below are from the local `spatter-workloads` branch of `radiance-kernels`.
 The branch has not been pushed.
 The [artifact inventory](evaluation/README.md) indexes run status, provenance,
 ELF and input hashes, raw logs, and simulator files for later reporting.
+These RTL cycles use the pinned Radiance `b83419e` build. Upstream Radiance
+`main` advanced to `4cb8700` on 2026-09-29 with one intervening change to
+the default coalescer source-ID count (32 to 8). The cycle tables do not
+represent a run of that newer setting.
 
 ## Timing-model results at the stated input sizes
 
@@ -126,17 +130,18 @@ output digest in 4,024,544 cycles. STREAM Add passed a sampled host check in
 7,485,262 Verilator GPU cycles; its identical-ELF timing-model run passed a
 complete output digest in 6,346,569 cycles. Copy passed a sampled host check
 in 3,970,659 Verilator GPU cycles; its identical-ELF model run passed a
-complete output digest in 3,987,096 cycles. Triad is running on the 16-thread
-binary. The full-size materialized Gather→Scatter composition is running on
-the 8-thread binary. Earlier STREAM
+complete output digest in 3,987,096 cycles. Triad passed its sampled host
+check in 7,750,785 RTL GPU cycles; its identical-ELF model run passed a
+complete output digest in 6,346,349 cycles. The full-size materialized
+Gather→Scatter composition passed its sampled host check in 2,294,139 RTL
+GPU cycles. The fused composition RTL run is in progress. Earlier STREAM
 partial attempts are
 retained as interrupted. Later Triad and Copy attempts were stopped during
 host CPU saturation, including a later Add attempt, and an 8-thread Copy
 attempt was stopped to switch
 simulator threading; none produced a completed cycle result. The
-[paired table](stream/evaluation/current-build-results.csv) retains the
-completed Copy, Scale, and Add RTL/model pairs and will gain Triad after it
-passes.
+[paired table](stream/evaluation/current-build-results.csv) retains all four
+completed STREAM RTL/model pairs.
 
 The completed original-size GPU STREAM Spatter pairs, each using the same ELF
 for RTL and model, are:
@@ -160,8 +165,10 @@ The completed original-size STREAM pairs are:
 | Copy | 3,970,659 | 3,987,096 | 0.996 | Samples and guards |
 | Scale | 3,971,774 | 4,024,544 | 0.987 | Samples and guards |
 | Add | 7,485,262 | 6,346,569 | 1.179 | Samples and guards |
+| Triad | 7,750,785 | 6,346,349 | 1.221 | Samples and guards |
 
-The STREAM table will include Triad after its RTL run passes.
+All four STREAM RTL runs passed their sampled host and guard checks; the
+identical-ELF model runs passed complete output digests.
 
 ## Full-size Gather→Scatter composition
 
@@ -176,9 +183,9 @@ model runs checked every output word and guards against the same digest:
 | Materialized Gather→Scatter | 3,100,336 | 8,388,608 | 17,850,624 | 7e49d79ec062db25 |
 
 The materialized chain includes the intermediate write and read. Its two
-stages run in one Muon launch with a barrier between them. This is a timing
-model comparison using the generic DRAM configuration described above; it is
-not a full-size RTL measurement. The exact cycle and memory counters are in
+stages run in one Muon launch with a barrier between them. The model comparison
+uses the generic DRAM configuration described above. The exact cycle and
+memory counters are in
 [composition cycle](spatter/evaluation/composition-fullsize-model-results.csv)
 and [memory](spatter/evaluation/composition-fullsize-memory.csv) tables.
 Running the pinned, unmodified upstream Spatter serial Gather followed by its
@@ -195,8 +202,16 @@ model and full SoC Verilator ELFs for two small cases:
 | Repeated destinations, ordered | 9,306 | 4,878 | 546ebd1e8889cdb4 |
 
 The [paired records](spatter/evaluation/composition-one-launch-pair.csv)
-include build, model, and RTL ELF hash checks. A full-size RTL composition run
-is in progress and has no completed cycle result yet.
+include build, model, and RTL ELF hash checks. The full-size materialized
+chain passed a sampled host and guard check in 2,294,139 RTL GPU cycles on
+the identical ELF used by the 3,100,336-cycle model run. Its
+[paired record](spatter/evaluation/composition-fullsize-rtl-results.csv)
+contains per-core counters and correctness levels. The full-size fused GS
+RTL run is in progress.
+
+| Composition mapping | RTL GPU cycles | Model GPU cycles | RTL host check |
+| --- | ---: | ---: | --- |
+| Materialized Gather→Scatter | 2,294,139 | 3,100,336 | Samples and guards |
 
 For an earlier small equal-count composition case, fused GS and the materialized
 two-stage chain have the same output digest. The model reports 3,189 and

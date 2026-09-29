@@ -1,0 +1,3 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+chain-gpu-stream-no-fence,Verilator 5.022 (8 threads),passed,sample-checked,gather-scatter-chain,256,1024,8388608,2294139,0.0:238113;0.1:238113,0.0:0.104;0.1:0.105,3.656539,1.828269,,
+chain-gpu-stream-no-fence,Cyclotron timing model,passed,digest-checked,gather-scatter-chain,256,1024,8388608,3100336,,,2.705709,1.352855,,

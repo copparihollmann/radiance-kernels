@@ -7,6 +7,12 @@ contains `kernels/spatter`, its simulator tools and this record. The RTL
 model uses Chipyard `d45f86f4cca379715ac0ceb3a9f2369927796794`, Radiance
 `b83419ea85e7fc0b6cbd81b3bb0a0cb3751a5445`, and Cyclotron
 `9b774a53a882df4a655c04b5aa662ae8a01d5f47`.
+On 2026-09-29, upstream Radiance `main` was checked at
+`4cb87002efaf9a1b177a2b25e717b8b76669b4c1`. The one intervening
+source commit changes the default coalescer TileLink source-ID count from
+32 to 8 in `MemParallelism.scala`. The reported RTL cycles were measured on
+the pinned `b83419e` simulator build; they are not measurements of the newer
+memory setting.
 VCS runtime currently queues for a license on this machine, so current-build
 RTL runs use the built Verilator 5.022 model. No FPGA bitstream is available.
 No GSIM executable was found in this checkout or on `PATH`, so no GSIM cycle
@@ -290,6 +296,11 @@ took 3,985 model and 8,597 RTL GPU cycles; the ordered repeated-destination
 chain took 4,878 model and 9,306 RTL cycles. The
 [paired table](composition-one-launch-pair.csv) keeps both correctness
 levels, per-core RTL counters, and cycles. No RTL logic changed.
+The original-size materialized GPU STREAM Gather→Scatter chain also passed
+the full SoC Verilator sampled host and guard check in 2,294,139 GPU cycles;
+its identical-ELF model run passed a complete digest in 3,100,336 cycles.
+The [full-size paired table](composition-fullsize-rtl-results.csv) retains
+both results. The fused RTL comparison is still in progress.
 
 [Current-build memory counters](current-build-memory.csv) record the
 timing model's issued global-memory transactions and bytes, including effects

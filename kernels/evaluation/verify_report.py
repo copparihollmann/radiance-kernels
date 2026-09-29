@@ -357,6 +357,64 @@ def verify_composition_rtl_summary(report: str) -> None:
         raise ValueError("the materialized chain RTL summary differs from paired runs")
 
 
+def verify_fullsize_composition_rtl(report: str) -> int:
+    """Validate every completed full-size fused/materialized RTL comparison."""
+    validate = load_tool("spatter-validate.py")
+    summarize = load_tool("spatter-summarize.py")
+    root = KERNELS / "spatter/runs"
+    rtl_root = root / "rtl-full-composition"
+    table = KERNELS / "spatter/evaluation/composition-fullsize-rtl-results.csv"
+    with table.open(newline="") as source:
+        rows = list(csv.DictReader(source))
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=summarize.FIELDS,
+                            lineterminator="\n")
+    writer.writeheader()
+    completed = []
+    for name, _ in COMPOSITION_FULLSIZE_NAMES:
+        result_path = rtl_root / name / "result.json"
+        if (result_path.exists() and
+                json.loads(result_path.read_text()).get("status") == "passed"):
+            completed.append(name)
+    included = [row["run"] for row in rows[::2]]
+    if len(rows) != 2 * len(completed) or included != completed:
+        raise ValueError(f"{table}: does not cover completed composition RTL cases")
+    for name in completed:
+        rtl_path = rtl_root / name
+        log = (rtl_path / "verilator.log").read_text(errors="replace")
+        cycles = [int(value) for value in re.findall(r"\bCycles:\s*(\d+)", log)]
+        result = json.loads((rtl_path / "result.json").read_text())
+        if ("Verilog $finish" not in log or "*** FAILED ***" in log or
+                "%Error" in log or not cycles or
+                result["gpu_cycles"] != max(cycles)):
+            raise ValueError(f"{rtl_path}: RTL log differs from reported result")
+        writer.writerows(validate.inspect_run(root, rtl_root, root / "model",
+                                              name, summarize))
+    if table.read_text() != output.getvalue():
+        raise ValueError(f"{table}: paired CSV differs from raw RTL/model runs")
+    header = ("| Composition mapping | RTL GPU cycles | Model GPU cycles | "
+              "RTL host check |")
+    block = report.split(header, 1)[1].split("\n\n", 1)[0]
+    reported = [tuple(field.strip() for field in line.strip("|").split("|"))
+                for line in block.splitlines()
+                if line.startswith("| ") and not line.startswith("| ---")]
+    labels = dict(COMPOSITION_FULLSIZE_NAMES)
+    expected = []
+    for rtl, model in zip(rows[::2], rows[1::2]):
+        name = rtl["run"]
+        if model["run"] != name:
+            raise ValueError(f"{table}: mismatched composition pair")
+        check = {"digest-checked": "Complete digest",
+                 "sample-checked": "Samples and guards"}.get(rtl["correctness"])
+        if check is None:
+            raise ValueError(f"{table}: unsupported host check for {name}")
+        expected.append((labels[name], f"{int(rtl['gpu_cycles']):,}",
+                         f"{int(model['gpu_cycles']):,}", check))
+    if reported != expected:
+        raise ValueError("the full-size composition RTL summary differs from paired runs")
+    return len(completed)
+
+
 def report_csv(records: dict) -> str:
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=REPORT_FIELDS, lineterminator="\n")
@@ -440,13 +498,15 @@ def main() -> None:
     verify_stream_rtl_summary(report)
     verify_composition_fullsize(report)
     verify_composition_rtl_summary(report)
+    fullsize_composition_paired = verify_fullsize_composition_rtl(report)
     expected_csv = report_csv(records)
     if args.write_csv:
         REPORT_CSV.write_text(expected_csv)
     if REPORT_CSV.read_text() != expected_csv:
         raise ValueError(f"{REPORT_CSV} differs from verified model runs")
     print(f"verified {len(found)} workload rows, 2 composition model rows, "
-          f"{paired} full-size and {small_paired} small paired RTL cases, "
+          f"{paired} full-size workload RTL cases, {fullsize_composition_paired} "
+          f"full-size composition RTL cases, and {small_paired} small paired RTL cases, "
           "and consolidated CSV")
 
 

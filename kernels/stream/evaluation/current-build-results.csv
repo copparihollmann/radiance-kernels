@@ -5,3 +5,5 @@ scale-1048576,Verilator 5.022 (16 threads),passed,sample-checked,stream-scale,10
 scale-1048576,Cyclotron timing model,passed,digest-checked,stream-scale,1048576,1,8388608,4024544,,,2.084362,,,
 add-1048576,Verilator 5.022 (16 threads),passed,sample-checked,stream-add,1048576,1,12582912,7485262,0.0:622941;0.1:622941,0.0:0.083;0.1:0.084,1.681025,,,
 add-1048576,Cyclotron timing model,passed,digest-checked,stream-add,1048576,1,12582912,6346569,,,1.982632,,,
+triad-1048576,Verilator 5.022 (16 threads),passed,sample-checked,stream-triad,1048576,1,12582912,7750785,0.0:622945;0.1:622945,0.0:0.085;0.1:0.080,1.623437,,,
+triad-1048576,Cyclotron timing model,passed,digest-checked,stream-triad,1048576,1,12582912,6346349,,,1.982701,,,
