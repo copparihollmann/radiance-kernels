@@ -83,8 +83,8 @@ static void scatter_stage(void*, uint32_t tid, uint32_t threads_per_block,
 static void chain_body(void* arg, uint32_t tid, uint32_t threads_per_block,
                        uint32_t block_id) {
   gather_stage(arg, tid, threads_per_block, block_id);
-  // Keep both stages in one launch. A second mu_schedule lost some worker
-  // warps in timing simulation when the materialized transfer was large.
+  // Keep both stages in one launch. A second mu_schedule left some Scatter
+  // worker output blocks unwritten in the full-size timing simulation.
   mu_barrier(1, SPATTER_NUM_WARPS * MU_NUM_CORES);
   scatter_stage(arg, tid, threads_per_block, block_id);
 }
