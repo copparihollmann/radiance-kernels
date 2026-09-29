@@ -21,7 +21,7 @@ matched when this snapshot was generated. The archive's contents were checked
 against all 501 recorded file hashes.
 `verify_artifact_snapshot.py` repeats that check and verifies the ELF and
 dependency snapshots, the run JSON records, and input/simulator references.
-The generator also checked 106 rows in the current-build cycle and memory
+The generator also checked 108 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
 `verify_report.py` checks the 15 workload rows in `WORKLOAD_RESULTS.md`
 against the model cycle and memory tables, then regenerates every table row
