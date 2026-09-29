@@ -176,5 +176,13 @@ published atomic xRAGE9 GPU result. The logical payload metric counts one
 HBM timing calibration is assumed. See [evaluation/README.md](evaluation/README.md)
 for measured cases and provenance.
 
+For an independent correctness check, `tools/spatter-upstream-golden.py`
+compiles the pinned [original Spatter](https://github.com/hpcgarage/spatter)
+serial backend, runs it on the same deterministic inputs, and compares its
+complete output digest with the Radiance/Cyclotron result. The
+[golden record](evaluation/README.md#independent-upstream-correctness-oracle)
+documents the nine original-size and five small cases, raw artifact hashes,
+and reproduction commands.
+
 Run `python3 -m unittest -v test_run.py` for parser, address-map, and software
 composition checks.
