@@ -117,9 +117,11 @@ RTL GPU cycles; its identical-ELF model run passed the same digest in
 1,999,593 cycles. The
 [paired table](spatter/evaluation/current-build-results.csv) records the
 byte-identical build, RTL, and model ELF checks. MultiScatter is the remaining
-full-size GPU STREAM Spatter RTL case and is running in the sequential queue.
-Full-size STREAM Copy, Add, and Triad RTL runs are active; Scale is queued
-behind Copy. Their
+full-size GPU STREAM Spatter RTL case and is running on the 16-thread Verilator
+binary. The earlier partial attempt is retained as interrupted.
+Full-size STREAM Copy is running on the 8-thread Verilator binary; Scale, Add,
+and Triad are queued behind it. Their earlier partial attempts are retained as
+interrupted. The
 [paired table](stream/evaluation/current-build-results.csv) has no
 result rows until the first case completes.
 

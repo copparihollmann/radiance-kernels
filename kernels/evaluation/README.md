@@ -10,15 +10,15 @@ logs, and model counter summaries, along with both CSV inventories.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
 
-The current snapshot indexes 161 run records and 668 files across seven
-roots. It preserves 507 non-ELF files in the metadata archive. The 161 ELFs
+The current snapshot indexes 163 run records and 681 files across seven
+roots. It preserves 518 non-ELF files in the metadata archive. The 163 ELFs
 remain in the run roots and have local
 hardlinks under the ignored `elf-snapshot/` directory. The hardlinks preserve
 the binaries if a run directory is removed without copying the data blocks.
 Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
-against all 507 recorded file hashes.
+against all 518 recorded file hashes.
 `verify_artifact_snapshot.py` repeats that check and verifies the ELF and
 dependency snapshots, the run JSON records, and input/simulator references.
 The generator also checked 112 rows in the current-build cycle and memory
@@ -75,6 +75,14 @@ python3 kernels/evaluation/snapshot_dependencies.py
 python3 kernels/evaluation/verify_report.py
 python3 kernels/evaluation/verify_artifact_snapshot.py
 ```
+
+On 2026-09-29, five live simulator session handles disappeared after an
+environment change. Their logs stopped advancing before the Verilog finish
+marker. The partial runs, including the original `result-at-interruption.json`
+files, are retained under `spatter/runs/rtl-lost-session-20260929/` and
+`stream/runs/rtl-full-lost-session-20260929/`. Their indexed status is
+`interrupted`; they contribute no reported GPU cycles. The new full-size RTL
+runs use the already checked 8- and 16-thread Verilator binaries.
 
 The archive is a compact raw-record snapshot, not a replacement for the
 local ELF binaries or the input and simulator binaries.

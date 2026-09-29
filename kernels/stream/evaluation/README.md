@@ -30,8 +30,10 @@ ELF hashes, checks, and exact cycle values are in
 [smoke results](current-build-smoke-results.csv).
 
 The four original-size full SoC Verilator cases use separate directories under
-`../runs/rtl-full/`. Copy, Add, and Triad are active; Scale is queued behind
-Copy. The [paired table](current-build-results.csv) has no
+`../runs/rtl-full/`. Copy is active on the 8-thread simulator; Scale, Add, and
+Triad are queued behind it. The earlier partial attempts are archived under
+`../runs/rtl-full-lost-session-20260929/` with interrupted status. The
+[paired table](current-build-results.csv) has no
 result rows until the first run completes. As each run completes, validate it
 against its build ELF and the complete Cyclotron output readback, then update
 the paired table from `kernels/stream`:
