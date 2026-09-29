@@ -32,6 +32,7 @@ RESULT_TABLES = (
     ("spatter-current", "spatter/evaluation/current-build-model-results.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/current-build-results.csv", "model", "rtl"),
     ("spatter-current", "spatter/evaluation/gpu-stream-revision-comparison.csv", "model", "model"),
+    ("spatter-current", "spatter/evaluation/xrage9-revision-comparison.csv", "model", "model"),
     ("stream-current", "stream/evaluation/current-build-model-results.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/current-build-smoke-results.csv", "model", "rtl-single"),
     ("stream-current", "stream/evaluation/current-build-smoke-results.csv", "model", "rtl"),
@@ -40,6 +41,7 @@ RESULT_TABLES = (
     ("spatter-current", "spatter/evaluation/composition-model-results.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/current-build-memory.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/gpu-stream-revision-memory.csv", "model", "model"),
+    ("spatter-current", "spatter/evaluation/xrage9-revision-memory.csv", "model", "model"),
     ("stream-current", "stream/evaluation/current-build-memory.csv", "model", "model"),
     ("spatter-current", "spatter/evaluation/composition-memory.csv", "model", "model"),
 )

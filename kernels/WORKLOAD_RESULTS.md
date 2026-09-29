@@ -9,15 +9,18 @@ ELF and input hashes, raw logs, and simulator files for later reporting.
 
 ## Timing-model results at the stated input sizes
 
-**Revision audit in progress.** The Spatter values in this table came from
-their recorded ELFs. A rebuild from the current kernel source changed the
-Scatter, GS, and MultiScatter instruction images. Their new GPU STREAM model
-cycles are 1,040,016, 2,038,053, and 1,046,089 respectively; see the
+**Revision audit complete for the timing-model table.** The five GPU STREAM
+Spatter rows use ELFs rebuilt from the current kernel source. Rebuilding
+changed the Scatter, GS, and MultiScatter instruction images; their former
+cycle counts are retained in the
 [revision comparison](spatter/evaluation/gpu-stream-revision-comparison.csv).
 Loaded-image checks also confirm that xRAGE5, ordered xRAGE9, and both LULESH
 patterns retain the same initialized executable content after rebuilding.
-Parallel xRAGE9 has changed instructions, and its new model run is in progress.
-Keep each result tied to its recorded ELF hash until this audit is complete.
+Parallel xRAGE9 changed instructions and was rerun: its current model count is
+98,895,114 cycles, compared with 99,547,352 on the earlier ELF. Both counts
+and their memory counters are in the
+[xRAGE9 revision comparison](spatter/evaluation/xrage9-revision-comparison.csv).
+Each result remains tied to its recorded ELF hash in the artifact inventory.
 
 The Cyclotron timing model checked every output value and its guard regions
 for the deterministic cases below. It uses a generic DRAM timing node (200
@@ -37,12 +40,12 @@ until corresponding RTL measurements or calibration are available.
 | STREAM Add | 1,048,576 | 6,346,569 | 12,582,912 | 12,606,720 |
 | STREAM Triad | 1,048,576 | 6,346,349 | 12,582,912 | 12,606,720 |
 | Spatter GPU STREAM Gather | 262,144 | 1,998,857 | 4,194,304 | 8,413,440 |
-| Spatter GPU STREAM Scatter | 262,144 | 1,039,322 | 4,194,304 | 9,460,992 |
-| Spatter GPU STREAM GS | 262,144 | 2,037,327 | 4,194,304 | 10,509,568 |
-| Spatter GPU STREAM MultiScatter | 262,144 | 1,048,236 | 4,194,304 | 10,509,568 |
+| Spatter GPU STREAM Scatter | 262,144 | 1,040,016 | 4,194,304 | 9,460,992 |
+| Spatter GPU STREAM GS | 262,144 | 2,038,053 | 4,194,304 | 10,509,568 |
+| Spatter GPU STREAM MultiScatter | 262,144 | 1,046,089 | 4,194,304 | 10,509,568 |
 | Spatter GPU STREAM MultiGather | 262,144 | 1,999,593 | 4,194,304 | 8,414,464 |
 | xRAGE asteroid pattern 5, Gather | 8,368,968 | 100,529,234 | 133,903,488 | 478,662,848 |
-| xRAGE asteroid pattern 9, parallel Scatter | 6,664,304 | 99,547,352 | 106,628,864 | 389,316,672 |
+| xRAGE asteroid pattern 9, parallel Scatter | 6,664,304 | 98,895,114 | 106,628,864 | 389,316,672 |
 | xRAGE asteroid pattern 9, ordered Scatter | 6,664,304 | 96,235,005 | 106,628,864 | 581,683,520 |
 | LULESH app trace case 1, Gather | 3,699,168 | 74,419,767 | 59,186,688 | 532,704,064 |
 | LULESH app trace case 3, ordered Scatter | 2,048,032 | 74,611,507 | 32,768,512 | 536,606,144 |
@@ -52,6 +55,14 @@ so its output check covers guards and a nonzero probe. Ordered Scatter
 executes every transfer without racing and passed the full serial-order digest
 `215de6e81154b9c5` over 6,664,304 transfers. Its cycle and memory counts
 describe the generated conflict schedule, not upstream CUDA atomic exchange.
+An independent golden check compiled the unmodified
+[upstream Spatter serial kernels](https://github.com/hpcgarage/spatter/tree/ec8923711f8dc21eedff7189f12b02eb06845d2f/src/Spatter)
+with deterministic inputs. Complete output digests agree with Radiance and
+Cyclotron for all five GPU STREAM Spatter families, xRAGE5, ordered xRAGE9,
+and both LULESH traces. The
+[golden comparison table](spatter/evaluation/upstream-golden-results.csv)
+records the input and output hashes; the original-size parallel xRAGE9 run
+has no deterministic golden output.
 The LULESH rows use the original `standard-suite/app-traces/lulesh.json`
 counts of 231,198 for Gather and 128,002 for Scatter. Both passed functional
 and timing-model full-output digests on identical per-case ELFs. The Scatter

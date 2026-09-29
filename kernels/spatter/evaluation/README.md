@@ -9,6 +9,49 @@ model uses Chipyard `d45f86f4cca379715ac0ceb3a9f2369927796794`, Radiance
 `9b774a53a882df4a655c04b5aa662ae8a01d5f47`.
 VCS runtime currently queues for a license on this machine, so current-build
 RTL runs use the built Verilator 5.022 model. No FPGA bitstream is available.
+
+## Independent upstream correctness oracle
+
+[`../tools/upstream-golden.cc`](../tools/upstream-golden.cc) links the
+unmodified serial `Configuration.cc`, `PatternParser.cc`, and `Timer.cc` from
+[hpcgarage/Spatter commit ec89237](https://github.com/hpcgarage/spatter/commit/ec8923711f8dc21eedff7189f12b02eb06845d2f).
+It runs the upstream transfer loops on the same deterministic 64-bit source
+array embedded in each Radiance ELF, then saves the complete golden output.
+For generated patterns, the runner also compares Radiance's expanded indices
+and delta with Spatter's own pattern parser. Explicit JSON index arrays are
+passed unchanged. It checks the golden output digest against the build's
+expected digest and Cyclotron's complete GPU output readback.
+
+The [original-size comparison](upstream-golden-results.csv) passes all five
+GPU STREAM Spatter families, xRAGE5 Gather, ordered xRAGE9 Scatter, and two
+LULESH traces. The [small comparison](upstream-golden-smoke-results.csv) adds
+four transfer-family checks and an overlapping ordered Scatter. The
+[artifact manifest](upstream-golden-artifacts.csv) records SHA-256 and byte
+size for every local golden input, output, parser record, log, and driver.
+Those 219 MB of raw files are retained under the ignored `../golden-runs/`;
+keep that directory with the paper artifacts. The hashes and generation code
+are committed, but Git alone does not contain the raw golden arrays.
+
+From `kernels/spatter`, regenerate and verify with a pinned upstream clone:
+
+```sh
+python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
+  rebuild-gpu-stream-0 rebuild-gpu-stream-1 rebuild-gpu-stream-2 \
+  rebuild-gpu-stream-3 rebuild-gpu-stream-4 xrage5 xrage9-ordered \
+  lulesh-gather lulesh-scatter-ordered
+python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
+  --table evaluation/upstream-golden-smoke-results.csv \
+  smoke-1 smoke-2 smoke-3 smoke-4 ordered-overlap
+python3 tools/verify-upstream-golden.py --upstream /path/to/spatter
+```
+
+This is a semantic check against upstream's serial backend. Upstream CUDA
+Gather/MultiGather elide ordinary dense writes, and overlapping CUDA Scatter
+can have a race or use atomic exchange. The ordered Radiance Scatter matches
+the serial last-writer result; the parallel overlapping xRAGE9 run remains
+exploratory and is excluded from golden comparisons. Composition-specific
+`gather-final-wrap` has no direct upstream primitive and is checked separately
+through materialized and fused Radiance kernels.
 The original-size GPU STREAM ELFs were built before later Spatter source
 changes. Rebuilding from the tracked input deck leaves Gather and MultiGather
 load images unchanged except for 128 zero bytes in unused data space. Scatter,
@@ -28,7 +71,8 @@ initialized instructions and data plus 128 unused zero bytes, and its model
 run passes the same complete digest and cycle count.
 The corresponding ELF load comparisons show compatible initialized segments
 for original-size xRAGE5, ordered xRAGE9, and both LULESH patterns. Parallel
-xRAGE9 has changed loaded instructions and is being rerun in the model.
+xRAGE9 changed loaded instructions and was rerun in the model;
+[both versions](xrage9-revision-comparison.csv) remain recorded.
 `../../evaluation/compare_elf_loads.py` produces the per-case JSON records;
 it exits nonzero when initialized bytes differ.
 A 90-second same-revision VCS probe on 2026-09-28 used the current-branch

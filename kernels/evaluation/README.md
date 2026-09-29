@@ -10,18 +10,18 @@ logs, and model counter summaries, along with both CSV inventories.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
 
-The current snapshot indexes 150 run records and 623 files across seven
-roots. It preserves 473 non-ELF files in the metadata archive. The 150 ELFs
-total 1,858,172,776 bytes; they remain in the run roots and have local
+The current snapshot indexes 151 run records and 628 files across seven
+roots. It preserves 477 non-ELF files in the metadata archive. The 151 ELFs
+remain in the run roots and have local
 hardlinks under the ignored `elf-snapshot/` directory. The hardlinks preserve
 the binaries if a run directory is removed without copying the data blocks.
 Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
-against all 473 recorded file hashes.
+against all 477 recorded file hashes.
 `verify_artifact_snapshot.py` repeats that check and verifies the ELF and
 dependency snapshots, the run JSON records, and input/simulator references.
-The generator also checked 96 rows in the current-build cycle and memory
+The generator also checked 100 rows in the current-build cycle and memory
 tables against the indexed result JSON status and cycle fields.
 `verify_report.py` checks the 14 workload rows in `WORKLOAD_RESULTS.md`
 against the model cycle and memory tables, including the exploratory status
@@ -60,7 +60,7 @@ python3 kernels/evaluation/verify_artifact_snapshot.py
 ```
 
 The archive is a compact raw-record snapshot, not a replacement for the
-1,858,172,776 bytes of ELF binaries or the input and simulator binaries.
+local ELF binaries or the input and simulator binaries.
 These large snapshots are local and are not committed to Git; their CSV indexes are
 committed. **Keep `elf-snapshot/` and `dependency-snapshot/` with this checkout
 when preserving results for a paper. Git alone cannot restore the large ELF,
@@ -76,3 +76,12 @@ each ELF hash, input path and hash, source hash, simulator path and hash, and
 the checker and timing-config hashes where available. These let a later
 report distinguish current-branch measurements, older builds, complete
 checks, and exploratory overlapping Scatter results.
+
+The independent upstream Spatter golden records are kept separately in
+[`spatter/evaluation`](../spatter/evaluation/README.md). The committed
+comparison tables cover 14 deterministic cases, and the committed artifact
+manifest hashes all 118 locally retained golden files. Run
+`python3 kernels/spatter/tools/verify-upstream-golden.py --upstream
+/path/to/spatter` to verify them against the pinned upstream source. Keep
+`kernels/spatter/golden-runs/` with the ELF and dependency snapshots when
+retaining raw inputs and outputs for publication.

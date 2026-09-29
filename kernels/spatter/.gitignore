@@ -1,4 +1,5 @@
 data.S
 generated/
 runs/
+golden-runs/
 __pycache__/
