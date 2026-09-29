@@ -30,8 +30,8 @@ ELF hashes, checks, and exact cycle values are in
 [smoke results](current-build-smoke-results.csv).
 
 The four original-size full SoC Verilator cases use separate directories under
-`../runs/rtl-full/`. Scale is active on the 16-thread simulator; Copy, Add,
-and Triad are queued. The earlier partial attempts
+`../runs/rtl-full/`. Scale is active on the 16-thread simulator and Copy on the
+8-thread simulator; Add and Triad are queued. The earlier partial attempts
 are archived under `../runs/rtl-full-lost-session-20260929/` with interrupted
 status. The
 later Triad attempt was stopped during host CPU saturation and is retained
