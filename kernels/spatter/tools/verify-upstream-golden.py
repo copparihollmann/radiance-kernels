@@ -12,6 +12,16 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = Path(__file__).resolve().parent
+EXPECTED_RUNS = {
+    "upstream-golden-results.csv": {
+        *(f"rebuild-gpu-stream-{index}" for index in range(5)),
+        "xrage5", "xrage9-ordered", "lulesh-gather", "lulesh-scatter-ordered",
+    },
+    "upstream-golden-smoke-results.csv": {
+        "smoke-1", "smoke-2", "smoke-3", "smoke-4", "ordered-overlap",
+    },
+    "upstream-golden-scaled-results.csv": {"amg-gpu-scaled-1024"},
+}
 spec = importlib.util.spec_from_file_location("upstream_golden", TOOLS / "spatter-upstream-golden.py")
 golden = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(golden)
@@ -55,9 +65,14 @@ def main() -> None:
 
     seen = set()
     count = 0
-    for table in ("upstream-golden-results.csv", "upstream-golden-smoke-results.csv",
-                  "upstream-golden-scaled-results.csv"):
-        for row in rows(ROOT / "evaluation" / table):
+    for table, expected_runs in EXPECTED_RUNS.items():
+        table_rows = rows(ROOT / "evaluation" / table)
+        actual_runs = {row["run"] for row in table_rows}
+        if actual_runs != expected_runs or len(table_rows) != len(expected_runs):
+            raise ValueError(f"{table}: golden comparison coverage differs; "
+                             f"missing={sorted(expected_runs - actual_runs)}, "
+                             f"extra={sorted(actual_runs - expected_runs)}")
+        for row in table_rows:
             name = row["run"]
             if name in seen:
                 raise ValueError(f"duplicate golden run: {name}")
