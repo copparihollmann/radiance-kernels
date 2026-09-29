@@ -1,0 +1,126 @@
+"""Composable address maps for the five Spatter transfer families.
+
+This is the software contract for the Muon operations in spatter_ops.hpp.
+Each transfer is one 64-bit read and one 64-bit write. run_chain.py
+materializes a Gather output before a following Scatter reads it.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+
+
+@dataclass(frozen=True)
+class AddressMap:
+    kind: str  # dense, pattern, final_gather_pattern, or nested_pattern
+    table: str | None = None
+    inner: str | None = None
+    delta: int = 0
+    wrap: int = 0
+
+    def at(self, case: dict, iteration: int, j: int) -> int:
+        if self.kind == "dense":
+            return j + case["length"] * (iteration % case["wrap"])
+        if self.kind == "final_gather_pattern":
+            residue = iteration % self.wrap
+            iteration = residue + ((case["count"] - 1 - residue) // self.wrap) * self.wrap
+            base = case[self.table][j]
+        elif self.kind == "pattern":
+            base = case[self.table][j]
+        elif self.kind == "nested_pattern":
+            base = case[self.table][case[self.inner][j]]
+        else:
+            raise ValueError(f"unsupported address map: {self.kind}")
+        return base + self.delta * iteration
+
+
+@dataclass(frozen=True)
+class TransferPlan:
+    source_array: str
+    destination_array: str
+    read: AddressMap
+    write: AddressMap
+    schedule: str  # owner for dense gather output, task for other families
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def plan_for(case: dict) -> TransferPlan:
+    kind = case["kind"]
+    dense = AddressMap("dense")
+    if kind == "gather":
+        return TransferPlan("sparse", "dense",
+                            AddressMap("pattern", "pattern", delta=case["delta"]),
+                            dense, "owner")
+    if kind == "scatter":
+        return TransferPlan("dense", "sparse", dense,
+                            AddressMap("pattern", "pattern", delta=case["delta"]),
+                            "destination_owner" if case["collision_policy"] == "ordered" else "task")
+    if kind == "gs":
+        source_map = (AddressMap("final_gather_pattern", "gather",
+                                 delta=case["delta_gather"],
+                                 wrap=case["gather_final_wrap"])
+                      if case["gather_final_wrap"] else
+                      AddressMap("pattern", "gather", delta=case["delta_gather"]))
+        return TransferPlan(
+            "sparse_gather", "sparse_scatter",
+            source_map,
+            AddressMap("pattern", "scatter", delta=case["delta_scatter"]),
+            "destination_owner" if case["collision_policy"] == "ordered" else "task")
+    if kind == "multigather":
+        return TransferPlan(
+            "sparse", "dense",
+            AddressMap("nested_pattern", "pattern", "gather", case["delta"]),
+            dense, "owner")
+    if kind == "multiscatter":
+        return TransferPlan(
+            "dense", "sparse", dense,
+            AddressMap("nested_pattern", "pattern", "scatter", case["delta"]),
+            "destination_owner" if case["collision_policy"] == "ordered" else "task")
+    raise ValueError(f"unsupported Spatter family: {kind}")
+
+
+def execute_reference(case: dict, source: list[int]) -> list[int]:
+    """Serial reference for one transfer; only deterministic writes are comparable."""
+    plan = case["_plan"]
+    if len(source) < case["src_length"]:
+        raise ValueError("source is shorter than the address plan requires")
+    output = [0] * case["dst_length"]
+    for iteration in range(case["count"]):
+        for j in range(case["length"]):
+            output[plan.write.at(case, iteration, j)] = source[
+                plan.read.at(case, iteration, j)]
+    return output
+
+
+def stitch_reference(stages: list[dict], source: list[int]) -> list[int]:
+    """Compose transfer stages through dense intermediate arrays in software."""
+    for position, case in enumerate(stages):
+        if position and len(source) != case["src_length"]:
+            raise ValueError("stage output length does not match the next input")
+        source = execute_reference(case, source)
+    return source
+
+
+def fuse_gather_scatter(gather: dict, scatter: dict) -> dict:
+    """Emit a GS configuration for a lossless Gather -> Scatter chain.
+
+    Each Scatter read observes the final Gather write to its wrapped dense
+    slot, including when several Gather iterations share that slot.
+    """
+    if gather["kind"] != "gather" or scatter["kind"] != "scatter":
+        raise ValueError("fusion requires a Gather followed by a Scatter")
+    if gather["count"] != scatter["count"] or gather["length"] != scatter["length"]:
+        raise ValueError("fusion requires matching count and pattern length")
+    count = gather["count"]
+    if gather["wrap"] != scatter["wrap"]:
+        raise ValueError("fusion requires matching wrap in both stages")
+    if gather["dst_length"] != scatter["src_length"]:
+        raise ValueError("fusion requires matching intermediate array lengths")
+    return {"kernel": "GS", "pattern-gather": gather["pattern"],
+            "pattern-scatter": scatter["pattern"], "count": count,
+            "gather-final-wrap": gather["wrap"],
+            "collision-policy": scatter["collision_policy"],
+            "source-tag": gather["payload_tag"],
+            "delta-gather": gather["delta"], "delta-scatter": scatter["delta"]}
