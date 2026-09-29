@@ -58,6 +58,18 @@ Those 223 MB of raw files are retained under the ignored `../golden-runs/`;
 keep that directory with the paper artifacts. The hashes and generation code
 are committed, but Git alone does not contain the raw golden arrays.
 
+The [control script](../tools/check-upstream-controls.py) compiles the pinned
+upstream driver again and reruns the small Scatter case `smoke-1`. Its baseline
+output matches the retained golden output byte for byte. A source bit flip, a
+pattern-entry swap, and an output bit flip each change the output SHA-256 and
+the full-output digest. The [control CSV](upstream-control-results.csv) records
+the four outcomes. The script writes only to a temporary directory and checks
+the recorded CSV by default:
+
+```sh
+python3 tools/check-upstream-controls.py --upstream /path/to/spatter
+```
+
 From `kernels/spatter`, regenerate and verify with a pinned upstream clone:
 
 ```sh
@@ -72,6 +84,7 @@ python3 tools/spatter-upstream-golden.py --upstream /path/to/spatter \
   --table evaluation/upstream-golden-scaled-results.csv amg-gpu-scaled-1024
 python3 tools/spatter-upstream-composition-golden.py --upstream /path/to/spatter
 python3 tools/verify-upstream-golden.py --upstream /path/to/spatter
+python3 tools/check-upstream-controls.py --upstream /path/to/spatter
 python3 tools/spatter-upstream-pattern-audit.py --upstream /path/to/spatter
 ```
 

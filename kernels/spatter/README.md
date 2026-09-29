@@ -1,6 +1,6 @@
 # Spatter on Radiance
 
-The [workload result summary](../WORKLOAD_RESULTS.md) combines this kernel's
+The [workload result summary](../README.md) combines this kernel's
 cycles with the standalone STREAM measurements.
 
 This kernel lives in `radiance-kernels` and builds with `../common.mk`, the same
@@ -205,6 +205,9 @@ complete output digest with the Radiance/Cyclotron result. The
 documents nine original-size single-family cases, five small cases, the
 scaled AMG case, and the full-size two-stage composition, with raw artifact
 hashes and reproduction commands.
+The [mutation controls](evaluation/upstream-control-results.csv) rerun one
+small case with changed source data and pattern entries; both changes alter
+upstream's output digest, as does a direct output-bit flip.
 
 Run `python3 -m unittest -v test_run.py` for parser, address-map, and software
 composition checks.
