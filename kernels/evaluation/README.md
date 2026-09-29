@@ -10,15 +10,15 @@ logs, and model counter summaries, along with both CSV inventories.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
 
-The current snapshot indexes 165 run records and 690 files across seven
-roots. It preserves 525 non-ELF files in the metadata archive. The 165 ELFs
+The current snapshot indexes 166 run records and 695 files across seven
+roots. It preserves 529 non-ELF files in the metadata archive. The 166 ELFs
 remain in the run roots and have local
 hardlinks under the ignored `elf-snapshot/` directory. The hardlinks preserve
 the binaries if a run directory is removed without copying the data blocks.
 Every ELF has a SHA-256 in `artifacts.csv` and `elf-snapshot.csv`. All declared
 ELF and available input-suite hashes
 matched when this snapshot was generated. The archive's contents were checked
-against all 525 recorded file hashes.
+against all 529 recorded file hashes.
 `verify_artifact_snapshot.py` repeats that check and verifies the ELF and
 dependency snapshots, the run JSON records, and input/simulator references.
 The generator also checked 114 rows in the current-build cycle and memory
@@ -86,6 +86,9 @@ runs use the already checked 8- and 16-thread Verilator binaries.
 An additional full-size Triad attempt was stopped before completion when host
 CPU pressure rose; its partial files remain under
 `stream/runs/rtl-full-interrupted-load-20260929/` with interrupted status.
+An 8-thread full-size Copy attempt was later stopped to use the verified
+16-thread simulator; its partial files remain under
+`stream/runs/rtl-full-interrupted-switch-20260929/` with interrupted status.
 
 The archive is a compact raw-record snapshot, not a replacement for the
 local ELF binaries or the input and simulator binaries.
