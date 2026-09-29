@@ -84,9 +84,11 @@ run passes the same complete digest and cycle count.
 The rebuilt original-size Scatter passed its RV64 host sample and guard check
 in 1,247,066 Verilator GPU cycles. Its paired Cyclotron run checked the complete
 output digest in 1,040,016 timing-model cycles. The build, RTL, and model ELFs
-have the same SHA-256, as required by the paired validator. GS, MultiScatter,
-and MultiGather are still running or queued. GS and MultiScatter share a
-sequential queue; MultiGather started separately in its own run directory.
+have the same SHA-256, as required by the paired validator. Rebuilt GS passed
+its RV64 host sample and guard check in 2,158,179 Verilator GPU cycles. Its
+paired Cyclotron run checked the complete output digest in 2,038,053 cycles,
+and the build, RTL, and model ELFs have the same SHA-256. MultiScatter is
+running in the sequential RTL queue; MultiGather is running separately.
 The corresponding ELF load comparisons show compatible initialized segments
 for original-size xRAGE5, ordered xRAGE9, and both LULESH patterns. Parallel
 xRAGE9 changed loaded instructions and was rerun in the model;

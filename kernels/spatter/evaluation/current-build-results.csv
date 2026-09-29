@@ -3,3 +3,5 @@ gpu-stream-0,Verilator 5.022,passed,digest-checked,gather,256,1024,4194304,84262
 gpu-stream-0,Cyclotron timing model,passed,digest-checked,gather,256,1024,4194304,1998857,,,2.098351,1.049176,,
 rebuild-gpu-stream-1,Verilator 5.022,passed,sample-checked,scatter,256,1024,4194304,1247066,0.0:221513;0.1:221513,0.0:0.178;0.1:0.180,3.363338,1.681669,,
 rebuild-gpu-stream-1,Cyclotron timing model,passed,digest-checked,scatter,256,1024,4194304,1040016,,,4.032923,2.016461,,
+rebuild-gpu-stream-2,Verilator 5.022,passed,sample-checked,gs,256,1024,4194304,2158179,0.0:246097;0.1:246097,0.0:0.114;0.1:0.115,1.943446,0.971723,,
+rebuild-gpu-stream-2,Cyclotron timing model,passed,digest-checked,gs,256,1024,4194304,2038053,,,2.057996,1.028998,,
