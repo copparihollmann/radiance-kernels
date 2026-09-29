@@ -122,15 +122,21 @@ byte-identical build, RTL, and model ELF checks for all five full-size GPU
 STREAM Spatter cases. The earlier partial MultiScatter attempt is retained as
 interrupted. Full-size STREAM Scale passed a sampled host check in 3,971,774
 Verilator GPU cycles; its identical-ELF timing-model run passed a complete
-output digest in 4,024,544 cycles. Copy is running on the 8-thread binary and
-Add on the 16-thread binary; Triad is queued. Their earlier
+output digest in 4,024,544 cycles. STREAM Add passed a sampled host check in
+7,485,262 Verilator GPU cycles; its identical-ELF timing-model run passed a
+complete output digest in 6,346,569 cycles. Copy passed a sampled host check
+in 3,970,659 Verilator GPU cycles; its identical-ELF model run passed a
+complete output digest in 3,987,096 cycles. Triad is running on the 16-thread
+binary. The full-size materialized Gather→Scatter composition is running on
+the 8-thread binary. Earlier STREAM
 partial attempts are
 retained as interrupted. Later Triad and Copy attempts were stopped during
 host CPU saturation, including a later Add attempt, and an 8-thread Copy
 attempt was stopped to switch
 simulator threading; none produced a completed cycle result. The
 [paired table](stream/evaluation/current-build-results.csv) retains the
-completed Scale RTL/model pair and will gain the remaining cases as they pass.
+completed Copy, Scale, and Add RTL/model pairs and will gain Triad after it
+passes.
 
 The completed original-size GPU STREAM Spatter pairs, each using the same ELF
 for RTL and model, are:
@@ -147,13 +153,15 @@ The timing model is not calibrated to RTL or HBM; the ratios describe these
 paired runs and should not be used as a general correction factor. All five
 model runs checked their complete output digests.
 
-The completed original-size STREAM pair is:
+The completed original-size STREAM pairs are:
 
 | STREAM operation | RTL GPU cycles | Model GPU cycles | RTL/model cycles | RTL host check |
 | --- | ---: | ---: | ---: | --- |
+| Copy | 3,970,659 | 3,987,096 | 0.996 | Samples and guards |
 | Scale | 3,971,774 | 4,024,544 | 0.987 | Samples and guards |
+| Add | 7,485,262 | 6,346,569 | 1.179 | Samples and guards |
 
-The STREAM table will include Copy, Add, and Triad after their RTL runs pass.
+The STREAM table will include Triad after its RTL run passes.
 
 ## Full-size Gather→Scatter composition
 
@@ -187,8 +195,8 @@ model and full SoC Verilator ELFs for two small cases:
 | Repeated destinations, ordered | 9,306 | 4,878 | 546ebd1e8889cdb4 |
 
 The [paired records](spatter/evaluation/composition-one-launch-pair.csv)
-include build, model, and RTL ELF hash checks. The full-size RTL composition
-has not been run.
+include build, model, and RTL ELF hash checks. A full-size RTL composition run
+is in progress and has no completed cycle result yet.
 
 For an earlier small equal-count composition case, fused GS and the materialized
 two-stage chain have the same output digest. The model reports 3,189 and

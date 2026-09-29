@@ -32,9 +32,13 @@ ELF hashes, checks, and exact cycle values are in
 The four original-size full SoC Verilator cases use separate directories under
 `../runs/rtl-full/`. Scale passed its RV64 host sample and guard check in
 3,971,774 GPU cycles on the 16-thread simulator. Its identical-ELF Cyclotron
-run passed the complete output digest in 4,024,544 model cycles. Copy is
-active on the 8-thread simulator and Add on the 16-thread simulator; Triad is
-queued. The earlier partial attempts are archived under
+run passed the complete output digest in 4,024,544 model cycles. Add passed
+the sampled host and guard check in 7,485,262 RTL GPU cycles; its identical-ELF
+model run passed a complete output digest in 6,346,569 cycles. Copy passed
+the sampled host and guard check in 3,970,659 RTL GPU cycles; its identical-ELF
+model run passed a complete output digest in 3,987,096 cycles. Triad is
+active on the 16-thread simulator. The earlier
+partial attempts are archived under
 `../runs/rtl-full-lost-session-20260929/` with interrupted status. A later
 Triad attempt was stopped during host CPU saturation and is retained
 under `../runs/rtl-full-interrupted-load-20260929/` without a cycle result.
@@ -53,7 +57,8 @@ reproduced by:
 ```sh
 python3 ../spatter/tools/spatter-validate.py --build-root runs \
   --rtl-root runs/rtl-full --model-root runs/model \
-  --output evaluation/current-build-results.csv scale-1048576
+  --output evaluation/current-build-results.csv \
+  copy-1048576 scale-1048576 add-1048576
 ```
 
 After all four finish, pass `copy-1048576 scale-1048576 add-1048576
