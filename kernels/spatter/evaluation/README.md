@@ -97,6 +97,12 @@ A 90-second same-revision VCS probe on 2026-09-28 used the current-branch
 LULESH Gather smoke ELF. It exited with timeout code 124 while reporting a
 license-server connection failure and queued runtime license; no GPU cycles
 were produced by that probe.
+An 8-thread Verilator smoke probe using the `smoke-1` ELF passed the same host
+check and reported the same 7,923 GPU cycles as the single-thread Verilator
+run. `tools/spatter-validate.py` paired the probe with the existing Cyclotron
+run on a byte-identical ELF. Its raw log and manifest are retained under
+`../runs/rtl-mt-probe/smoke-1`. The wall times (115.209 and 178.040 seconds)
+were observed under different shared-host loads and are not a speedup estimate.
 
 ## Scope and provenance
 
