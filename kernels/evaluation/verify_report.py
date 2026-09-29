@@ -65,6 +65,8 @@ SMALL_RTL_TABLES = (
      ("lulesh-gather-smoke", "lulesh-scatter-smoke")),
     ("spatter", "composition-ordered-pair.csv", "rtl",
      ("materialized-chain-ordered", "composed-ordered")),
+    ("spatter", "mt8-smoke-pair.csv", "rtl-mt-probe", ("smoke-1",)),
+    ("spatter", "mt16-smoke-pair.csv", "rtl-mt16-probe", ("smoke-1",)),
 )
 
 

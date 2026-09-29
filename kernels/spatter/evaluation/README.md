@@ -107,10 +107,15 @@ license-server connection failure and queued runtime license; no GPU cycles
 were produced by that probe.
 An 8-thread Verilator smoke probe using the `smoke-1` ELF passed the same host
 check and reported the same 7,923 GPU cycles as the single-thread Verilator
-run. `tools/spatter-validate.py` paired the probe with the existing Cyclotron
-run on a byte-identical ELF. Its raw log and manifest are retained under
-`../runs/rtl-mt-probe/smoke-1`. The wall times (115.209 and 178.040 seconds)
-were observed under different shared-host loads and are not a speedup estimate.
+run. A 16-thread probe also passed the same check and reported 7,923 GPU
+cycles on the same ELF. `tools/spatter-validate.py` paired both probes with
+the existing Cyclotron run on a byte-identical ELF; see the
+[8-thread](mt8-smoke-pair.csv) and [16-thread](mt16-smoke-pair.csv) tables.
+Their raw logs and manifests are retained under `../runs/rtl-mt-probe/smoke-1`
+and `../runs/rtl-mt16-probe/smoke-1`. The observed wall times were 178.040,
+115.209, and 70.588 seconds for one, eight, and sixteen threads respectively.
+These were measured under different shared-host loads and are not a calibrated
+speedup estimate.
 
 ## Scope and provenance
 
