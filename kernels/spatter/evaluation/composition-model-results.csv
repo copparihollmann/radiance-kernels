@@ -1,0 +1,6 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+composed-wrap,Cyclotron timing model,passed,digest-checked,gs,3,3,144,3189,,,0.045155,0.022578,,
+materialized-chain-equal,Cyclotron timing model,passed,digest-checked,gather-scatter-chain,3,3,288,4839,,,0.059516,0.029758,,
+materialized-chain,Cyclotron timing model,passed,digest-checked,gather-scatter-chain,3,2,240,4769,,,0.050325,0.025163,,
+materialized-chain-ordered,Cyclotron timing model,passed,digest-checked,gather-scatter-chain,3,2,192,5890,,,0.032598,0.016299,,
+composed-ordered,Cyclotron timing model,passed,digest-checked,gs,3,2,96,4752,,,0.020202,0.010101,,

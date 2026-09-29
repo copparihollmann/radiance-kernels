@@ -1,0 +1,115 @@
+suite,case,kind,original_count,native,native_reason,fitting_prefix_count,prefix_source_elements,prefix_output_elements
+app-traces/amg.json,0,gather,1454647,True,,1024,2392,16
+app-traces/amg.json,1,gather,1454647,True,,1024,3653,16
+app-traces/amg_gpu.json,0,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,17752,256
+app-traces/amg_gpu.json,1,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,19013,256
+app-traces/lulesh.json,0,scatter,577806,True,,1024,16,361
+app-traces/lulesh.json,1,gather,231198,True,,1024,1144,16
+app-traces/lulesh.json,2,scatter,167805,True,,1024,16,1144
+app-traces/lulesh.json,3,scatter,128002,True,,1024,16,8545
+app-traces/lulesh.json,4,gather,96360,True,,1024,4453,16
+app-traces/lulesh.json,5,gather,96360,True,,1024,8545,16
+app-traces/lulesh.json,6,gather,96186,True,,1024,8545,16
+app-traces/lulesh.json,7,scatter,88011,True,,1024,16,1384
+app-traces/lulesh.json,8,gather,76794,True,,1024,8200,16
+app-traces/lulesh.json,9,gather,76794,True,,1024,41959,16
+app-traces/lulesh.json,10,gather,76794,True,,1024,1039,16
+app-traces/lulesh.json,11,gather,72270,True,,1024,1384,16
+app-traces/lulesh_gpu.json,0,scatter,250000000,False,count * pattern length exceeds RV32 task range,1024,256,361
+app-traces/lulesh_gpu.json,1,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,16504,256
+app-traces/lulesh_gpu.json,2,scatter,14705882,False,array exceeds the current GPU DRAM address window,1024,256,16504
+app-traces/lulesh_gpu.json,3,scatter,1937984,False,array exceeds the current GPU DRAM address window,1024,256,131425
+app-traces/lulesh_gpu.json,4,gather,3846153,False,array exceeds the current GPU DRAM address window,1024,65893,256
+app-traces/lulesh_gpu.json,5,gather,3846153,False,array exceeds the current GPU DRAM address window,1024,65893,256
+app-traces/lulesh_gpu.json,6,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,16744,256
+app-traces/lulesh_gpu.json,7,scatter,14705882,False,array exceeds the current GPU DRAM address window,1024,256,16744
+app-traces/lulesh_gpu.json,8,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,16399,256
+app-traces/lulesh_gpu.json,9,gather,380517,False,array exceeds the current GPU DRAM address window,1024,671719,256
+app-traces/lulesh_gpu.json,10,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,16399,256
+app-traces/lulesh_gpu.json,11,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,16744,256
+app-traces/nekbone.json,0,gather,982980,True,,1024,3160,16
+app-traces/nekbone.json,1,gather,982980,True,,1024,8275,16
+app-traces/nekbone.json,2,gather,491490,True,,1024,8275,16
+app-traces/nekbone_gpu.json,0,gather,5102040,False,array exceeds the current GPU DRAM address window,1024,49240,256
+app-traces/nekbone_gpu.json,1,gather,14705882,False,array exceeds the current GPU DRAM address window,1024,16474,256
+app-traces/nekbone_gpu.json,2,gather,3086419,False,array exceeds the current GPU DRAM address window,1024,82006,256
+app-traces/pennant.json,0,gather,83333333,True,,1024,2107,16
+app-traces/pennant.json,1,gather,83333333,True,,1024,2107,16
+app-traces/pennant.json,2,gather,482,False,array exceeds the current GPU DRAM address window,453,234320447,16
+app-traces/pennant.json,3,gather,83333333,True,,1024,2537,16
+app-traces/pennant.json,4,gather,83333333,True,,1024,2537,16
+app-traces/pennant.json,5,gather,517598,False,array exceeds the current GPU DRAM address window,1024,493577,16
+app-traces/pennant.json,6,scatter,125000000,True,,1024,16,1084
+app-traces/pennant.json,7,gather,642,False,array exceeds the current GPU DRAM address window,604,234475348,16
+app-traces/pennant.json,8,gather,642,False,array exceeds the current GPU DRAM address window,604,234475348,16
+app-traces/pennant.json,9,gather,50000000,True,,1024,4153,16
+app-traces/pennant.json,10,gather,132,False,array exceeds the current GPU DRAM address window,125,233415620,16
+app-traces/pennant.json,11,gather,482,False,array exceeds the current GPU DRAM address window,453,234320447,16
+app-traces/pennant.json,12,gather,241,False,array exceeds the current GPU DRAM address window,227,234320447,16
+app-traces/pennant.json,13,gather,519750,False,array exceeds the current GPU DRAM address window,1024,491531,16
+app-traces/pennant.json,14,gather,1928,False,array exceeds the current GPU DRAM address window,1024,132588987,16
+app-traces/pennant.json,15,gather,50000000,True,,1024,4096,16
+app-traces/pennant.json,16,gather,642,False,array exceeds the current GPU DRAM address window,604,234477760,16
+app-traces/pennant_gpu.json,0,gather,7575757,False,array exceeds the current GPU DRAM address window,1024,32827,256
+app-traces/pennant_gpu.json,1,gather,7575757,False,array exceeds the current GPU DRAM address window,1024,32827,256
+app-traces/pennant_gpu.json,2,gather,30,False,array exceeds the current GPU DRAM address window,28,231728407,256
+app-traces/pennant_gpu.json,3,gather,7575757,False,array exceeds the current GPU DRAM address window,1024,33257,256
+app-traces/pennant_gpu.json,4,gather,7575757,False,array exceeds the current GPU DRAM address window,1024,33257,256
+app-traces/pennant_gpu.json,5,gather,32412,False,array exceeds the current GPU DRAM address window,1024,7897097,256
+app-traces/pennant_gpu.json,6,scatter,14705882,False,array exceeds the current GPU DRAM address window,1024,256,16444
+app-traces/pennant_gpu.json,7,gather,40,False,array exceeds the current GPU DRAM address window,37,229809172,256
+app-traces/pennant_gpu.json,8,gather,40,False,array exceeds the current GPU DRAM address window,37,229809172,256
+app-traces/pennant_gpu.json,9,gather,3846153,False,array exceeds the current GPU DRAM address window,1024,65593,256
+app-traces/pennant_gpu.json,10,gather,8,False,array exceeds the current GPU DRAM address window,7,208944628,256
+app-traces/pennant_gpu.json,11,gather,30,False,array exceeds the current GPU DRAM address window,28,231728407,256
+app-traces/pennant_gpu.json,12,gather,15,False,array exceeds the current GPU DRAM address window,14,231209999,256
+app-traces/pennant_gpu.json,13,gather,32547,False,array exceeds the current GPU DRAM address window,1024,7864331,256
+app-traces/pennant_gpu.json,14,gather,120,False,array exceeds the current GPU DRAM address window,113,234201659,256
+app-traces/pennant_gpu.json,15,gather,3846153,False,array exceeds the current GPU DRAM address window,1024,65536,256
+app-traces/pennant_gpu.json,16,gather,40,False,array exceeds the current GPU DRAM address window,37,229811536,256
+basic-tests/cpu-stream.json,0,gather,4194304,True,,1024,8192,8
+basic-tests/cpu-stream.json,1,scatter,4194304,True,,1024,8,8192
+basic-tests/cpu-stream.json,2,gs,4194304,True,,1024,8192,8192
+basic-tests/cpu-stream.json,3,multiscatter,4194304,True,,1024,8,8192
+basic-tests/cpu-stream.json,4,multigather,4194304,True,,1024,8192,8
+basic-tests/cpu-ustride.json,0,scatter,31250000,False,array exceeds the current GPU DRAM address window,1024,8,8192
+basic-tests/cpu-ustride.json,1,scatter,15625000,False,array exceeds the current GPU DRAM address window,1024,8,16383
+basic-tests/cpu-ustride.json,2,scatter,7812500,False,array exceeds the current GPU DRAM address window,1024,8,32765
+basic-tests/cpu-ustride.json,3,scatter,3906250,False,array exceeds the current GPU DRAM address window,1024,8,65529
+basic-tests/cpu-ustride.json,4,scatter,1953125,False,array exceeds the current GPU DRAM address window,1024,8,131057
+basic-tests/cpu-ustride.json,5,scatter,976562,False,array exceeds the current GPU DRAM address window,1024,8,262113
+basic-tests/cpu-ustride.json,6,scatter,488281,False,array exceeds the current GPU DRAM address window,1024,8,524225
+basic-tests/cpu-ustride.json,7,scatter,244140,False,array exceeds the current GPU DRAM address window,1024,8,1048449
+basic-tests/cpu-ustride.json,8,gather,31250000,False,array exceeds the current GPU DRAM address window,1024,8192,8
+basic-tests/cpu-ustride.json,9,gather,15625000,False,array exceeds the current GPU DRAM address window,1024,16383,8
+basic-tests/cpu-ustride.json,10,gather,7812500,False,array exceeds the current GPU DRAM address window,1024,32765,8
+basic-tests/cpu-ustride.json,11,gather,3906250,False,array exceeds the current GPU DRAM address window,1024,65529,8
+basic-tests/cpu-ustride.json,12,gather,1953125,False,array exceeds the current GPU DRAM address window,1024,131057,8
+basic-tests/cpu-ustride.json,13,gather,976562,False,array exceeds the current GPU DRAM address window,1024,262113,8
+basic-tests/cpu-ustride.json,14,gather,488281,False,array exceeds the current GPU DRAM address window,1024,524225,8
+basic-tests/cpu-ustride.json,15,gather,244140,False,array exceeds the current GPU DRAM address window,1024,1048449,8
+basic-tests/gpu-stream.json,0,gather,1024,True,,1024,262144,256
+basic-tests/gpu-stream.json,1,scatter,1024,True,,1024,256,262144
+basic-tests/gpu-stream.json,2,gs,1024,True,,1024,262144,262144
+basic-tests/gpu-stream.json,3,multiscatter,1024,True,,1024,256,262144
+basic-tests/gpu-stream.json,4,multigather,1024,True,,1024,262144,256
+basic-tests/gpu-ustride.json,0,scatter,3906250,False,array exceeds the current GPU DRAM address window,1024,256,262144
+basic-tests/gpu-ustride.json,1,scatter,1953125,False,array exceeds the current GPU DRAM address window,1024,256,524287
+basic-tests/gpu-ustride.json,2,scatter,976562,False,array exceeds the current GPU DRAM address window,1024,256,1048573
+basic-tests/gpu-ustride.json,3,scatter,488281,False,array exceeds the current GPU DRAM address window,1024,256,2097145
+basic-tests/gpu-ustride.json,4,scatter,244140,False,array exceeds the current GPU DRAM address window,1024,256,4194289
+basic-tests/gpu-ustride.json,5,scatter,122070,False,array exceeds the current GPU DRAM address window,1024,256,8388577
+basic-tests/gpu-ustride.json,6,scatter,61035,False,array exceeds the current GPU DRAM address window,1024,256,16777153
+basic-tests/gpu-ustride.json,7,scatter,30517,False,array exceeds the current GPU DRAM address window,1024,256,33554305
+basic-tests/gpu-ustride.json,8,gather,3906250,False,array exceeds the current GPU DRAM address window,1024,262144,256
+basic-tests/gpu-ustride.json,9,gather,1953125,False,array exceeds the current GPU DRAM address window,1024,524287,256
+basic-tests/gpu-ustride.json,10,gather,976562,False,array exceeds the current GPU DRAM address window,1024,1048573,256
+basic-tests/gpu-ustride.json,11,gather,488281,False,array exceeds the current GPU DRAM address window,1024,2097145,256
+basic-tests/gpu-ustride.json,12,gather,244140,False,array exceeds the current GPU DRAM address window,1024,4194289,256
+basic-tests/gpu-ustride.json,13,gather,122070,False,array exceeds the current GPU DRAM address window,1024,8388577,256
+basic-tests/gpu-ustride.json,14,gather,61035,False,array exceeds the current GPU DRAM address window,1024,16777153,256
+basic-tests/gpu-ustride.json,15,gather,30517,False,array exceeds the current GPU DRAM address window,1024,33554305,256
+basic-tests/pattern-size-test.json,0,scatter,16777216,True,,1024,4,8188
+basic-tests/pattern-size-test.json,1,gather,16777216,True,,1024,8188,4
+basic-tests/pattern-size-test.json,2,scatter,16777216,True,,1024,8,8192
+basic-tests/pattern-size-test.json,3,gather,16777216,True,,1024,8192,8
