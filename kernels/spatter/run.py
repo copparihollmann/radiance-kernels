@@ -200,12 +200,13 @@ def reference(case: dict) -> tuple[int | None, bool]:
     """Return serial output digest and whether destination writes overlap."""
     length, count = case["length"], case["count"]
     tag = case["payload_tag"]
+    source_base = case.get("source_index_base", 0)
     if case["kind"] in ("gather", "multigather"):
         def values():
             for r in range(case["wrap"]):
                 last = r + ((count - 1 - r) // case["wrap"]) * case["wrap"] if r < count else None
                 for j in range(length):
-                    yield payload(tag, source_index(case, last, j)) if last is not None else 0
+                    yield payload(tag, source_base + source_index(case, last, j)) if last is not None else 0
         return fnv(values()), False
     seen = bytearray(case["dst_length"])
     overlap = False
@@ -234,7 +235,8 @@ def sample_digest(case: dict, samples: int = 64) -> int:
                 values.append(0)
             else:
                 last = r + ((case["count"] - 1 - r) // case["wrap"]) * case["wrap"]
-                values.append(payload(case["payload_tag"], source_index(case, last, j)))
+                values.append(payload(case["payload_tag"],
+                                      case.get("source_index_base", 0) + source_index(case, last, j)))
         return fnv(values)
     selected = {pos: 0 for pos in positions}
     for i in range(case["count"]):
@@ -256,10 +258,11 @@ def write_u32(path: Path, values: list[int]) -> None:
             stream.write(struct.pack(f"<{len(chunk)}I", *chunk))
 
 
-def write_source(path: Path, length: int, tag: int) -> None:
+def write_source(path: Path, length: int, tag: int, base_index: int = 0) -> None:
     with path.open("wb") as stream:
         for start in range(0, length, 32768):
-            chunk = [payload(tag, i) for i in range(start, min(length, start + 32768))]
+            chunk = [payload(tag, base_index + i)
+                     for i in range(start, min(length, start + 32768))]
             stream.write(struct.pack(f"<{len(chunk)}Q", *chunk))
 
 
@@ -295,7 +298,8 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
     write_u32(GENERATED / "pattern_scatter.bin", case["scatter"])
-    write_source(GENERATED / "source.bin", case["src_length"], case["payload_tag"])
+    write_source(GENERATED / "source.bin", case["src_length"],
+                 case["payload_tag"], case.get("source_index_base", 0))
     if case["collision_policy"] == "ordered":
         write_destination_groups(case)
     else:
@@ -354,6 +358,8 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
         "kind": case["kind"], "pattern_length": case["length"],
         "address_plan": address_plan,
         "count": case["count"], "wrap": case["wrap"],
+        "iteration_start": case.get("iteration_start", 0),
+        "source_index_base": case.get("source_index_base", 0),
         "source_tag": case["payload_tag"],
         "requested_local_work_size": case["requested_local_work_size"],
         "muon_warps_per_core": 4,
@@ -401,11 +407,15 @@ def main() -> int:
     parser.add_argument("--case", type=int, default=0, help="zero-based JSON configuration index")
     parser.add_argument("--count", type=int,
                         help="replace the suite repetition count for a clearly labeled scaled run")
+    parser.add_argument("--iteration-start", type=int, default=0,
+                        help="start iteration for a wrap-1 Gather count chunk")
     parser.add_argument("--collision-policy", choices=("parallel", "ordered"),
                         help="ordered serializes transfers per destination for complete scatter checks")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--build-only", action="store_true")
+    parser.add_argument("--full-host-check", action="store_true",
+                        help="read and digest every output word on the RV64 host")
     parser.add_argument("--sim-only", action="store_true",
                         help="run an already built ELF from --out without regenerating inputs")
     parser.add_argument("--simv", type=Path, help="VCS simulator for the pinned Radiance checkout")
@@ -421,6 +431,8 @@ def main() -> int:
         parser.error("--max-cycles must be positive")
     if args.count is not None and args.count <= 0:
         parser.error("--count must be positive")
+    if args.iteration_start < 0:
+        parser.error("--iteration-start must be nonnegative")
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     if args.sim_only:
@@ -442,6 +454,15 @@ def main() -> int:
         if args.count is not None:
             raw_case["count"] = args.count
         case = normalize(raw_case)
+        if args.iteration_start:
+            if args.count is None:
+                parser.error("--iteration-start requires an explicit --count")
+            if case["kind"] != "gather" or case["wrap"] != 1:
+                parser.error("--iteration-start currently supports only wrap-1 Gather")
+            if args.iteration_start + case["count"] > original_count:
+                parser.error("the iteration chunk extends past the original count")
+        case["iteration_start"] = args.iteration_start
+        case["source_index_base"] = args.iteration_start * case["delta"]
         manifest = prepare(case, args.suite, args.case)
         manifest["original_count"] = original_count
         manifest["count_overridden"] = args.count is not None and args.count != original_count
@@ -458,17 +479,27 @@ def main() -> int:
         )
         manifest["simulator"] = "VCS" if args.simv else None
         manifest["cyclotron_trace_requested"] = args.record_trace
+        if args.full_host_check and manifest["destination_overlap"] and manifest["collision_policy"] == "parallel":
+            parser.error("a parallel collision case has no deterministic full-output digest")
         manifest["correctness"] = (
             "guards-and-nonzero-exploratory" if manifest["destination_overlap"] and
             manifest["collision_policy"] == "parallel" else
+            "digest-checked" if args.full_host_check else
             "sample-checked" if manifest["readback_samples"] else "digest-checked"
         )
+        manifest["host_full_readback"] = args.full_host_check
         (out / "result.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if args.prepare_only:
         return 0
     try:
         if not args.sim_only:
-            run_command(["make", "kernel.soc.elf"], out / "build.log", ROOT)
+            build_env = os.environ.copy()
+            if args.full_host_check:
+                build_env["EXTRA_HOST_CXXFLAGS"] = (
+                    build_env.get("EXTRA_HOST_CXXFLAGS", "") +
+                    " -DSPATTER_FORCE_FULL_READBACK=1").strip()
+            run_command(["make", "kernel.soc.elf"], out / "build.log", ROOT,
+                        env=build_env)
             shutil.copy2(ROOT / "kernel.soc.elf", out / "kernel.soc.elf")
             manifest["status"] = "built"
         if not args.build_only:

@@ -10,6 +10,7 @@ MU_CFLAGS += -isystem $(LLVM_MUON)/include/c++/v1
 
 # Readback hashes every output word; keep that verification path efficient.
 HOST_CXXFLAGS += -O3
+HOST_CXXFLAGS += $(EXTRA_HOST_CXXFLAGS)
 
 MU_NM = $(LLVM_MUON)/bin/llvm-nm
 

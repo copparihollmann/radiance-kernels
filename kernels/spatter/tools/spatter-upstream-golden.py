@@ -80,6 +80,7 @@ def fnv_file(path: Path) -> str:
 
 
 def validate_case(build: dict, raw: dict) -> dict:
+    original_count = raw.get("count", 1024)
     raw = dict(raw)
     raw["count"] = build["count"]
     raw["collision-policy"] = build.get("collision_policy", "parallel")
@@ -91,6 +92,14 @@ def validate_case(build: dict, raw: dict) -> dict:
                          ("source_tag", case["payload_tag"])):
         if field in build and build[field] != value:
             raise ValueError(f"build differs from input suite at {field}")
+    start = build.get("iteration_start", 0)
+    if start:
+        if case["kind"] != "gather" or case["wrap"] != 1:
+            raise ValueError("iteration chunks require wrap-1 Gather")
+        if start + case["count"] > original_count:
+            raise ValueError("iteration chunk extends past the upstream count")
+    if build.get("source_index_base", 0) != start * case["delta"]:
+        raise ValueError("source index base differs from iteration start")
     if case["gather_final_wrap"]:
         raise ValueError("fused composition has no direct upstream Spatter kernel")
     if build["destination_overlap"] and case["collision_policy"] != "ordered":
@@ -129,19 +138,21 @@ def check_patterns(raw: dict, case: dict, driver: Path, path: Path) -> str:
 
 
 def one_case(name: str, upstream: Path, driver: Path, source_root: Path,
-             model_root: Path, output_root: Path, source_hash: str) -> dict:
+             model_root: Path | None, output_root: Path, source_hash: str) -> dict:
     build_dir = source_root / name
     build = json.loads((build_dir / "result.json").read_text())
-    model = json.loads((model_root / name / "result.json").read_text())
-    if model["status"] != "passed":
-        raise ValueError(f"{name}: complete Cyclotron check is required")
+    model = None
+    if model_root is not None:
+        model = json.loads((model_root / name / "result.json").read_text())
+        if model["status"] != "passed":
+            raise ValueError(f"{name}: complete Cyclotron check is required")
     suite = Path(build["suite"])
     if sha256(suite) != build["suite_sha256"]:
         raise ValueError(f"{name}: input suite changed")
     raw = json.loads(suite.read_text())[build["case"]]
     case = validate_case(build, raw)
     elf_hash = sha256(build_dir / "kernel.soc.elf")
-    if elf_hash != model["elf_sha256"]:
+    if model is not None and elf_hash != model["elf_sha256"]:
         raise ValueError(f"{name}: build and model ELF differ")
     path = output_root / name
     path.mkdir(parents=True, exist_ok=True)
@@ -149,7 +160,8 @@ def one_case(name: str, upstream: Path, driver: Path, source_root: Path,
     write_pattern(path / "gather.bin", case["gather"])
     write_pattern(path / "scatter.bin", case["scatter"])
     pattern_validation = check_patterns(raw, case, driver, path)
-    write_source(path / "source.bin", case["src_length"], case["payload_tag"])
+    write_source(path / "source.bin", case["src_length"], case["payload_tag"],
+                 build.get("source_index_base", 0))
     output = path / "output.bin"
     command = [str(driver), case["kind"], str(case["count"]), str(case["wrap"]),
                str(case["delta"]), str(case["delta_gather"]),
@@ -160,9 +172,10 @@ def one_case(name: str, upstream: Path, driver: Path, source_root: Path,
     with (path / "upstream.log").open("w") as log:
         subprocess.run(command, check=True, stdout=log, stderr=subprocess.STDOUT)
     actual = fnv_file(output)
-    if actual != build["expected_digest"] or actual != model["output_digest"]:
+    if actual != build["expected_digest"] or (model is not None and actual != model["output_digest"]):
         raise ValueError(f"{name}: upstream {actual}, Radiance expectation "
-                         f"{build['expected_digest']}, Cyclotron {model['output_digest']}")
+                         f"{build['expected_digest']}, Cyclotron "
+                         f"{model['output_digest'] if model is not None else 'not run'}")
     row = {
         "run": name, "kind": case["kind"], "pattern_length": case["length"],
         "count": case["count"], "collision_policy": case["collision_policy"],
@@ -176,7 +189,8 @@ def one_case(name: str, upstream: Path, driver: Path, source_root: Path,
         "golden_output_sha256": sha256(output),
         "golden_digest": actual,
         "radiance_expected_digest": build["expected_digest"],
-        "cyclotron_digest": model["output_digest"], "status": "passed",
+        "cyclotron_digest": model["output_digest"] if model is not None else "not-run",
+        "status": "passed",
     }
     (path / "result.json").write_text(json.dumps(row, indent=2) + "\n")
     return row
@@ -188,6 +202,8 @@ def main() -> None:
     parser.add_argument("--upstream", type=Path, required=True)
     parser.add_argument("--source-root", type=Path, default=ROOT / "runs")
     parser.add_argument("--model-root", type=Path, default=ROOT / "runs/model")
+    parser.add_argument("--no-model", action="store_true",
+                        help="check upstream against the generated expectation without a Cyclotron run")
     parser.add_argument("--output-root", type=Path, default=ROOT / "golden-runs")
     parser.add_argument("--table", type=Path,
                         default=ROOT / "evaluation/upstream-golden-results.csv")
@@ -207,8 +223,9 @@ def main() -> None:
     if not driver.is_file() or not stamp.is_file() or stamp.read_text().strip() != source_hash:
         compile_driver(upstream, driver)
         stamp.write_text(source_hash + "\n")
+    model_root = None if args.no_model else args.model_root.resolve()
     rows = [one_case(name, upstream, driver, args.source_root.resolve(),
-                     args.model_root.resolve(), output_root, source_hash)
+                     model_root, output_root, source_hash)
             for name in args.names]
     args.table.parent.mkdir(parents=True, exist_ok=True)
     with args.table.open("w", newline="") as output:
@@ -225,7 +242,8 @@ def main() -> None:
                                 lineterminator="\n")
         writer.writeheader()
         writer.writerows(artifacts)
-    print(f"upstream Spatter and Radiance/Cyclotron agree on {len(rows)} cases")
+    comparator = "generated Radiance expectations" if args.no_model else "Radiance/Cyclotron"
+    print(f"upstream Spatter and {comparator} agree on {len(rows)} cases")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,16 @@
 """Small serial checks for the Spatter address mapping and input parser."""
 
 import json
+import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from run import (destination, fnv, normalize, parse_pattern, payload, reference,
-                 sample_digest, source_index, source_tag)
+                 sample_digest, source_index, source_tag, write_source)
 from plan import execute_reference, fuse_gather_scatter, stitch_reference
 from run_chain import expected_output
 
@@ -55,6 +57,21 @@ class SpatterMappingTest(unittest.TestCase):
         self.assertEqual(ordered["_plan"].schedule, "destination_owner")
         self.assertEqual(reference(ordered),
                          (fnv([payload(2, 1)]), True))
+
+    def test_wrap_one_gather_final_chunk_matches_full_count(self):
+        full = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
+                          "count": 5, "delta": 3, "wrap": 1})
+        final = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
+                           "count": 2, "delta": 3, "wrap": 1})
+        final["source_index_base"] = 3 * full["delta"]
+        self.assertEqual(reference(final), reference(full))
+        self.assertEqual(sample_digest(final, 3), reference(full)[0])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "source.bin"
+            write_source(path, final["src_length"], final["payload_tag"],
+                         final["source_index_base"])
+            values = struct.unpack(f"<{final['src_length']}Q", path.read_bytes())
+            self.assertEqual(values[4], payload(full["payload_tag"], 13))
 
     def test_stitch_gather_and_scatter_as_gs(self):
         gather = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
