@@ -1,0 +1,51 @@
+{
+  "suite": "/scratch/agustin/projects/chipyard/radiance-kernels-main-full/kernels/spatter/inputs/standard-suite/basic-tests/gpu-stream.json",
+  "suite_sha256": "34d10c083f159800fbfd05fa50ae8041a871e3e9872cf8692c9d8c0523ebb4c9",
+  "case": 3,
+  "kind": "multiscatter",
+  "pattern_length": 256,
+  "address_plan": {
+    "source_array": "dense",
+    "destination_array": "sparse",
+    "read": {
+      "kind": "dense",
+      "table": null,
+      "inner": null,
+      "delta": 0,
+      "wrap": 0
+    },
+    "write": {
+      "kind": "nested_pattern",
+      "table": "pattern",
+      "inner": "scatter",
+      "delta": 256,
+      "wrap": 0
+    },
+    "schedule": "task"
+  },
+  "count": 1024,
+  "wrap": 1,
+  "source_tag": 2,
+  "requested_local_work_size": 1024,
+  "muon_warps_per_core": 4,
+  "source_elements": 256,
+  "output_elements": 262144,
+  "logical_payload_bytes": 4194304,
+  "expected_digest": "6395beb9b9c4eb25",
+  "expected_sample_digest": "0c1a5844bcc37125",
+  "readback_samples": 64,
+  "exploratory_probe_index": null,
+  "destination_overlap": false,
+  "collision_policy": "parallel",
+  "status": "built",
+  "original_count": 1024,
+  "count_overridden": false,
+  "spatter_revision": "a81524982a70fb547a4a048585e9d284dc117db9",
+  "kernel_revision": "a81524982a70fb547a4a048585e9d284dc117db9",
+  "kernel_source_sha256": "e0f4f3d27a776d5061c6c23de7e5d373f983ad8c1f4499556735933b04de3edf",
+  "radiance_revision": null,
+  "cyclotron_revision": null,
+  "simulator": null,
+  "cyclotron_trace_requested": false,
+  "correctness": "sample-checked"
+}

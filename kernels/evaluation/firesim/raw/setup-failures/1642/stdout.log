@@ -1,0 +1,111 @@
+
+=== [firesim-queue] phase=STAGING job_id=1642 ===
+hwdb snapshot /scratch/agustin/projects/chipyard/sims/firesim/deploy/built-hwdb-entries/radiance_u250 sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 -> /run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1642.yaml
+staged /scratch/agustin/projects/chipyard/spatter-clone-rtl-runs/smoke/kernel.soc.elf -> /scratch/agustin/projects/chipyard/sims/firesim/deploy/workloads/radiance-spatter-smoke-agustin/kernel.soc.elf
+
+=== [firesim-queue] phase=INFRASETUP job_id=1642 ===
+hwdb verify phase=before_leading_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1642.yaml
+
+=== [firesim-queue] phase=LEADING_KILL job_id=1642 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: kill
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'localhost': [(<runtools.run_farm.Inst object at 0x791290e75600>, None)]})
+set_server_hardware_config 0 None
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+[localhost] Killing FPGA simulation for slot: 0.
+Warning: run() received nonzero return code 1 while executing ' pkill -SIGKILL FireSim-xilinx_'!
+Confirming exit...
+Warning: run() received nonzero return code 1 while executing 'screen -ls'!
+screenoutput No Sockets found in /run/screen/S-jack.
+The full log of this run is:
+/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-52-55-kill-6JH4N1ZUTSJ3MHUA.log
+hwdb verify phase=before_infrasetup sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1642.yaml
+
+=== [firesim-queue] phase=INFRASETUP job_id=1642 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: infrasetup
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'localhost': [(<runtools.run_farm.Inst object at 0x772735461600>, None)]})
+set_server_hardware_config 0 None
+[localhost] Checking if host instance is up...
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+Building FPGA software driver for xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config
+[localhost] run: make PLATFORM=xilinx_alveo_u250 TARGET_PROJECT=firesim TARGET_PROJECT_MAKEFRAG=/scratch/nicorakela/chipyard/generators/firechip/chip/src/main/makefrag/firesim DESIGN=FireSim TARGET_CONFIG=FireSimE4M3MxGemminiRadianceConfig PLATFORM_CONFIG=BaseXilinxAlveoU250Config xilinx_alveo_u250
+[localhost] out: mkdir: cannot create directory ‘/scratch/agustin/projects/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks’: Permission denied
+[localhost] out: mkdir: cannot create directory ‘/scratch/agustin/projects/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks’: Permission denied
+[localhost] out: ln: failed to create symbolic link '/scratch/agustin/projects/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks/bridgeinterfaces/.': No such file or directory
+[localhost] out: ln: failed to create symbolic link '/scratch/agustin/projects/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks/goldengateimplementations/.': No such file or directory
+[localhost] out: mkdir -p /scratch/agustin/projects/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks
+[localhost] out: mkdir: cannot create directory ‘/scratch/agustin/projects/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks’: Permission denied
+[localhost] out: make: *** [make/utils.mk:35: firesim_target_symlink_hook] Error 1
+[localhost] out: 
+Fatal error: run() received nonzero return code 2 while executing!
+Requested: make PLATFORM=xilinx_alveo_u250 TARGET_PROJECT=firesim TARGET_PROJECT_MAKEFRAG=/scratch/nicorakela/chipyard/generators/firechip/chip/src/main/makefrag/firesim DESIGN=FireSim TARGET_CONFIG=FireSimE4M3MxGemminiRadianceConfig PLATFORM_CONFIG=BaseXilinxAlveoU250Config xilinx_alveo_u250
+Executed: /bin/bash -l -c "cd /scratch/agustin/projects/chipyard/sims/firesim/deploy/../ && export PATH=/scratch/agustin/projects/chipyard/sims/firesim/utils/fireperf:/scratch/agustin/projects/chipyard/sims/firesim/utils/fireperf/FlameGraph:/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/bin:/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/bin:/scratch/agustin/projects/chipyard/.conda-env/bin:/scratch2/agustin/miniforge3/condabin:/scratch2/agustin/miniforge3/condabin:/home/agustin/.codex/packages/app-server-daemon/releases/0.160.0-x86_64-unknown-linux-musl/codex-path:/home/agustin/.local/bin:/home/agustin/.local/bin:/ecad/tools/xilinx/Vitis_HLS/2023.1/bin:/ecad/tools/xilinx/Model_Composer/2023.1/bin:/ecad/tools/xilinx/Vitis/2023.1/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/microblaze/lin/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/arm/lin/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/microblaze/linux_toolchain/lin64_le/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-linux-gnueabi/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-none-eabi/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch64/lin/aarch64-linux/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch64/lin/aarch64-none/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/armr5/lin/gcc-arm-none-eabi/bin:/ecad/tools/xilinx/Vitis/2023.1/tps/lnx64/cmake-3.3.2/bin:/ecad/tools/xilinx/Vitis/2023.1/aietools/bin:/ecad/tools/xilinx/Vivado/2023.1/bin:/ecad/tools/xilinx/DocNav:/home/agustin/.local/bin:/home/agustin/.local/bin:/home/agustin/.local/bin:/ecad/tools/xilinx/Vitis_HLS/2023.1/bin:/ecad/tools/xilinx/Model_Composer/2023.1/bin:/ecad/tools/xilinx/Vitis/2023.1/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/microblaze/lin/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/arm/lin/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/microblaze/linux_toolchain/lin64_le/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-linux-gnueabi/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-none-eabi/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch64/lin/aarch64-linux/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch64/lin/aarch64-none/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/armr5/lin/gcc-arm-none-eabi/bin:/ecad/tools/xilinx/Vitis/2023.1/tps/lnx64/cmake-3.3.2/bin:/ecad/tools/xilinx/Vitis/2023.1/aietools/bin:/ecad/tools/xilinx/Vivado/2023.1/bin:/ecad/tools/xilinx/DocNav:/home/agustin/.codex/tmp/arg0/codex-arg0edyu0N:/home/agustin/.codex/packages/app-server-daemon/releases/0.160.0-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg0j28wS8:/home/agustin/.codex/packages/app-server-daemon/releases/0.159.3-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg0S7jQ0n:/home/agustin/.codex/packages/app-server-daemon/releases/0.159.2-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg0tLAQf9:/home/agustin/.codex/packages/app-server-daemon/releases/0.159.1-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg0IzAbxN:/home/agustin/.codex/packages/app-server-daemon/releases/0.159.0-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg05nnzuZ:/home/agustin/.codex/packages/app-server-daemon/releases/0.158.0-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg0MJYNcH:/home/agustin/.codex/packages/app-server-daemon/releases/0.157.1-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg0G1QfzC:/home/agustin/.codex/packages/app-server-daemon/releases/0.157.0-x86_64-unknown-linux-musl/codex-path:/home/agustin/.codex/tmp/arg0/codex-arg0zWXgm1:/home/agustin/.codex/packages/standalone/releases/0.157.0-x86_64-unknown-linux-musl/codex-path:/home/agustin/.local/bin:/home/agustin/.local/bin:/home/agustin/.local/bin:/ecad/tools/xilinx/Vitis_HLS/2023.1/bin:/ecad/tools/xilinx/Model_Composer/2023.1/bin:/ecad/tools/xilinx/Vitis/2023.1/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/microblaze/lin/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/arm/lin/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/microblaze/linux_toolchain/lin64_le/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-linux-gnueabi/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch32/lin/gcc-arm-none-eabi/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch64/lin/aarch64-linux/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/aarch64/lin/aarch64-none/bin:/ecad/tools/xilinx/Vitis/2023.1/gnu/armr5/lin/gcc-arm-none-eabi/bin:/ecad/tools/xilinx/Vitis/2023.1/tps/lnx64/cmake-3.3.2/bin:/ecad/tools/xilinx/Vitis/2023.1/aietools/bin:/ecad/tools/xilinx/Vivado/2023.1/bin:/ecad/tools/xilinx/DocNav:/home/agustin/.local/bin:/home/agustin/.local/bin:/home/agustin/.local/bin:/home/agustin/.nvm/versions/node/v22.22.2/bin:/home/agustin/.cargo/bin:/home/agustin/.local/bin:/scratch2/agustin/miniforge3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/ecad/tools/scripts:/ecad/tools/synopsys/installer/current:/ecad/tools/synopsys/vcs/current/bin:/ecad/tools/synopsys/syn/current/bin:/ecad/tools/synopsys/icc/current/bin:/ecad/tools/synopsys/mw/current/bin/AMD.64:/ecad/tools/synopsys/starrc/current/bin:/ecad/tools/synopsys/rail/current/bin/IA.32:/ecad/tools/synopsys/pts/current/bin:/ecad/tools/synopsys/astro/current/bin/IA.32:/ecad/tools/synopsys/cadabra/current/bin:/ecad/tools/synopsys/fm/current/bin:/ecad/tools/mentor/calibre/current/bin:/ecad/tools/synopsys/verdi/current/bin:/ecad/tools/cadence/XCELIUM/current/tools/bin/64bit:/ecad/tools/cadence/XCELIUM/current/tools/bin:/bin:/ecad/tools/scripts:/ecad/tools/synopsys/installer/current:/ecad/tools/synopsys/vcs/current/bin:/ecad/tools/synopsys/syn/current/bin:/ecad/tools/synopsys/icc/current/bin:/ecad/tools/synopsys/mw/current/bin/AMD.64:/ecad/tools/synopsys/starrc/current/bin:/ecad/tools/synopsys/rail/current/bin/IA.32:/ecad/tools/synopsys/pts/current/bin:/ecad/tools/synopsys/astro/current/bin/IA.32:/ecad/tools/synopsys/cadabra/current/bin:/ecad/tools/synopsys/fm/current/bin:/ecad/tools/mentor/calibre/current/bin:/ecad/tools/synopsys/verdi/current/bin:/ecad/tools/cadence/XCELIUM/current/tools/bin/64bit:/ecad/tools/cadence/XCELIUM/current/tools/bin:/bin:/ecad/tools/scripts:/ecad/tools/synopsys/installer/current:/ecad/tools/synopsys/vcs/current/bin:/ecad/tools/synopsys/syn/current/bin:/ecad/tools/synopsys/icc/current/bin:/ecad/tools/synopsys/mw/current/bin/AMD.64:/ecad/tools/synopsys/starrc/current/bin:/ecad/tools/synopsys/rail/current/bin/IA.32:/ecad/tools/synopsys/pts/current/bin:/ecad/tools/synopsys/astro/current/bin/IA.32:/ecad/tools/synopsys/cadabra/current/bin:/ecad/tools/synopsys/fm/current/bin:/ecad/tools/mentor/calibre/current/bin:/ecad/tools/synopsys/verdi/current/bin:/ecad/tools/cadence/XCELIUM/current/tools/bin/64bit:/ecad/tools/cadence/XCELIUM/current/tools/bin:/bin:/scratch/agustin/projects/chipyard/sims/firesim/deploy RISCV=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools LD_LIBRARY_PATH=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/lib && source sourceme-manager.sh --skip-ssh-setup && cd sim/ && make PLATFORM=xilinx_alveo_u250 TARGET_PROJECT=firesim TARGET_PROJECT_MAKEFRAG=/scratch/nicorakela/chipyard/generators/firechip/chip/src/main/makefrag/firesim DESIGN=FireSim TARGET_CONFIG=FireSimE4M3MxGemminiRadianceConfig PLATFORM_CONFIG=BaseXilinxAlveoU250Config xilinx_alveo_u250"
+Aborting.
+Fatal error.
+Traceback (most recent call last):
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 530, in <module>
+    main(args)
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 469, in main
+    t['task'](t['config'](args))
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 243, in infrasetup
+    runtime_conf.infrasetup()
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 1219, in infrasetup
+    self.firesim_topology_with_passes.infrasetup_passes(
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/firesim_topology_with_passes.py", line 646, in infrasetup_passes
+    self.pass_build_required_drivers()
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/firesim_topology_with_passes.py", line 602, in pass_build_required_drivers
+    execute(build_drivers_helper, servers, hosts=["localhost"])
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/tasks.py", line 346, in execute
+    results[host] = _execute(
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/tasks.py", line 246, in _execute
+    return task.run(*args, **kwargs)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/tasks.py", line 146, in run
+    return self.wrapped(*args, **kwargs)
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/firesim_topology_with_passes.py", line 595, in build_drivers_helper
+    resolved_cfg.build_sim_driver()
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 707, in build_sim_driver
+    buildresult = run(driverbuildcommand)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/network.py", line 679, in host_prompting_wrapper
+    return func(*args, **kwargs)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/operations.py", line 1062, in run
+    return _run_command(
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/operations.py", line 938, in _run_command
+    error(message=msg, stdout=out, stderr=err)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/utils.py", line 346, in error
+    return func(message)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/site-packages/fabric/utils.py", line 56, in abort
+    raise e
+SystemExit: 1
+The full log of this run is:
+/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-53-10-infrasetup-GO227TURKC4OUBLG.log
+
+=== [firesim-queue] phase=TEARDOWN job_id=1642 ===
+hwdb verify phase=before_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1642.yaml
+
+=== [firesim-queue] phase=TEARDOWN job_id=1642 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: kill
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'localhost': [(<runtools.run_farm.Inst object at 0x7155ed869600>, None)]})
+set_server_hardware_config 0 None
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+[localhost] Killing FPGA simulation for slot: 0.
+Warning: run() received nonzero return code 1 while executing ' pkill -SIGKILL FireSim-xilinx_'!
+Confirming exit...
+Warning: run() received nonzero return code 1 while executing 'screen -ls'!
+screenoutput No Sockets found in /run/screen/S-jack.
+The full log of this run is:
+/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-53-15-kill-1J4VYX524JIFOZJQ.log
+hwdb verify phase=after_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1642.yaml

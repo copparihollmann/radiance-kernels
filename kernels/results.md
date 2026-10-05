@@ -9,6 +9,10 @@ limits of the measurements. The branch is published on the
 `copparihollmann/radiance-kernels` fork as `spatter-workloads`.
 The [artifact inventory](evaluation/README.md) indexes run status, provenance,
 ELF and input hashes, raw logs, and simulator files for later reporting.
+The [U250 FireSim run](evaluation/firesim/README.md) records FPGA output-check
+outcomes and whole-program target-cycle counts for representative HPC cases,
+including an ordered xRAGE9 failure. Those totals are distinct from the
+GPU-cycle measurements below.
 These RTL cycles use the pinned Radiance `b83419e` build. Upstream Radiance
 `main` advanced to `4cb8700` on 2026-09-29 with one intervening change to
 the default coalescer source-ID count (32 to 8). The cycle tables do not
@@ -247,5 +251,7 @@ current GPU address window and task range.
 Count-reduced versions are mapping checks, not original benchmark results.
 Gather/MultiGather implement the documented full transfer, whereas upstream
 CUDA uses a conditional single-slot store; their throughput figures do not
-share the same traffic definition. There is no FPGA bitstream or calibrated
-clock result in this evaluation.
+share the same traffic definition. The original RTL/model evaluation had no
+FPGA result or calibrated clock. A separate
+[U250 FireSim run](evaluation/firesim/README.md) now uses a bitstream for
+correctness checks; it does not establish calibrated bandwidth.

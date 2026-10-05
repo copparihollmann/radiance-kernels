@@ -1,0 +1,33 @@
+{
+  "kind": "stream-triad",
+  "stream_operation": "triad",
+  "pattern_length": 1048576,
+  "stream_elements": 1048576,
+  "count": 1,
+  "output_elements": 524288,
+  "logical_payload_bytes": 12582912,
+  "expected_digest": "44cd90308b622325",
+  "expected_sample_digest": "d65a34973ee91825",
+  "readback_samples": 64,
+  "destination_overlap": false,
+  "collision_policy": "parallel",
+  "address_plan": {
+    "read": "dense",
+    "write": "dense",
+    "operation": "triad"
+  },
+  "suite_sha256": "2984f4bd2545958a72e529b5de2ad1c44047e976d7e3d9c40ab58caf4a0698b1",
+  "case": 3,
+  "kernel_source_sha256": "47790777d2c9f7bc4cc88bccac52f44c874ad60f7c380ba565bd8029ce65c8d2",
+  "correctness": "sample-checked",
+  "status": "passed",
+  "simulator": "Verilator 5.022 (16 threads)",
+  "element_format": "float32",
+  "output_element_count": 1048576,
+  "checker_word_pairs": 524288,
+  "simulator_path": "/scratch/agustin/projects/chipyard/spatter-verilator/sims/verilator/simulator-mt16-chipyard.harness-RadianceSingleClusterConfig",
+  "elf_sha256": "76e7ff2b743a2fc424c0d12937bb5f52c8436fa6a2f3b1ca79bed664c14be1de",
+  "cyclotron_trace_requested": false,
+  "gpu_cycles": 7750785,
+  "simulation_wall_seconds": 4193.066
+}

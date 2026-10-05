@@ -4,6 +4,8 @@ This branch adds Muon kernels for four STREAM operations and five Spatter
 transfers. It includes full SoC RTL runs, timing-model runs, and checks against
 the original Spatter implementation. The [artifact inventory](evaluation/README.md)
 records the input, ELF, simulator, and check status behind each result.
+The [U250 FireSim evaluation](evaluation/firesim/README.md) records FPGA checks
+of the representative HPC cases using the same archived ELFs.
 
 ## Implemented kernels
 
@@ -154,8 +156,9 @@ size.
 ## Workload coverage and remaining work
 
 This branch covers the STREAM and Spatter kernel work and one measured
-compute→memory→compute chain. The wider HPC, LLM, HBM, and FPGA evaluation
-needs separate runs.
+compute→memory→compute chain. A one-cluster U250 FireSim correctness run is
+recorded [separately](evaluation/firesim/README.md). Wider HPC, LLM, HBM, and
+scaling measurements still need separate runs.
 
 | Target | Current result | Status | Next evidence needed |
 | --- | --- | --- | --- |
@@ -165,7 +168,12 @@ needs separate runs.
 | Other HPC inputs | Original-size LULESH Gather and ordered Scatter in the model; reduced-count AMG Gather correctness check. | Selected traces mapped. | Original-size AMG GPU performance and full application execution. |
 | Compute→memory→compute | Gather writes a dense intermediate; Scatter reads it after a barrier. Fused GS gives the same final result. | One chain measured in RTL and model. | A general stage scheduler and checks for further chains. |
 | GEMM and LLM inference | Existing [GEMM](gemm_mxgemmini/README.md), [batched GEMV](gemv_batched_fp8_m128/README.md), and [attention](flash_attention_mx_gqa/README.md) kernels came from [earlier work](https://github.com/ucb-bar/radiance-kernels/pull/1). | Separate kernel results; none in this evaluation. | Shared buffers, datatype/layout conversion, and measured end-to-end model schedules. |
-| HBM and FPGA stages | Generic model memory requests and one-cluster RTL cycles. | No HBM-calibrated or FPGA result. | Calibrated memory timing, measured clock, bitstream runs, and scalability measurements. |
+| HBM and FPGA stages | Generic model memory requests, one-cluster RTL cycles, and a [U250 FireSim correctness run](evaluation/firesim/README.md). | One-cluster FPGA execution is checked; GPU launch latency, HBM bandwidth, and scaling are not measured. | Host-side launch interval, calibrated memory timing and clock, and multi-cluster or multi-FPGA runs. |
+
+The U250 run covers 17 representative cases. Fourteen of the 16 deterministic
+cases passed the FPGA host check; ordered xRAGE9 and LULESH Scatter failed.
+Parallel xRAGE9 passed only an exploratory guard/nonzero-probe check. The
+exact results and controls are in the [FireSim report](evaluation/firesim/README.md).
 
 The proposed FPGA sequence starts with one SM, then two SMs on one FPGA without
 memory logic. Later stages add memory and move to two FPGAs. The present
@@ -187,12 +195,12 @@ log, output check, and counters in the [artifact inventory](evaluation/README.md
 | A CUDA-style Spatter performance comparison is meaningful. | Match the upstream CUDA Gather/MultiGather conditional-write behavior and the chosen Scatter collision policy in separate kernel variants. Check whether the available Muon ISA provides the required 64-bit atomic operation before claiming atomic equivalence. Run upstream and Radiance with the same deck, initialization, repetition policy, and timed region; inspect access traces and traffic counters. | Matching declared access semantics and benchmark boundaries, with raw runs for both sides. If atomic exchange cannot be matched, keep ordered Scatter results separate from CUDA atomic throughput. |
 | Multi-stage workloads execute with shared data. | Run Copy→Scale→Add→Triad on shared `A/B/C` buffers and check the final FP32 array against a CPU reference. For a Muon→MX-Gemmini chain, first define the datatype, layout, and buffer ownership at the handoff, then run a small checked chain in RTL and the model. | End-to-end output and guards pass; stage boundaries and intermediate hashes are recorded; measured chain cycles are reported rather than a sum of separate runs. |
 | The cycle tables apply to the newer Radiance revision. | Rebuild the SoC simulator from the newer Radiance source, rerun the nine main cases and the composition pair on pinned inputs, and regenerate paired tables with the new simulator and ELF hashes. | Complete checks and cycle records tied to the new revision. The current tables remain labeled as measurements of `b83419e` until that run exists. |
-| HBM and FPGA claims have measured support. | Calibrate memory timing against an HBM configuration and measured reference workloads, then run the same kernel ELFs or documented rebuilds on an available bitstream. Record clock, memory configuration, host/device transfer boundaries, and scaling setup. | Calibrated model errors and actual HBM/FPGA measurements. The current generic-DRAM cycles cannot establish bandwidth in GB/s or multi-FPGA scaling. |
+| HBM and FPGA performance claims have measured support. | Use the one-cluster [bitstream runs](evaluation/firesim/README.md) as a correctness base. Measure host-side launch intervals, calibrate memory timing against an HBM configuration and reference workloads, then run documented scaling cases. Record clock, memory configuration, host/device transfer boundaries, and scaling setup. | Calibrated model errors, FPGA kernel intervals, and scaling measurements. The present whole-program FireSim cycles and generic-DRAM model cycles cannot establish HBM bandwidth in GB/s or multi-FPGA scaling. |
 | Another machine can audit the results. | Export a fresh bundle with [export_report_bundle.py](evaluation/export_report_bundle.py) after the final branch revision, then unpack it in a clean checkout and rerun the report, golden, control, and artifact verifiers. | A bundle hash, pinned Git revisions, complete raw logs, ELF/input/simulator snapshots, and passing verification output from the clean checkout. The existing local archive predates the latest report edits. |
 
-The kernel and correctness work belongs in `radiance-kernels`. HBM calibration,
-bitstream availability, and FPGA scaling need hardware results outside this
-branch.
+The kernel and correctness work belongs in `radiance-kernels`. HBM calibration
+and FPGA scaling still need hardware measurements beyond this branch's
+one-cluster U250 check.
 
 ## Stitching kernels
 
@@ -296,7 +304,9 @@ inputs. The model adds request and transaction counts with generic DRAM
 timing. There is no measured HBM bandwidth, per-access latency, lane
 efficiency, warp occupancy, FPGA clock, or FPGA scaling result. VCS lacked a
 runtime license for this build, and GSIM was unavailable; Verilator supplied
-the RTL runs. The [presentation notes](evaluation/presentation.md) give a
+the RTL runs. The later [U250 FireSim checks](evaluation/firesim/README.md)
+add one-cluster FPGA execution results but no GPU-only cycle measurements.
+The [presentation notes](evaluation/presentation.md) give a
 shorter version for slides.
 
 ## Reproduce and inspect

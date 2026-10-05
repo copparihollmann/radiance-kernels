@@ -1,0 +1,26 @@
+{
+  "case": "xrage9-ordered-rebuild",
+  "mode": "Cyclotron functional model",
+  "checked_utc": "2026-10-05T00:48:17.126686+00:00",
+  "elf_sha256": "a2a7b29f021e1794dab9a16aa9a0cd9f7c669bc4cfdc359654754960af10f90b",
+  "checker_sha256": "53236c3bfd41ed0163e6f7629cefe077ded2df1cfa4589228c176003bd6b6e5c",
+  "config_sha256": "d619ab56e7165f6249f526514f43019f86f980a480c83ea39a0c85821e3215a8",
+  "timing_includes_sha256": {
+    "gmem.toml": "0d67bfe3fabaceacd4fc3f6c654bb49142b1a61d39f52e1ede4c3bc01cd1cc39",
+    "icache.toml": "07dadc02c26b598c91713939bb132a9963817a55b4fe9689614a52a44aa9a19d",
+    "lsu_scheduler.toml": "3783b41e3ae4d010442e2868747d082cd4d6dcaf0a5cc1fa54ee92db6a34e89a",
+    "smem.toml": "0641faf1ca704d48a8047bd59c15953d1897514cd064366f27ea2b4787440bc1",
+    "writeback_operand_fetch.toml": "a0ff5b26b4ead05a20c82873219f8def4e13ea3dc674745140f1ad31ff3ee36c",
+    "barrier.toml": "979e772ebf55a4aa0e8b635801731e33008562e9957a463804d11e0f88573d4c",
+    "fence.toml": "4afc584db777f9e9002c48d3e708403bb487a39e75e323cbc3d9c1320d77dc4a",
+    "dma_tensor.toml": "9646ce3b85f78848bbea54e1768747df133c6ee56ec5c4461b1f6dc78f2825a6",
+    "execute.toml": "21e9f0e3798b56db17d9f0b5848b73804e7499ecd5b8858b9b575131db99c445"
+  },
+  "upstream_golden_digest": "215de6e81154b9c5",
+  "model_digest": "215de6e81154b9c5",
+  "guards_intact": true,
+  "nonzero_words": 2383756,
+  "output_elements": 2051101,
+  "model_steps": 1461440,
+  "status": "passed"
+}

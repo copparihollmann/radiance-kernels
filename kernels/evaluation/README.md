@@ -8,6 +8,8 @@ records its status, input and source hashes, simulator binary hash, output
 digest, and cycle count. `artifacts.csv` indexes every file in the run roots
 with its size and SHA-256. `raw-metadata.tar.gz` contains the indexed JSON,
 logs, and model counter summaries, along with both CSV inventories.
+The later [U250 FireSim evaluation](firesim/README.md) has its own plan,
+queue records, and whole-program target-cycle counts.
 `elf-snapshot.csv` indexes a second local path for every ELF.
 `dependency-snapshot.csv` indexes local copies of the input JSON decks and
 simulator binaries named by the run records.
