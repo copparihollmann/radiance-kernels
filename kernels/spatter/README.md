@@ -8,8 +8,9 @@ Muon and RV64 host infrastructure used by the other kernels. It maps the five
 [Spatter](https://github.com/hpcgarage/spatter) transfer families: Gather,
 Scatter, GatherScatter (`GS`), MultiGather, and MultiScatter. The source JSON
 may come from Spatter's standard suite or the [LANL xRAGE traces](https://github.com/lanl/spatter).
-No FPGA bitstream is required; the fused ELF runs on the Radiance SoC RTL
-simulator or Cyclotron model.
+The fused ELF runs on the Radiance SoC RTL simulator or Cyclotron model.
+A one-cluster U250 image has also run the selected cases recorded in the
+[FireSim evaluation](../evaluation/firesim/README.md).
 Spatter's `gpu-stream.json` contains five Spatter address-transfer families;
 the four standalone STREAM operations live in [../stream](../stream/README.md).
 
@@ -120,6 +121,34 @@ python3 run.py --suite smoke.json --case 0 --out runs/smoke-0 --build-only
 `--count N` makes a clearly labeled scaled run while preserving the input
 pattern. It is not performance-equivalent to the original repetition count.
 The output directory contains `kernel.soc.elf`, `result.json`, and `build.log`.
+
+The RV64 host clears the complete output before releasing Muon reset. This is
+required for U250 FireSim: the fused RV32 BSS output has no initialized ELF
+payload, and unwritten Scatter destinations otherwise retain stale memory.
+Pass `--full-host-check` to make the host digest every output word and both
+guards after the kernel finishes. That mode provides stronger FPGA
+correctness evidence but adds readback time to whole-program target cycles;
+see the [U250 follow-up](../evaluation/firesim/output-initialization/README.md).
+The [complete standard-suite JSON set](inputs/README.md) and its
+[native-size inventory](evaluation/native-workload-footprint.csv) are tracked
+here. The inventory covers 114 cases; it is a feasibility audit, not a list
+of completed FPGA runs.
+
+For a Gather with `wrap=1`, `--count C --iteration-start S` prepares the
+contiguous repetitions `[S, S+C)` using source values from their original
+global indices. It rejects other families and wraps because they need output
+state across chunks. The tiny [chunk smoke input](chunk-smoke.json) splits
+five repetitions into three and two; the final chunk and unsplit run have
+the same digest. The [upstream serial record](evaluation/chunk-smoke-upstream.csv)
+checks all three generated ELFs independently. This is a correctness primitive
+for large Gather decompositions. The corresponding
+[original-count GPU AMG chunk runs](../evaluation/firesim/amg-gpu-chunks/README.md)
+both passed complete-output U250 checks. The separate booted runs do not
+provide a single-launch timing equivalent.
+[`tools/spatter-gather-chunks.py`](tools/spatter-gather-chunks.py) records the
+contiguous count ranges, rebased source indices, per-chunk footprints, and
+expected final digest. The [AMG GPU case 0 plan](evaluation/amg-gpu-chunk-plan.json)
+uses two 7,352,941-repetition chunks to cover the original 14,705,882 count.
 
 Scatter, GS, and MultiScatter can use `--collision-policy ordered` when
 destinations repeat. The generator groups transfers by destination in source

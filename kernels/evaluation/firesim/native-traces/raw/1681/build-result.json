@@ -1,0 +1,52 @@
+{
+  "suite": "/scratch/agustin/projects/spatter-data/spatter-upstream/standard-suite/app-traces/amg.json",
+  "suite_sha256": "3ebf359a0976532c04cebd3cb4432589c2c9ec3d7b6fe61661c042f6adc2121c",
+  "case": 0,
+  "kind": "gather",
+  "pattern_length": 16,
+  "address_plan": {
+    "source_array": "sparse",
+    "destination_array": "dense",
+    "read": {
+      "kind": "pattern",
+      "table": "pattern",
+      "inner": null,
+      "delta": 1,
+      "wrap": 0
+    },
+    "write": {
+      "kind": "dense",
+      "table": null,
+      "inner": null,
+      "delta": 0,
+      "wrap": 0
+    },
+    "schedule": "owner"
+  },
+  "count": 1454647,
+  "wrap": 1,
+  "source_tag": 1,
+  "requested_local_work_size": null,
+  "muon_warps_per_core": 4,
+  "source_elements": 1456015,
+  "output_elements": 16,
+  "logical_payload_bytes": 372389632,
+  "expected_digest": "915654aaf1205028",
+  "expected_sample_digest": null,
+  "readback_samples": 0,
+  "exploratory_probe_index": null,
+  "destination_overlap": false,
+  "collision_policy": "parallel",
+  "status": "built",
+  "original_count": 1454647,
+  "count_overridden": false,
+  "spatter_revision": "ec8923711f8dc21eedff7189f12b02eb06845d2f",
+  "kernel_revision": "85469e24b6efd7b1459e6ac252cdc05acd9b35aa",
+  "kernel_source_sha256": "992b18fa784f514539f0a9dd09428ca1b462bebf1e0953a5a2566c24004b46be",
+  "radiance_revision": null,
+  "cyclotron_revision": null,
+  "simulator": null,
+  "cyclotron_trace_requested": false,
+  "correctness": "digest-checked",
+  "host_full_readback": true
+}

@@ -1,0 +1,337 @@
+{
+  "uart": "/scratch/firesim_queue/jobs/1676/simulation/sim_slot_0/uartlog",
+  "uart_sha256": "5df1e0ae779e29bde40335bb303b23c215702ca7b7f50ce0066b914c11d6ced8",
+  "golden": "/scratch/agustin/projects/chipyard/firesim-hpc-inputs/golden-samples/golden-runs/lulesh-scatter-ordered/output.bin",
+  "golden_sha256": "c6b3ad4616cef0606dc6b6018fe1a16db56d17f2acd5cfa09a93c75a651255a8",
+  "output_elements": 1024369,
+  "guard_status": "1",
+  "actual_sample_digest": "ff48718d33bcf665",
+  "expected_sample_digest": "c5165f0fa1beb4d2",
+  "matched_samples": 10,
+  "mismatches": [
+    {
+      "sample": 1,
+      "position": 16259,
+      "actual": "001bfbb8001bfbb1",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 2,
+      "position": 32519,
+      "actual": "001c2307001c2306",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 3,
+      "position": 48779,
+      "actual": "0019ac300019ac29",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 4,
+      "position": 65039,
+      "actual": "0019ca750019ca74",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 5,
+      "position": 81299,
+      "actual": "0019da1f0019da1e",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 6,
+      "position": 97558,
+      "actual": "001af9ca001af98b",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 7,
+      "position": 113818,
+      "actual": "001b20cd001b20cc",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 8,
+      "position": 130078,
+      "actual": "001bb982001bb97b",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 9,
+      "position": 146338,
+      "actual": "001bd7bb001bd7ba",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 10,
+      "position": 162598,
+      "actual": "001be779001be778",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 11,
+      "position": 178857,
+      "actual": "001d06ec001d06e5",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 12,
+      "position": 195117,
+      "actual": "001d2e33001d2e32",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 13,
+      "position": 211377,
+      "actual": "001dc71c001dc6dd",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 14,
+      "position": 227637,
+      "actual": "001de599001de598",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 15,
+      "position": 243897,
+      "actual": "001df4cf001df4ce",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 16,
+      "position": 260156,
+      "actual": "001f147e001f143f",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 18,
+      "position": 292676,
+      "actual": "0019acea0019ace3",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 20,
+      "position": 325196,
+      "actual": "0019dadd0019dadc",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 22,
+      "position": 357715,
+      "actual": "001b2203001b2202",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 23,
+      "position": 373975,
+      "actual": "001bba7c001bba3d",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 24,
+      "position": 390235,
+      "actual": "001be999001be998",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 25,
+      "position": 406495,
+      "actual": "001be8ef001be8ee",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 26,
+      "position": 422755,
+      "actual": "001d07a8001d07a1",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 27,
+      "position": 439014,
+      "actual": "001d2ee1001d2ee0",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 28,
+      "position": 455274,
+      "actual": "001e017e001dc797",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 29,
+      "position": 471534,
+      "actual": "001de5d7001de5d6",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 30,
+      "position": 487794,
+      "actual": "001df58d001df58c",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 31,
+      "position": 504054,
+      "actual": "001f476d001f14fb",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 32,
+      "position": 520313,
+      "actual": "001f43ba001f43b9",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 33,
+      "position": 536573,
+      "actual": "000295e4000295dd",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 34,
+      "position": 552833,
+      "actual": "0002b4390002b438",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 35,
+      "position": 569093,
+      "actual": "0002c3d70002c3d6",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 36,
+      "position": 585353,
+      "actual": "0003e3480003e341",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 37,
+      "position": 601612,
+      "actual": "0003a3e40003a3e4",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 39,
+      "position": 634132,
+      "actual": "0004c1770004c176",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 41,
+      "position": 666652,
+      "actual": "0005f0d20005f093",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 43,
+      "position": 699171,
+      "actual": "0006b0900006b089",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 44,
+      "position": 715431,
+      "actual": "0006cf450006cf44",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 45,
+      "position": 731691,
+      "actual": "00072c0a00072c09",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 46,
+      "position": 747951,
+      "actual": "00082fc60007fded",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 47,
+      "position": 764211,
+      "actual": "0007c0590007c059",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 48,
+      "position": 780470,
+      "actual": "0008bdea0008bde3",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 49,
+      "position": 796730,
+      "actual": "0008dc230008dc22",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 50,
+      "position": 812990,
+      "actual": "0008ebe50008ebe4",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 51,
+      "position": 829250,
+      "actual": "000a3ce7000a0b43",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 52,
+      "position": 845510,
+      "actual": "0009cf190009cf19",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 53,
+      "position": 861769,
+      "actual": "000b0524000acb3d",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 54,
+      "position": 878029,
+      "actual": "000ae989000ae988",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 55,
+      "position": 894289,
+      "actual": "000af93f000af93e",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 56,
+      "position": 910549,
+      "actual": "000c18b0000c18a9",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 57,
+      "position": 926809,
+      "actual": "000bddf8000bddf8",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 58,
+      "position": 943068,
+      "actual": "000cd8ac000cd88d",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 60,
+      "position": 975588,
+      "actual": "000d0699000d0698",
+      "expected": "0000000000000000"
+    },
+    {
+      "sample": 62,
+      "position": 1008108,
+      "actual": "000deb90000deb90",
+      "expected": "0000000000000000"
+    }
+  ]
+}

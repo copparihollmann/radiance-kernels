@@ -5,7 +5,12 @@ transfers. It includes full SoC RTL runs, timing-model runs, and checks against
 the original Spatter implementation. The [artifact inventory](evaluation/README.md)
 records the input, ELF, simulator, and check status behind each result.
 The [U250 FireSim evaluation](evaluation/firesim/README.md) records FPGA checks
-of the representative HPC cases using the same archived ELFs.
+of representative HPC cases. Its
+[output-initialization follow-up](evaluation/firesim/output-initialization/README.md)
+records complete-output U250 passes for the two ordered Scatter cases that
+failed in the first run, with byte-identical Muon images. The
+[native trace series](evaluation/firesim/native-traces/README.md) extends the
+check to original-count AMG, LULESH, and Nekbone CPU-deck cases.
 
 ## Implemented kernels
 
@@ -163,17 +168,30 @@ scaling measurements still need separate runs.
 | Target | Current result | Status | Next evidence needed |
 | --- | --- | --- | --- |
 | STREAM | Four independent FP32 kernels at 1,048,576 elements; RTL and model cycles for each. | Four operations measured. | Shared `A/B/C` buffers and a measured Copy→Scale→Add→Triad run; other data types if they matter to the target. |
-| Spatter | Five GPU STREAM cases at original count and pattern size; RTL, model, and upstream golden checks. | Five families measured; 38/114 standard-suite configurations fit at original size. | Address-window support for the remaining cases; matched CUDA traffic/atomics before comparing published bandwidth. |
-| xRAGE | Original-size asteroid Gather 5 and Scatter 9 mapped; model cycles and memory counters. Ordered Scatter and Gather match upstream serial output. | Two traces mapped in the model. | Original-size RTL, atomic Scatter if matching the published GPU case, and application-level runs. |
-| Other HPC inputs | Original-size LULESH Gather and ordered Scatter in the model; reduced-count AMG Gather correctness check. | Selected traces mapped. | Original-size AMG GPU performance and full application execution. |
+| Spatter | Five GPU STREAM cases at original count and pattern size; RTL, model, upstream golden, and complete-output U250 checks. | Five families measured; 38/114 standard-suite configurations pass the single-launch size checks. | Run the 16 other size-fitting cases; map the remaining large cases; match CUDA traffic and atomics before comparing published bandwidth. |
+| xRAGE | Original-size asteroid Gather 5 and ordered Scatter 9 match upstream serial output and pass complete-output U250 checks. Model cycles and memory counters are also recorded. | Two traces mapped and checked on the FPGA. | Original-size RTL GPU cycle runs, atomic Scatter if matching the published GPU case, and application-level execution. |
+| Other HPC inputs | All 17 original-count AMG, LULESH, and Nekbone CPU traces match upstream serial output and pass complete-output U250 checks. GPU AMG case 0 also passes as two original-count Gather chunks. | [CPU trace results](evaluation/firesim/native-traces/README.md) and [GPU AMG chunk results](evaluation/firesim/amg-gpu-chunks/README.md). | One-launch GPU AMG performance, 16 other size-fitting standard-suite cases, mappings for the 75 other cases that fail single-launch limits, and full application execution. |
 | Compute→memory→compute | Gather writes a dense intermediate; Scatter reads it after a barrier. Fused GS gives the same final result. | One chain measured in RTL and model. | A general stage scheduler and checks for further chains. |
 | GEMM and LLM inference | Existing [GEMM](gemm_mxgemmini/README.md), [batched GEMV](gemv_batched_fp8_m128/README.md), and [attention](flash_attention_mx_gqa/README.md) kernels came from [earlier work](https://github.com/ucb-bar/radiance-kernels/pull/1). | Separate kernel results; none in this evaluation. | Shared buffers, datatype/layout conversion, and measured end-to-end model schedules. |
 | HBM and FPGA stages | Generic model memory requests, one-cluster RTL cycles, and a [U250 FireSim correctness run](evaluation/firesim/README.md). | One-cluster FPGA execution is checked; GPU launch latency, HBM bandwidth, and scaling are not measured. | Host-side launch interval, calibrated memory timing and clock, and multi-cluster or multi-FPGA runs. |
 
-The U250 run covers 17 representative cases. Fourteen of the 16 deterministic
-cases passed the FPGA host check; ordered xRAGE9 and LULESH Scatter failed.
-Parallel xRAGE9 passed only an exploratory guard/nonzero-probe check. The
-exact results and controls are in the [FireSim report](evaluation/firesim/README.md).
+The first U250 run covered 17 representative cases. Fourteen of its 16
+deterministic cases passed; the two ordered Scatter checks failed because the
+host had not cleared the output BSS before launch. Both now pass complete
+output digests on the same Muon images, as the
+[follow-up](evaluation/firesim/output-initialization/README.md) shows. Parallel
+xRAGE9 remains exploratory in its separate parallel mapping: its
+guard/nonzero-probe pass does not establish a unique final array. The ordered
+mapping passed a complete-output check. All 17 selected CPU application
+traces passed complete-output U250 checks, as did both original-count GPU AMG
+chunks. The [native trace table](evaluation/firesim/native-traces/README.md)
+separates a setup failure with no guest result from its successful retry.
+Across the original representative set and these corrected reruns, all 16
+deterministic cases have a passing U250 host check. The five GPU STREAM
+Spatter families, both named xRAGE patterns, and the 17 CPU application
+traces now have complete-output checks. The four standalone STREAM FP32
+cases and the composition pair still have sampled FPGA checks; their
+Verilator and model evidence is recorded separately.
 
 The proposed FPGA sequence starts with one SM, then two SMs on one FPGA without
 memory logic. Later stages add memory and move to two FPGAs. The present

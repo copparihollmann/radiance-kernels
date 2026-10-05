@@ -1,0 +1,15 @@
+{
+  "upstream_revision": "ec8923711f8dc21eedff7189f12b02eb06845d2f",
+  "suite_sha256": "91b9d2fc47426f49ac6ebb063a788415d2b19db735e24134f672baa49af48591",
+  "plan_sha256": "5a8dd9b527230ef2b292b84b04329a36bac4dfa6a3df25a64e24e0e17b6d5f51",
+  "upstream_driver_sha256": "5588bf8596726ca2b95952859e663507b4ddff8b56e3b95af56205f462ca9d74",
+  "original_count": 5,
+  "pattern_length": 3,
+  "source_bytes": 136,
+  "source_sha256": "59def8844fcb496aa06d69f6896885f69a42d6eea51f8bc6d2055e12e97f14c3",
+  "pattern_sha256": "881a0bc1df6e36555ee7bb4c1435644951b8042a6c737309d8619df18b3254c3",
+  "output_bytes": 24,
+  "output_sha256": "e271536e77ad0e3255f8818b5a168801e721a2fbeb8f7cc7e57e0f492ee5b9c2",
+  "complete_output_digest": "ccf6545c128b8c14",
+  "status": "passed"
+}

@@ -1,0 +1,14 @@
+{
+  "job_id": 1681,
+  "user": "agustin",
+  "priority": 0,
+  "project": "radiance-hpc",
+  "chipyard": "/scratch/nicorakela/chipyard",
+  "workload": "agustin-radiance-amg-scaled",
+  "bootbinary": "kernel.soc.elf",
+  "stage_from": "/scratch/agustin/projects/chipyard/firesim-hpc-inputs/native/amg-0/kernel.soc.elf",
+  "timeout": 1800,
+  "hw_config": "radiance_u250",
+  "hwdb_config_artifact": "/scratch/nicorakela/chipyard/sims/firesim/deploy/built-hwdb-entries/radiance_u250",
+  "hwdb_config_artifact_sha256": "d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4"
+}

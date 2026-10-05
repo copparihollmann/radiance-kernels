@@ -1,0 +1,15 @@
+{
+  "upstream_revision": "ec8923711f8dc21eedff7189f12b02eb06845d2f",
+  "suite_sha256": "1b50a9a6dbc612c718b2654462c9dda04674b61b5f070651a327b482c4e1f027",
+  "plan_sha256": "7f797c40affd3774eb1f1e9ded127857fcb0e483776d7de1839c09d8b17a7f6d",
+  "upstream_driver_sha256": "5588bf8596726ca2b95952859e663507b4ddff8b56e3b95af56205f462ca9d74",
+  "original_count": 14705882,
+  "pattern_length": 256,
+  "source_bytes": 1882363840,
+  "source_sha256": "396b06c895758aaa0c44ce2bedbe66153c7de2f39c8a61457558c111b1eaadec",
+  "pattern_sha256": "a51e99e8e0f87657b07565dfc70653b6ab013aba8ece95e3c1f571ecf83783af",
+  "output_bytes": 2048,
+  "output_sha256": "70273629aeb58c1d14caff69868e10b61bc7b563524500a8396c8d72edd15a44",
+  "complete_output_digest": "0e8f823875db84ff",
+  "status": "passed"
+}

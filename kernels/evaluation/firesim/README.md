@@ -9,6 +9,35 @@ count. The `raw/<job-id>/` directories preserve the queue request, console,
 FireSim logs, and available memory statistics for each completed job. The
 [artifact manifest](artifacts.csv) hashes every retained raw file.
 
+The failed ordered Scatter rows below are the original, retained results.
+The [software output-initialization follow-up](output-initialization/README.md)
+documents their corrected U250 full-output passes with unchanged RV32 device
+images. A separate [native trace run series](native-traces/README.md) covers
+the remaining AMG, LULESH, and Nekbone CPU-deck cases at original counts. The
+[GPU AMG count decomposition](amg-gpu-chunks/README.md) and its
+[small control](gather-chunking/README.md) have separate plans and outcomes.
+The [GPU STREAM full-readback series](gpu-stream-full/README.md) checks the
+three families that had sample-only FPGA checks in the original campaign.
+The [xRAGE5 follow-up](xrage-full/README.md) checks every Gather output.
+The [source snapshot manifest](source-snapshot-manifest.csv) identifies the
+exact kernel source files used by each newer ELF build, including diagnostic
+variants. Those small snapshots are retained in the local artifact archive;
+`verify_cases.py` checks each captured build's source hash against the manifest.
+
+| Follow-up series | Guest checks passed | What was checked |
+| --- | ---: | --- |
+| [Output initialization](output-initialization/README.md) | 4/4 corrected reruns | Two original-size ordered Scatter cases, each with a sample check and a complete-output check; a separate diagnostic intentionally failed. |
+| [Native CPU application traces](native-traces/README.md) | 15/15 new cases | Original-count AMG, LULESH, and Nekbone decks with complete output digests. Together with two earlier LULESH passes, this covers all 17 selected CPU traces. One earlier setup attempt had no guest result and was retried. |
+| [xRAGE5](xrage-full/README.md) | 1/1 | All 8,368,968 Gather output words and guards. |
+| [GPU STREAM full readback](gpu-stream-full/README.md) | 3/3 | Scatter, GatherScatter, and MultiScatter. Earlier Gather and MultiGather jobs already checked complete output, so all five families are covered. |
+| [Gather chunk control](gather-chunking/README.md) | 2/2 | Unsplit and final-chunk outputs on a five-repetition input. |
+| [Original-count GPU AMG chunks](amg-gpu-chunks/README.md) | 2/2 | Two 7,352,941-repetition Gather ranges; the final digest matches the independent upstream full-count serial run. |
+
+These are FPGA guest correctness checks. The target-cycle totals include
+boot, ELF loading, host initialization, Muon work, and output readback. The
+image does not expose GPU-only latency, core utilization, or calibrated HBM
+bandwidth in the captured records.
+
 ## Hardware and software provenance
 
 - Target: Xilinx Alveo U250 with the
@@ -55,9 +84,9 @@ check but reported `*** FAILED *** (code = 1)` after 136,324,022 whole-program
 target cycles. The same ELF passed Cyclotron's complete-output digest check;
 its FPGA host program checks 64 output samples and guards. The UART does not
 say which of those checks failed; the guard-only diagnostic below isolates
-the sample comparison. This remains an unresolved FPGA output discrepancy,
-not a passed FPGA result. Its raw log is retained under `raw/1658/` and the
-case remains a failed row in `comparison.csv`.
+the sample comparison. The later [output-initialization study](output-initialization/README.md)
+identifies and fixes the software cause. This original job remains a failed
+row in `comparison.csv`; its raw log is retained under `raw/1658/`.
 
 Diagnostic job 1668 uses a copy of the same ELF with only the host's final
 sample-digest branch at virtual address `0x80000774` (ELF offset `0x1774`)
@@ -89,8 +118,8 @@ This diagnostic is not a workload pass.
 
 Job 1671 is a two-entry ordered-overlap Scatter smoke ELF that passed the
 earlier Verilator and model checks. It also passed the complete FPGA host
-digest check. This shows the ordered path can work on a tiny input; it does
-not explain the two original-size ordered failures.
+digest check. The native-size failures were later traced to uninitialized
+output memory, as recorded in the follow-up above.
 
 ## Correctness checks
 

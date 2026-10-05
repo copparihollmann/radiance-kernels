@@ -1,0 +1,286 @@
+
+=== [firesim-queue] phase=STAGING job_id=1693 ===
+hwdb snapshot /scratch/nicorakela/chipyard/sims/firesim/deploy/built-hwdb-entries/radiance_u250 sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 -> /run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1693.yaml
+staged /scratch/agustin/projects/chipyard/firesim-hpc-inputs/native/nekbone-0/kernel.soc.elf -> /scratch/nicorakela/chipyard/sims/firesim/deploy/workloads/agustin-radiance-spatter-smoke/kernel.soc.elf
+
+=== [firesim-queue] phase=INFRASETUP job_id=1693 ===
+hwdb verify phase=before_leading_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1693.yaml
+
+=== [firesim-queue] phase=LEADING_KILL job_id=1693 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: kill
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'localhost': [(<runtools.run_farm.Inst object at 0x7058a1e4d630>, None)]})
+set_server_hardware_config 0 None
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+[localhost] Killing FPGA simulation for slot: 0.
+Warning: run() received nonzero return code 1 while executing ' pkill -SIGKILL FireSim-xilinx_'!
+Confirming exit...
+Warning: run() received nonzero return code 1 while executing 'screen -ls'!
+screenoutput No Sockets found in /run/screen/S-jack.
+The full log of this run is:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/logs/2026-10-05--02-35-22-kill-0S4B9RK86UWYTXNJ.log
+hwdb verify phase=before_infrasetup sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1693.yaml
+
+=== [firesim-queue] phase=INFRASETUP job_id=1693 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: infrasetup
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'localhost': [(<runtools.run_farm.Inst object at 0x702a37761630>, None)]})
+set_server_hardware_config 0 None
+[localhost] Checking if host instance is up...
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+Building FPGA software driver for xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config
+[localhost] run: make PLATFORM=xilinx_alveo_u250 TARGET_PROJECT=firesim TARGET_PROJECT_MAKEFRAG=/scratch/nicorakela/chipyard/generators/firechip/chip/src/main/makefrag/firesim DESIGN=FireSim TARGET_CONFIG=FireSimE4M3MxGemminiRadianceConfig PLATFORM_CONFIG=BaseXilinxAlveoU250Config xilinx_alveo_u250
+[localhost] out: mkdir -p /scratch/nicorakela/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks
+[localhost] out: # make the symlink dir
+[localhost] out: # symlink things
+[localhost] out: # remove any folders that don't match
+[localhost] out: find /scratch/nicorakela/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks/* -type d | grep -v -e "/scratch/nicorakela/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks/bridgeinterfaces" -e "/scratch/nicorakela/chipyard/sims/firesim/sim/midas/src/main/scala/target-symlinks/goldengateimplementations" | xargs rm -rf
+[localhost] out: source /scratch/nicorakela/chipyard/env.sh && \
+[localhost] out: 	make -C /scratch/nicorakela/chipyard/sims/firesim-staging \
+[localhost] out: 		SBT_PROJECT=firechip \
+[localhost] out: 		MODEL=FireSim \
+[localhost] out: 		MODEL_PACKAGE=firechip.chip \
+[localhost] out: 		VLOG_MODEL=FireSim \
+[localhost] out: 		CONFIG=FireSimE4M3MxGemminiRadianceConfig \
+[localhost] out: 		CONFIG_PACKAGE=firechip.chip \
+[localhost] out: 		GENERATOR_PACKAGE=chipyard \
+[localhost] out: 		EXTRA_CHISEL_OPTIONS=--emit-legacy-sfc \
+[localhost] out: 		TB=unused \
+[localhost] out: 		TOP=unused
+[localhost] out: make[1]: Entering directory '/scratch/nicorakela/chipyard/sims/firesim-staging'
+[localhost] out: make[1]: Nothing to be done for 'default'.
+[localhost] out: make[1]: Leaving directory '/scratch/nicorakela/chipyard/sims/firesim-staging'
+[localhost] out: # firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig must be same as Chipyard
+[localhost] out: ln -sf /scratch/nicorakela/chipyard/sims/firesim-staging/generated-src/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig.sfc.fir /scratch/nicorakela/chipyard/sims/firesim/sim/generated-src/xilinx_alveo_u250/xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig.fir
+[localhost] out: ln -sf /scratch/nicorakela/chipyard/sims/firesim-staging/generated-src/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig.anno.json /scratch/nicorakela/chipyard/sims/firesim/sim/generated-src/xilinx_alveo_u250/xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig.anno.json
+[localhost] out: # .d needed to run metasim CI tests
+[localhost] out: ln -sf /scratch/nicorakela/chipyard/sims/firesim-staging/generated-src/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig.d /scratch/nicorakela/chipyard/sims/firesim/sim/generated-src/xilinx_alveo_u250/xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config/firechip.chip.FireSim.FireSimE4M3MxGemminiRadianceConfig.d
+[localhost] out: 
+get_local_driver_dir xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L ../sim/output/xilinx_alveo_u250/xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config/FireSim-xilinx_alveo_u250 /scratch/nicorakela/tmp/tmp2s2il9ta/
+[localhost] out: sending incremental file list
+[localhost] out: FireSim-xilinx_alveo_u250
+[localhost] out: 
+[localhost] out: sent 4.31M bytes  received 35 bytes  8.62M bytes/sec
+[localhost] out: total size is 12.21M  speedup is 2.84
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L /scratch/nicorakela/chipyard/.conda-env/riscv-tools/lib/libriscv.so /scratch/nicorakela/tmp/tmp2s2il9ta/libriscv.so
+[localhost] out: sending incremental file list
+[localhost] out: libriscv.so
+[localhost] out: 
+[localhost] out: sent 31.09M bytes  received 35 bytes  20.72M bytes/sec
+[localhost] out: total size is 177.32M  speedup is 5.70
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L /scratch/nicorakela/chipyard/.conda-env/lib/libdwarf.so.1.0.0 /scratch/nicorakela/tmp/tmp2s2il9ta/libdwarf.so.1
+[localhost] out: sending incremental file list
+[localhost] out: libdwarf.so.1.0.0
+[localhost] out: 
+[localhost] out: sent 199.64K bytes  received 35 bytes  399.34K bytes/sec
+[localhost] out: total size is 486.20K  speedup is 2.43
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L /scratch/nicorakela/chipyard/.conda-env/lib/libelf-0.187.so /scratch/nicorakela/tmp/tmp2s2il9ta/libelf.so.1
+[localhost] out: sending incremental file list
+[localhost] out: libelf-0.187.so
+[localhost] out: 
+[localhost] out: sent 50.99K bytes  received 35 bytes  102.06K bytes/sec
+[localhost] out: total size is 117.87K  speedup is 2.31
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L /scratch/nicorakela/chipyard/.conda-env/lib/libz.so.1.2.13 /scratch/nicorakela/tmp/tmp2s2il9ta/libz.so.1
+[localhost] out: sending incremental file list
+[localhost] out: libz.so.1.2.13
+[localhost] out: 
+[localhost] out: sent 59.72K bytes  received 35 bytes  119.50K bytes/sec
+[localhost] out: total size is 112.80K  speedup is 1.89
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L /scratch/nicorakela/chipyard/.conda-env/lib/libstdc++.so.6.0.33 /scratch/nicorakela/tmp/tmp2s2il9ta/libstdc++.so.6
+[localhost] out: sending incremental file list
+[localhost] out: libstdc++.so.6.0.33
+[localhost] out: 
+[localhost] out: sent 4.87M bytes  received 35 bytes  9.73M bytes/sec
+[localhost] out: total size is 13.99M  speedup is 2.87
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L /scratch/nicorakela/chipyard/.conda-env/lib/libgmp.so.10.5.0 /scratch/nicorakela/tmp/tmp2s2il9ta/libgmp.so.10
+[localhost] out: sending incremental file list
+[localhost] out: libgmp.so.10.5.0
+[localhost] out: 
+[localhost] out: sent 348.26K bytes  received 35 bytes  696.58K bytes/sec
+[localhost] out: total size is 749.06K  speedup is 2.15
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: rsync -pthrvz -L /scratch/nicorakela/chipyard/.conda-env/lib/libgcc_s.so.1 /scratch/nicorakela/tmp/tmp2s2il9ta/libgcc_s.so.1
+[localhost] out: sending incremental file list
+[localhost] out: libgcc_s.so.1
+[localhost] out: 
+[localhost] out: sent 252.00K bytes  received 35 bytes  504.06K bytes/sec
+[localhost] out: total size is 649.08K  speedup is 2.58
+[localhost] out: 
+[localhost] local: pwd
+[localhost] run: find . -mindepth 1 -maxdepth 1 -printf "%P
+" | xargs tar -czvf /scratch/nicorakela/chipyard/sims/firesim/deploy/../sim/output/xilinx_alveo_u250/xilinx_alveo_u250-firesim-FireSim-FireSimE4M3MxGemminiRadianceConfig-BaseXilinxAlveoU250Config/driver-bundle.tar.gz
+[localhost] out: libriscv.so
+[localhost] out: FireSim-xilinx_alveo_u250
+[localhost] out: libstdc++.so.6
+[localhost] out: libgmp.so.10
+[localhost] out: libelf.so.1
+[localhost] out: libdwarf.so.1
+[localhost] out: libz.so.1
+[localhost] out: libgcc_s.so.1
+[localhost] out: 
+[localhost] Copying FPGA simulation infrastructure for slot: 0.
+[localhost] Unloading XDMA Driver Kernel Module.
+[localhost] Flash all FPGA Slots.
+[localhost] Copying FPGA flashing scripts for 0
+[localhost] Determine BDF for 0
+[localhost] Flashing FPGA Slot: 0 (42:00.0) with bitstream: /scratch/firesim_queue/jobs/1693/simulation/sim_slot_0/xilinx_alveo_u250/firesim.bit
+[localhost] XDMA Driver Kernel Module already loaded.
+[localhost] Change permissions on FPGA slot
+[localhost] Determine BDF for 0
+[localhost] Changing permissions on FPGA Slot: 0 (bdf:42:00.0)
+The full log of this run is:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/logs/2026-10-05--02-35-37-infrasetup-BIVSVNV17UA6MSDV.log
+hwdb verify phase=before_runworkload sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1693.yaml
+
+=== [firesim-queue] phase=RUNNING job_id=1693 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: runworkload
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'localhost': [(<runtools.run_farm.Inst object at 0x7663b805d630>, None)]})
+set_server_hardware_config 0 None
+Creating the directory: /scratch/nicorakela/chipyard/sims/firesim/deploy/results-workload/2026-10-05--02-37-27-agustin-radiance-spatter-smoke-q1693/
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+[localhost] Checking if host instance is up...
+start_simulations_instance 1
+[localhost] Starting FPGA simulation for slot: 0.
+[localhost] Determine BDF for 0
+[2J
+FireSim Simulation Status @ 2026-10-05 02:37:41.349113
+--------------------------------------------------------------------------------
+This workload's output is located in:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/results-workload/2026-10-05--02-37-27-agustin-radiance-spatter-smoke-q1693/
+This run's log is located in:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/logs/2026-10-05--02-37-27-runworkload-6E46GL60DW7KLT7Q.log
+This status will update every 10s.
+--------------------------------------------------------------------------------
+Instances
+--------------------------------------------------------------------------------
+Hostname/IP: localhost | Terminated: [33mFalse[0m
+--------------------------------------------------------------------------------
+Simulated Switches
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Pipes
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Nodes/Jobs
+--------------------------------------------------------------------------------
+Hostname/IP: localhost | Job: agustin-radiance-spatter-smoke0 | Sim running: [33mTrue [0m
+--------------------------------------------------------------------------------
+Summary
+--------------------------------------------------------------------------------
+1/1 instances are still running.
+1/1 simulations are still running.
+--------------------------------------------------------------------------------
+[2J
+FireSim Simulation Status @ 2026-10-05 02:37:51.656985
+--------------------------------------------------------------------------------
+This workload's output is located in:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/results-workload/2026-10-05--02-37-27-agustin-radiance-spatter-smoke-q1693/
+This run's log is located in:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/logs/2026-10-05--02-37-27-runworkload-6E46GL60DW7KLT7Q.log
+This status will update every 10s.
+--------------------------------------------------------------------------------
+Instances
+--------------------------------------------------------------------------------
+Hostname/IP: localhost | Terminated: [33mFalse[0m
+--------------------------------------------------------------------------------
+Simulated Switches
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Pipes
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Nodes/Jobs
+--------------------------------------------------------------------------------
+Hostname/IP: localhost | Job: agustin-radiance-spatter-smoke0 | Sim running: [33mTrue [0m
+--------------------------------------------------------------------------------
+Summary
+--------------------------------------------------------------------------------
+1/1 instances are still running.
+1/1 simulations are still running.
+--------------------------------------------------------------------------------
+[localhost] Slot 0, Job agustin-radiance-spatter-smoke0 completed!
+[2J
+FireSim Simulation Status @ 2026-10-05 02:38:02.314593
+--------------------------------------------------------------------------------
+This workload's output is located in:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/results-workload/2026-10-05--02-37-27-agustin-radiance-spatter-smoke-q1693/
+This run's log is located in:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/logs/2026-10-05--02-37-27-runworkload-6E46GL60DW7KLT7Q.log
+This status will update every 10s.
+--------------------------------------------------------------------------------
+Instances
+--------------------------------------------------------------------------------
+Hostname/IP: localhost | Terminated: [33mFalse[0m
+--------------------------------------------------------------------------------
+Simulated Switches
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Pipes
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Nodes/Jobs
+--------------------------------------------------------------------------------
+Hostname/IP: localhost | Job: agustin-radiance-spatter-smoke0 | Sim running: [32mFalse[0m
+--------------------------------------------------------------------------------
+Summary
+--------------------------------------------------------------------------------
+1/1 instances are still running.
+0/1 simulations are still running.
+--------------------------------------------------------------------------------
+FireSim Simulation Exited Successfully. See results in:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/results-workload/2026-10-05--02-37-27-agustin-radiance-spatter-smoke-q1693/
+The full log of this run is:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/logs/2026-10-05--02-37-27-runworkload-6E46GL60DW7KLT7Q.log
+
+=== [firesim-queue] phase=TEARDOWN job_id=1693 ===
+hwdb verify phase=before_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1693.yaml
+
+=== [firesim-queue] phase=TEARDOWN job_id=1693 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: kill
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'localhost': [(<runtools.run_farm.Inst object at 0x78e2dc151630>, None)]})
+set_server_hardware_config 0 None
+xilinx_alveo_u250/
+xilinx_alveo_u250/metadata
+xilinx_alveo_u250/firesim.bit
+[localhost] Killing FPGA simulation for slot: 0.
+Warning: run() received nonzero return code 1 while executing ' pkill -SIGKILL FireSim-xilinx_'!
+Confirming exit...
+Warning: run() received nonzero return code 1 while executing 'screen -ls'!
+screenoutput No Sockets found in /run/screen/S-jack.
+The full log of this run is:
+/scratch/nicorakela/chipyard/sims/firesim/deploy/logs/2026-10-05--02-38-07-kill-JI7HFKMN90VP7AA9.log
+hwdb verify phase=after_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1693.yaml

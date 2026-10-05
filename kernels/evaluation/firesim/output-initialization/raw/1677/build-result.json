@@ -1,0 +1,51 @@
+{
+  "suite": "/scratch/agustin/projects/spatter-data/spatter-upstream/standard-suite/app-traces/lulesh.json",
+  "suite_sha256": "9073035ecf77e7fde65262f782286207e76cca24312b2e01688b038901d021ee",
+  "case": 3,
+  "kind": "scatter",
+  "pattern_length": 16,
+  "address_plan": {
+    "source_array": "dense",
+    "destination_array": "sparse",
+    "read": {
+      "kind": "dense",
+      "table": null,
+      "inner": null,
+      "delta": 0,
+      "wrap": 0
+    },
+    "write": {
+      "kind": "pattern",
+      "table": "pattern",
+      "inner": null,
+      "delta": 8,
+      "wrap": 0
+    },
+    "schedule": "destination_owner"
+  },
+  "count": 128002,
+  "wrap": 1,
+  "source_tag": 2,
+  "requested_local_work_size": null,
+  "muon_warps_per_core": 4,
+  "source_elements": 16,
+  "output_elements": 1024369,
+  "logical_payload_bytes": 32768512,
+  "expected_digest": "b27b51a43dc716b5",
+  "expected_sample_digest": "c5165f0fa1beb4d2",
+  "readback_samples": 64,
+  "exploratory_probe_index": 0,
+  "destination_overlap": true,
+  "collision_policy": "ordered",
+  "status": "built",
+  "original_count": 128002,
+  "count_overridden": false,
+  "spatter_revision": "ec8923711f8dc21eedff7189f12b02eb06845d2f",
+  "kernel_revision": "85469e24b6efd7b1459e6ac252cdc05acd9b35aa",
+  "kernel_source_sha256": "e942349d8cfb2313e678c59cfd3f0d46dc591aa9b71e32c9185d828a6889b0a2",
+  "radiance_revision": null,
+  "cyclotron_revision": null,
+  "simulator": null,
+  "cyclotron_trace_requested": false,
+  "correctness": "sample-checked"
+}

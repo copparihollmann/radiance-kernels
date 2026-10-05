@@ -13,8 +13,9 @@ source commit changes the default coalescer TileLink source-ID count from
 32 to 8 in `MemParallelism.scala`. The reported RTL cycles were measured on
 the pinned `b83419e` simulator build; they are not measurements of the newer
 memory setting.
-VCS runtime currently queues for a license on this machine, so current-build
-RTL runs use the built Verilator 5.022 model. No FPGA bitstream is available.
+VCS runtime queued for a license on this machine, so those current-build
+RTL runs used the built Verilator 5.022 model. A U250 bitstream was later
+located and used for the [FireSim campaign](../../evaluation/firesim/README.md).
 No GSIM executable was found in this checkout or on `PATH`, so no GSIM cycle
 result is reported.
 No Verilog or Scala logic file was edited for these runs. The local Radiance
@@ -47,6 +48,18 @@ LULESH traces. The [small comparison](upstream-golden-smoke-results.csv) adds
 four transfer-family checks and an overlapping ordered Scatter. The
 [scaled AMG comparison](upstream-golden-scaled-results.csv) checks 1,024
 repetitions of the original GPU Gather pattern. The
+[original-count GPU AMG oracle](amg-gpu-full-upstream.json) runs the
+unmodified upstream serial Gather at all 14,705,882 repetitions and matches
+the final output predicted by the [two-count-chunk plan](amg-gpu-chunk-plan.json).
+The corresponding [U250 jobs](../../evaluation/firesim/amg-gpu-chunks/README.md)
+are recorded separately; the original upstream run does not supply a
+single-launch Radiance timing result. The
+[native CPU-trace comparison](native-upstream-golden.csv) checks 15 newly
+built original-count AMG, LULESH, and Nekbone cases against the same pinned
+upstream serial kernels. Its `cyclotron_digest=not-run` cells mean that these
+new ELFs were not run through Cyclotron; the upstream comparison itself
+passed. The [U250 run series](../../evaluation/firesim/native-traces/README.md)
+records their separate FPGA checks and queue outcomes. The
 [full-size composition comparison](upstream-golden-composition-results.csv)
 runs the pinned upstream serial Gather and then feeds its dense output to the
 pinned upstream serial Scatter. Its final digest matches both the fused and
@@ -176,6 +189,10 @@ standard configurations, 38 fit the current address window at original size;
 75 exceed that window and one exceeds the RV32 task range. All 114 configurations
 can be mapped with a reduced count of at most 1024, but these scaled cases
 are not original benchmark workloads. The
+[native footprint table](native-workload-footprint.csv) records the original
+count, transfer count, array sizes, active limit, and minimum count chunks
+for every case. A count split alone does not implement the required GPU
+memory streaming or preserve a single-launch latency measurement. The
 [current-build scaled AMG result](current-build-model-results.csv) uses 1,024
 repetitions rather than its original 14,705,882. It passed a complete output
 check against [upstream Spatter](upstream-golden-scaled-results.csv) in

@@ -1,0 +1,37 @@
+{
+  "suite": "inputs/standard-suite/app-traces/amg_gpu.json",
+  "suite_sha256": "1b50a9a6dbc612c718b2654462c9dda04674b61b5f070651a327b482c4e1f027",
+  "case": 0,
+  "kind": "gather",
+  "wrap": 1,
+  "pattern_length": 256,
+  "delta": 16,
+  "original_count": 14705882,
+  "original_source_elements": 235295480,
+  "original_source_bytes": 1882363840,
+  "logical_payload_bytes": 60235292672,
+  "expected_full_digest": "0e8f823875db84ff",
+  "chunk_count": 2,
+  "chunks": [
+    {
+      "iteration_start": 0,
+      "count": 7352941,
+      "iteration_end_exclusive": 7352941,
+      "source_index_base": 0,
+      "source_elements": 117648424,
+      "source_bytes": 941187392,
+      "logical_payload_bytes": 30117646336,
+      "expected_digest": "bcdd15879381d51d"
+    },
+    {
+      "iteration_start": 7352941,
+      "count": 7352941,
+      "iteration_end_exclusive": 14705882,
+      "source_index_base": 117647056,
+      "source_elements": 117648424,
+      "source_bytes": 941187392,
+      "logical_payload_bytes": 30117646336,
+      "expected_digest": "0e8f823875db84ff"
+    }
+  ]
+}
