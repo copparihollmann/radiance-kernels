@@ -11,6 +11,9 @@ records complete-output U250 passes for the two ordered Scatter cases that
 failed in the first run, with byte-identical Muon images. The
 [native trace series](evaluation/firesim/native-traces/README.md) extends the
 check to original-count AMG, LULESH, and Nekbone CPU-deck cases.
+The [LLM meeting brief](evaluation/llm/MEETING_BRIEF.md) proposes a workload
+matrix, hardware sweep, and first performance experiment. Those LLM cases
+are planned work, not measured results in this report.
 
 ## Implemented kernels
 
