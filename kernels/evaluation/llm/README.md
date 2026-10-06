@@ -1,8 +1,8 @@
 # Inputs for the LLM evaluation proposal
 
-The [three-slide meeting brief](MEETING_BRIEF.md) proposes the workload
-matrix and initial Radiance performance MVP. It contains no measured LLM
-cycles. The [model source table](inputs/sources.csv) pins five official
+This directory records candidate workload inputs for an initial Radiance
+performance evaluation. It contains no measured LLM cycles. The
+[model source table](inputs/sources.csv) pins five official
 checkpoint revisions and SHA-256 hashes for their small `config.json` files;
 the files are retained under `inputs/`. The weights, tokenizer, example
 prompts, and quantization format have not yet been pinned or run.

@@ -11,9 +11,9 @@ records complete-output U250 passes for the two ordered Scatter cases that
 failed in the first run, with byte-identical Muon images. The
 [native trace series](evaluation/firesim/native-traces/README.md) extends the
 check to original-count AMG, LULESH, and Nekbone CPU-deck cases.
-The [LLM meeting brief](evaluation/llm/MEETING_BRIEF.md) proposes a workload
-matrix, hardware sweep, and first performance experiment. Those LLM cases
-are planned work, not measured results in this report.
+The [LLM evaluation inputs](evaluation/llm/README.md) describe candidate
+workloads and the first decoder-layer mapping. Those LLM cases are planned
+work, not measured results in this report.
 
 ## Implemented kernels
 
@@ -327,8 +327,6 @@ efficiency, warp occupancy, FPGA clock, or FPGA scaling result. VCS lacked a
 runtime license for this build, and GSIM was unavailable; Verilator supplied
 the RTL runs. The later [U250 FireSim checks](evaluation/firesim/README.md)
 add one-cluster FPGA execution results but no GPU-only cycle measurements.
-The [presentation notes](evaluation/presentation.md) give a
-shorter version for slides.
 
 ## Reproduce and inspect
 

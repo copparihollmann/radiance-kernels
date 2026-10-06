@@ -49,8 +49,16 @@ each completed job under that output directory; `results.csv` distinguishes
 captured, pending, queue-failed, and capture-failed cases. It never changes
 the source ELFs or the hardware image.
 
-As of 2026-10-06 03:10 PDT, the seven jobs were queued behind other users of
-the U250; no runtime number from this series has passed the gate yet. The
-previous [comparison table](../comparison.csv) remains the measured RTL/model
-result set. No LLM execution, cache counters, interconnect counters, GPU
-issue utilization, or calibrated HBM bandwidth is implied by this plan.
+As of 2026-10-06, all seven jobs (1959, 1960, 1961, 1962, 1963, 1964,
+1966) failed during FireSim `infrasetup`, before a guest UART or kernel
+measurement was produced. Fabric reported that a localhost connection or sudo
+password prompt was ambiguous in parallel mode. The
+[queue outcome table](queue-outcomes.csv) copies the local watcher record;
+the archived queue and setup logs are under
+`/scratch/agustin/projects/chipyard/radiance-host-interval-artifacts/`.
+The ELFs and image checks
+above remain ready for a retry once the FireSim host setup is fixed. There is
+**no U250 launch interval result** from this series. The previous
+[comparison table](../comparison.csv) remains the measured RTL/model result
+set. No LLM execution, cache counters, interconnect counters, GPU issue
+utilization, or calibrated HBM bandwidth is implied by this plan.
