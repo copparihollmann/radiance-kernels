@@ -129,6 +129,13 @@ Pass `--full-host-check` to make the host digest every output word and both
 guards after the kernel finishes. That mode provides stronger FPGA
 correctness evidence but adds readback time to whole-program target cycles;
 see the [U250 follow-up](../evaluation/firesim/output-initialization/README.md).
+Pass `--host-timing` to print `HOST_RELEASE_TO_DONE_CYCLES` in the guest UART.
+It reads the RV64 host cycle counter just before Muon reset release and just
+after all-finished is observed, before output readback. The interval includes
+MMIO, launch and polling; it is not a Muon core cycle count or calibrated GPU
+time. A timed two-repetition Gather smoke build has a byte-identical RV32
+image to its untimed control. Both flags require a rebuild and cannot be
+added to an ELF through `--sim-only`.
 The [complete standard-suite JSON set](inputs/README.md) and its
 [native-size inventory](evaluation/native-workload-footprint.csv) are tracked
 here. The inventory covers 114 cases; it is a feasibility audit, not a list

@@ -416,6 +416,8 @@ def main() -> int:
     parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--full-host-check", action="store_true",
                         help="read and digest every output word on the RV64 host")
+    parser.add_argument("--host-timing", action="store_true",
+                        help="print RV64 release-to-all-finished cycle interval")
     parser.add_argument("--sim-only", action="store_true",
                         help="run an already built ELF from --out without regenerating inputs")
     parser.add_argument("--simv", type=Path, help="VCS simulator for the pinned Radiance checkout")
@@ -438,6 +440,8 @@ def main() -> int:
     if args.sim_only:
         if args.prepare_only or args.build_only or args.simv is None:
             parser.error("--sim-only requires --simv and excludes --prepare-only/--build-only")
+        if args.full_host_check or args.host_timing:
+            parser.error("--sim-only uses the existing ELF; readback and timing flags require a rebuild")
         if not (out / "result.json").exists() or not (out / "kernel.soc.elf").exists():
             parser.error("--sim-only requires result.json and kernel.soc.elf in --out")
         manifest = json.loads((out / "result.json").read_text())
@@ -487,17 +491,27 @@ def main() -> int:
             "digest-checked" if args.full_host_check else
             "sample-checked" if manifest["readback_samples"] else "digest-checked"
         )
-        manifest["host_full_readback"] = args.full_host_check
+        manifest["host_full_readback"] = bool(
+            args.full_host_check or
+            (not manifest["readback_samples"] and
+             manifest["correctness"] == "digest-checked")
+        )
+        manifest["host_timing_requested"] = args.host_timing
         (out / "result.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if args.prepare_only:
         return 0
     try:
         if not args.sim_only:
             build_env = os.environ.copy()
+            host_flags = []
             if args.full_host_check:
+                host_flags.append("-DSPATTER_FORCE_FULL_READBACK=1")
+            if args.host_timing:
+                host_flags.append("-DRAD_HOST_TIMING=1")
+            if host_flags:
                 build_env["EXTRA_HOST_CXXFLAGS"] = (
-                    build_env.get("EXTRA_HOST_CXXFLAGS", "") +
-                    " -DSPATTER_FORCE_FULL_READBACK=1").strip()
+                    build_env.get("EXTRA_HOST_CXXFLAGS", "") + " " +
+                    " ".join(host_flags)).strip()
             run_command(["make", "kernel.soc.elf"], out / "build.log", ROOT,
                         env=build_env)
             shutil.copy2(ROOT / "kernel.soc.elf", out / "kernel.soc.elf")

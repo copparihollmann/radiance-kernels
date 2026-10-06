@@ -1,5 +1,8 @@
 #include <stdint.h>
 #include <radiance.h>
+#ifdef RAD_HOST_TIMING
+#include <rad_host.h>
+#endif
 
 #include "generated/config.h"
 #include "generated/symbols.h"
@@ -50,11 +53,23 @@ int main() {
     after[i] = 0x5A5A0000u ^ i;
   }
   asm volatile("fence rw, rw" ::: "memory");
+#ifdef RAD_HOST_TIMING
+  const uint64_t release_cycle = rad_rdcycle();
+#endif
   WRITE_MMIO_32(RAD_HOST_GPU_RESET, 0);
   while (!READ_MMIO_32(RAD_HOST_GPU_ALL_FINISHED)) {}
+#ifdef RAD_HOST_TIMING
+  const uint64_t completion_cycle = rad_rdcycle();
+#endif
   asm volatile("fence rw, rw" ::: "memory");
   const bool passed = guards_intact() &&
       digest_output() == STREAM_EXPECTED_READBACK_DIGEST;
+#ifdef RAD_HOST_TIMING
+  rad_puts("HOST_RELEASE_TO_DONE_CYCLES=");
+  rad_putu(completion_cycle - release_cycle);
+  rad_putc('\n');
+  rad_flush();
+#endif
   tohost = passed ? 1 : 3;
   asm volatile("fence rw, rw" ::: "memory");
   for (;;) {}

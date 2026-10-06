@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -54,7 +55,8 @@ def write_input(path: Path, name: str, elements: int) -> None:
             stream.write(struct.pack(f"<{len(words)}f", *words))
 
 
-def prepare(kind: str, elements: int, out: Path) -> dict:
+def prepare(kind: str, elements: int, out: Path,
+            full_host_check: bool = False) -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
     if elements * 12 + 0x100000 > 0x70000000:
@@ -68,7 +70,7 @@ def prepare(kind: str, elements: int, out: Path) -> dict:
             (GENERATED / f"{name}.bin").write_bytes(b"")
     values = [float_word(result_value(kind, i)) for i in range(elements)]
     expected = digest(values)
-    samples = min(64, elements) if elements > 1024 else 0
+    samples = min(64, elements) if elements > 1024 and not full_host_check else 0
     positions = [i * (elements - 1) // (samples - 1) for i in range(samples)] if samples else []
     expected_sample = digest(values[i] for i in positions) if samples else None
     config = [
@@ -107,6 +109,7 @@ def prepare(kind: str, elements: int, out: Path) -> dict:
             "suite_sha256": hashlib.sha256(f"stream:{kind}:{elements}".encode()).hexdigest(),
             "case": KINDS[kind], "kernel_source_sha256": source.hexdigest(),
             "correctness": "sample-checked" if samples else "digest-checked",
+            "host_full_readback": full_host_check or not samples,
             "status": "prepared", "simulator": None,
             "element_format": "float32", "output_element_count": elements,
             "checker_word_pairs": elements // 2}
@@ -122,14 +125,25 @@ def main() -> None:
     parser.add_argument("--elements", type=int, default=65536)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--full-host-check", action="store_true",
+                        help="digest every FP32 output word on the RV64 host")
+    parser.add_argument("--host-timing", action="store_true",
+                        help="print RV64 release-to-all-finished cycle interval")
     args = parser.parse_args()
     out = args.out.resolve()
-    case = prepare(args.kind, args.elements, out)
+    case = prepare(args.kind, args.elements, out, args.full_host_check)
+    case["host_timing_requested"] = args.host_timing
+    (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:
         return
+    build_env = os.environ.copy()
+    if args.host_timing:
+        build_env["EXTRA_HOST_CXXFLAGS"] = (
+            build_env.get("EXTRA_HOST_CXXFLAGS", "") +
+            " -DRAD_HOST_TIMING=1").strip()
     with (out / "build.log").open("w") as log:
         subprocess.run(["make", "kernel.soc.elf"], cwd=ROOT, stdout=log,
-                       stderr=subprocess.STDOUT, check=True)
+                       stderr=subprocess.STDOUT, check=True, env=build_env)
     shutil.copy2(ROOT / "kernel.soc.elf", out / "kernel.soc.elf")
     case["status"] = "built"
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")

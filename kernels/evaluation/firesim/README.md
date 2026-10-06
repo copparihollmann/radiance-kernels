@@ -169,14 +169,16 @@ latency, HBM bandwidth, or two-cluster scaling is measured here. The exported
 bandwidth estimate. The FireSim `Host Frequency` and wallclock rate are FPGA
 emulation rates, not a calibrated Radiance GPU clock.
 
-To get FPGA launch latency without changing RTL, instrument the RV64 kernel
-host to read its cycle counter immediately before releasing Muon reset and
-after the all-finished register asserts, and emit that interval through the
-host console. Then rebuild and rerun the ELFs with the same output checks and
-an explicit hardware/host clock-domain interpretation. Per-core utilization
-and calibrated memory bandwidth require counters or traces that this bitstream
-does not currently export. The present comparison table uses the existing RTL
-and model measurements for those quantities.
+The STREAM and Spatter builders now accept `--host-timing`, which instruments
+the RV64 host immediately before releasing Muon reset and after the
+all-finished register asserts. The 256-element Copy and two-repetition Gather
+smoke builds have byte-identical RV32 device images with and without the flag.
+The interval still needs a passing FPGA guest run and an explicit host
+clock-domain interpretation before it can enter this comparison table. It
+includes launch and polling, so it is not a Muon core cycle count. Per-core
+utilization and calibrated memory bandwidth require counters or traces that
+this bitstream does not currently export. The present comparison table uses
+the existing RTL and model measurements for those quantities.
 
 ## Per-case results
 

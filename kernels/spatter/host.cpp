@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <radiance.h>
-#if SPATTER_DIAGNOSTIC_READBACK
+#if SPATTER_DIAGNOSTIC_READBACK || defined(RAD_HOST_TIMING)
 #include <rad_host.h>
 #endif
 
@@ -68,9 +68,15 @@ int main() {
   }
   clear_output();
   asm volatile("fence rw, rw" ::: "memory");
+#ifdef RAD_HOST_TIMING
+  const uint64_t release_cycle = rad_rdcycle();
+#endif
   WRITE_MMIO_32(RAD_HOST_GPU_RESET, 0);
 
   while (!READ_MMIO_32(RAD_HOST_GPU_ALL_FINISHED)) {}
+#ifdef RAD_HOST_TIMING
+  const uint64_t completion_cycle = rad_rdcycle();
+#endif
   asm volatile("fence rw, rw" ::: "memory");
 
   bool passed = guards_intact();
@@ -122,6 +128,12 @@ int main() {
 #endif
 #else
   passed = passed && output_digest() == SPATTER_EXPECTED_DIGEST;
+#endif
+#ifdef RAD_HOST_TIMING
+  rad_puts("HOST_RELEASE_TO_DONE_CYCLES=");
+  rad_putu(completion_cycle - release_cycle);
+  rad_putc('\n');
+  rad_flush();
 #endif
   // The fused startup loop ignores main()'s return value. HTIF uses 1 for
   // success and 3 for failure; publish only after the full readback check.

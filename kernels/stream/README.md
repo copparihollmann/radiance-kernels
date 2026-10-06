@@ -31,6 +31,16 @@ complete output. `output_elements` in the manifest is the number of 64-bit
 pairs passed to Spatter's reusable Cyclotron checker; `stream_elements` is the
 actual number of float32 values.
 
+For a complete host check on a larger array, add `--full-host-check`. Add
+`--host-timing` to print `HOST_RELEASE_TO_DONE_CYCLES` in the guest UART. This
+counts RV64 host cycles from just before Muon reset release until the
+all-finished register is observed. It excludes the later digest/readback and
+most boot and input setup, but includes MMIO, launch and completion polling.
+The interval is not a per-core GPU cycle count; compare it with other runs
+only after recording the host clock domain and hardware revision. The flag
+changes only the RV64 host; the RV32 Muon image was checked byte-for-byte
+against the untimed 256-element Copy smoke build.
+
 Use `../spatter/tools/spatter-verilator-run.py` and
 `../spatter/tools/spatter-cyclotron-run.py` with `--source-root runs` and a
 separate output root to run an ELF. The shared validator and summarizer produce

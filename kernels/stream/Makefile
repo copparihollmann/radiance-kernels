@@ -7,6 +7,7 @@ include ../common.mk
 
 MU_CFLAGS += -isystem $(LLVM_MUON)/include/c++/v1
 HOST_CXXFLAGS += -O3
+HOST_CXXFLAGS += $(EXTRA_HOST_CXXFLAGS)
 MU_NM = $(LLVM_MUON)/bin/llvm-nm
 
 data.S generated/config.h generated/a.bin generated/b.bin generated/c.bin &: run.py
