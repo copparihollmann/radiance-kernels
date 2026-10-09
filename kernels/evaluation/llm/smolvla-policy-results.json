@@ -1,0 +1,41 @@
+{
+  "model": "smolvla_base",
+  "scope": "one_full_checkpoint_action_chunk",
+  "passed": true,
+  "checkpoint_revision": "c83c3163b8ca9b7e67c509fffd9121e66cb96205",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "lerobot_version": "0.5.1",
+  "transformers_version": "5.3.0",
+  "torch_version": "2.9.1+cpu",
+  "device": "cpu",
+  "strict_checkpoint_load": true,
+  "load_vlm_weights_before_checkpoint_load": false,
+  "policy_method": "model.sample_actions",
+  "preprocessed_inputs": true,
+  "input_sha256": {
+    "camera0": "99944f971a4dee3faffc8c1af0f52cc593516725bef0609edc3750940786d440",
+    "camera1": "1115cd6508d8e54e8fffa06ede7fa4d821303796c41a39bdb276914cfb7ab347",
+    "camera2": "c577807b8f3c3c5e5de6947ce2371314586a46b7b9b50d63cc06c923f5ff6249",
+    "language": "7fe787bb4624f1055bb825af35776ec814951fcf6fcc0ef913fe9259a307add2",
+    "state": "80b6c6104fa7ff74dc3b2facea5496ded97a9c54bad49d827596e0f23d44ba54",
+    "noise": "59d291261bc50174a35f67ab8064c4c91608789176e4d310fc4700786bde9a91"
+  },
+  "observed_module_calls": {
+    "vision_model": 3,
+    "connector": 3,
+    "state_proj": 1,
+    "action_time_mlp_out": 10,
+    "action_out_proj": 10
+  },
+  "action_embedding_upstream_max_abs_error": 1.0728836059570312e-06,
+  "output_shape": [
+    1,
+    50,
+    32
+  ],
+  "output_sha256": "72510abe5e55c793c52138f159133af892bc117efe4413b914f319b8a9ea6c65",
+  "output_min": -0.7336515188217163,
+  "output_max": 1.0015119314193726,
+  "radiance_execution": false,
+  "radiance_comparison": false
+}

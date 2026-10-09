@@ -3,5 +3,10 @@
   "modeling_source": "https://raw.githubusercontent.com/huggingface/lerobot/v0.5.1/src/lerobot/policies/smolvla/modeling_smolvla.py",
   "modeling_source_sha256": "be4463140f1abc5bce61f8a8c849ba6ba23f37777d19ad9159c2e1ffff60c1c5",
   "expert_source": "https://raw.githubusercontent.com/huggingface/lerobot/v0.5.1/src/lerobot/policies/smolvla/smolvlm_with_expert.py",
-  "expert_source_sha256": "b70356145870c7da1e92a2195ee4626f7e9f9387576c6bed5ba2bfefae2a38d9"
+  "expert_source_sha256": "b70356145870c7da1e92a2195ee4626f7e9f9387576c6bed5ba2bfefae2a38d9",
+  "transformers_version": "v5.3.0",
+  "vision_source": "https://raw.githubusercontent.com/huggingface/transformers/v5.3.0/src/transformers/models/smolvlm/modeling_smolvlm.py",
+  "vision_source_sha256": "61de09624059e22766487e4ac8c2eb032eeefdcf4b19fe4962bcc2de5aa99ddf",
+  "vision_config_source": "https://raw.githubusercontent.com/huggingface/transformers/v5.3.0/src/transformers/models/smolvlm/configuration_smolvlm.py",
+  "vision_config_source_sha256": "9c51769ed02b3645fc68db691ffce8fbcf7fb46f04f8dd6bb2e66489b5754bad"
 }

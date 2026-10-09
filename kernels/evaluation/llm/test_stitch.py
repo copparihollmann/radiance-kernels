@@ -77,6 +77,9 @@ class ModelStitchTest(unittest.TestCase):
         graph = build("smolvla_base")
         ops = [stage["op"] for stage in graph.stages]
         self.assertEqual(ops.count("patch_embed"), 3)
+        self.assertEqual(ops.count("bidirectional_mha"), 3 * 12)
+        self.assertEqual(ops.count("layernorm"), 3 * (2 * 12 + 1))
+        self.assertEqual(ops.count("pixel_shuffle"), 3)
         self.assertEqual(ops.count("embedding_scale"), 4)
         self.assertEqual(ops.count("masked_gqa"), 16 + 10 * 16)
         self.assertEqual(ops.count("gated_activation"), 16 + 10 * 16)
@@ -84,6 +87,8 @@ class ModelStitchTest(unittest.TestCase):
         self.assertEqual(graph.tensors[graph.outputs[0]]["shape"], [1, 50, 32])
         self.assertEqual(graph.tensors["vlm.layer00.k_cache"]["shape"], [1, 241, 5, 64])
         self.assertEqual(graph.tensors["camera0.scale"]["shape"], [1, 64, 960])
+        self.assertEqual(graph.tensors["camera0.connector_shuffle"]["shape"],
+                         [1, 64, 16 * 768])
         self.assertEqual(graph.tensors["prefix.attention_mask"]["shape"], [1, 241, 241])
         self.assertEqual(graph.tensors["denoise0.attention_mask"]["shape"], [1, 50, 291])
         self.assertEqual(graph.tensors["denoise0.position_ids"]["shape"], [1, 50])
@@ -123,10 +128,12 @@ class ModelStitchTest(unittest.TestCase):
 
         prefix = schedule["prefix_once_per_refill"]
         self.assertEqual(len(prefix["camera_branches"]), 3)
+        self.assertTrue(all(len(branch["vision_layers"]) == 12
+                            for branch in prefix["camera_branches"]))
         self.assertEqual(len(prefix["vlm_layers"]), 16)
         self.assertEqual(prefix["vlm_layers"][0], "vlm.layer00.ffn_residual")
         self.assertEqual(len(prefix["read_only_cache"]), 32)
-        self.assertEqual(prefix["vision_encoder_internal_layers"], "opaque")
+        self.assertEqual(prefix["vision_encoder_layers_per_camera"], 12)
 
         loop = schedule["denoise_loop"]
         self.assertEqual(len(loop["iterations"]), 10)

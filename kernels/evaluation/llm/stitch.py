@@ -215,6 +215,11 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
         raise ValueError("image size must be divisible by the 4x4 connector patch group")
     patches = (image_size // patch) ** 2
     image_tokens = patches // 16  # SmolVLM2 pixel shuffle factor 4 in each spatial axis.
+    vision_width = spec["vision_hidden_size"]
+    vision_heads = spec["vision_num_attention_heads"]
+    if vision_width % vision_heads:
+        raise ValueError("SmolVLA vision width must divide into attention heads")
+    vision_base = "model.vlm_with_expert.vlm.model.vision_model"
     prefix_parts = []
     camera_valids = []
     camera_branches = []
@@ -223,25 +228,91 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
         image = graph.input(f"camera{camera}.image", (batch, 3, image_size, image_size), "fp32")
         camera_valids.append(graph.input(f"camera{camera}.valid", (batch,), "bool"))
         tokens = graph.add(f"camera{camera}.patch_embed", "patch_embed", (image,),
-                           (batch, patches, spec["vision_hidden_size"]), "patch_embed",
-                           {"parameter_base": "model.vlm_with_expert.vlm.model.vision_model.embeddings"})
-        tokens = graph.add(f"camera{camera}.vision_encoder", "vision_encoder", (tokens,),
-                           (batch, patches, spec["vision_hidden_size"]),
-                           attrs={"parameter_base":
-                                  "model.vlm_with_expert.vlm.model.vision_model",
-                                  "num_layers": spec["num_vision_layers"]})
-        tokens = graph.add(f"camera{camera}.connector", "pixel_shuffle_connector",
+                           (batch, patches, vision_width), "patch_embed",
+                           {"parameters": {
+                               f"{vision_base}.embeddings.patch_embedding.weight":
+                                   [vision_width, 3, patch, patch],
+                               f"{vision_base}.embeddings.patch_embedding.bias":
+                                   [vision_width],
+                               f"{vision_base}.embeddings.position_embedding.weight":
+                                   [patches, vision_width]}})
+
+        def vision_linear(name: str, source: str, width: int,
+                          parameter: str) -> str:
+            projected = graph.add(name + ".linear", "linear", (source,),
+                                  (batch, patches, width), "gemm_mxgemmini",
+                                  {"parameter": parameter + ".weight",
+                                   "weight_shape": [graph.tensors[source]["shape"][-1], width],
+                                   "checkpoint_shape":
+                                       [width, graph.tensors[source]["shape"][-1]]})
+            return graph.add(name, "bias_add", (projected,),
+                             (batch, patches, width), "qkv_bias",
+                             {"parameter": parameter + ".bias"})
+
+        for layer in range(spec["num_vision_layers"]):
+            base = f"camera{camera}.vision.layer{layer:02d}"
+            params = f"{vision_base}.encoder.layers.{layer}"
+            norm1 = graph.add(f"{base}.norm1", "layernorm", (tokens,),
+                              (batch, patches, vision_width),
+                              attrs={"parameters": {
+                                  f"{params}.layer_norm1.weight": [vision_width],
+                                  f"{params}.layer_norm1.bias": [vision_width]},
+                                  "epsilon": spec["vision_layer_norm_eps"]})
+            q, k, v = (vision_linear(f"{base}.{part}_proj", norm1, vision_width,
+                                     f"{params}.self_attn.{part}_proj")
+                       for part in ("q", "k", "v"))
+            attention = graph.add(f"{base}.attention", "bidirectional_mha",
+                                  (q, k, v), (batch, patches, vision_width),
+                                  attrs={"heads": vision_heads,
+                                         "head_dim": vision_width // vision_heads})
+            attention = vision_linear(f"{base}.o_proj", attention, vision_width,
+                                      f"{params}.self_attn.out_proj")
+            after_attention = graph.add(f"{base}.attn_residual", "add",
+                                        (tokens, attention),
+                                        (batch, patches, vision_width), "vecadd")
+            norm2 = graph.add(f"{base}.norm2", "layernorm", (after_attention,),
+                              (batch, patches, vision_width),
+                              attrs={"parameters": {
+                                  f"{params}.layer_norm2.weight": [vision_width],
+                                  f"{params}.layer_norm2.bias": [vision_width]},
+                                  "epsilon": spec["vision_layer_norm_eps"]})
+            mlp = vision_linear(f"{base}.fc1", norm2,
+                                spec["vision_intermediate_size"], f"{params}.mlp.fc1")
+            mlp = graph.add(f"{base}.activation", "gelu_tanh", (mlp,),
+                            (batch, patches, spec["vision_intermediate_size"]))
+            mlp = vision_linear(f"{base}.fc2", mlp, vision_width,
+                                f"{params}.mlp.fc2")
+            tokens = graph.add(f"{base}.ffn_residual", "add",
+                               (after_attention, mlp),
+                               (batch, patches, vision_width), "vecadd")
+        tokens = graph.add(f"camera{camera}.vision.final_norm", "layernorm", (tokens,),
+                           (batch, patches, vision_width),
+                           attrs={"parameters": {
+                               f"{vision_base}.post_layernorm.weight": [vision_width],
+                               f"{vision_base}.post_layernorm.bias": [vision_width]},
+                               "epsilon": spec["vision_layer_norm_eps"]})
+        tokens = graph.add(f"camera{camera}.connector_shuffle", "pixel_shuffle",
+                           (tokens,), (batch, image_tokens, 16 * vision_width),
+                           attrs={"scale_factor": 4})
+        tokens = graph.add(f"camera{camera}.connector", "linear",
                            (tokens,), (batch, image_tokens, spec["vlm_hidden_size"]),
+                           "gemm_mxgemmini",
                            attrs={"parameter": "model.vlm_with_expert.vlm.model.connector."
                                   "modality_projection.proj.weight",
                                   "checkpoint_shape": [spec["vlm_hidden_size"],
-                                                       16 * spec["vision_hidden_size"]]})
+                                                       16 * vision_width],
+                                  "weight_shape": [16 * vision_width,
+                                                   spec["vlm_hidden_size"]]})
         tokens = graph.add(f"camera{camera}.scale", "embedding_scale", (tokens,),
                            (batch, image_tokens, spec["vlm_hidden_size"]),
                            "embed_scale", {"scale": spec["vlm_hidden_size"] ** 0.5})
         prefix_parts.append(tokens)
-        camera_branches.append({"camera": camera,
-                                "stages": [stage["id"] for stage in graph.stages[camera_start:]]})
+        camera_branches.append({
+            "camera": camera,
+            "vision_layers": [f"camera{camera}.vision.layer{layer:02d}.ffn_residual"
+                              for layer in range(spec["num_vision_layers"])],
+            "stages": [stage["id"] for stage in graph.stages[camera_start:]],
+        })
     language = graph.input("language.ids", (batch, spec["language_tokens"]), "int32")
     language_valid = graph.input("language.valid", (batch, spec["language_tokens"]), "bool")
     language = graph.add("language.embedding", "embedding", (language,),
@@ -514,7 +585,7 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
         },
         "prefix_once_per_refill": {
             "camera_branches": camera_branches,
-            "vision_encoder_internal_layers": "opaque",
+            "vision_encoder_layers_per_camera": spec["num_vision_layers"],
             "stages": prefix_stages,
             "vlm_layers": [f"vlm.layer{layer:02d}.ffn_residual"
                            for layer in range(spec["num_vlm_layers"])],

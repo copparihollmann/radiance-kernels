@@ -48,8 +48,10 @@ iteration evaluates 16 ordered expert layers, alternating self- and
 cross-attention, and carries the updated 50-token action tensor into the next
 iteration. The timestep is a generated constant `1 - step/10`, and the Euler
 update uses `-1/10`. The prefix K/V tensors remain read-only throughout those
-iterations. The SigLIP vision encoder's 12 internal layers are still one opaque
-stage per camera; their loops have not been decomposed into device operations.
+iterations. Each camera's 12 SigLIP vision layers are also decomposed into
+LayerNorm, bidirectional attention, MLP, and residual stages. The connector
+has distinct pixel shuffle and projection stages. These stages still need a
+connected device implementation and a graph-to-checkpoint numerical comparison.
 At the policy boundary, `select_action` refills its queue with one 50-action
 chunk when empty, then returns one action per call, unpadded from 32 to 6
 features. These queue operations are schedule metadata, outside the graph's
@@ -60,11 +62,12 @@ logical tensors; each denoising step has a `[batch, action tokens, prefix + acti
 tokens]` attention mask. Self-attention concatenates action K/V for its local
 attention call while later steps read the same prefix cache. Cross-attention
 reads that prefix cache directly. The last Euler update reaches time 0.
-It marks the vision encoder, multimodal connector, cross-attention, and action operations
-as missing device stages. Its fixed 512-pixel and maximum-token shapes are
-planning assumptions from the pinned configs; real image preprocessing,
-padding, mask values, and action-expert behavior still need a checkpoint
-reference. Image and language embedding scale stages are explicit. The mask
+It marks the bidirectional vision attention, pixel shuffle, multimodal masks,
+expert attention, and action operations as missing device stages. Its fixed
+512-pixel and maximum-token shapes are
+planning assumptions from the pinned configs; the graph's image preprocessing,
+padding, mask values, and action-expert behavior still need comparison to the
+upstream checkpoint run. Image and language embedding scale stages are explicit. The mask
 tensors in the graph encode required rank and dependencies;
 they do not claim a mask implementation or numerical equivalence to LeRobot.
 The branch and cache-lifetime interpretation is checked against the pinned
@@ -72,18 +75,18 @@ policy and backbone configs plus [LeRobot v0.5.1 sources](smolvla-implementation
 That implementation concatenates suffix K/V for a self-attention call without
 replacing the stored prefix cache. The graph therefore keeps the prefix cache
 as the input to every denoising step. This source-level check does not replace
-a checkpoint run with real images, masks, and action outputs.
+a graph-to-checkpoint numerical comparison.
 
 The [SmolVLA checkpoint binding check](smolvla-checkpoint-bindings.json) reads
-the real pinned `model.safetensors` header. All 500 tensors are accounted for:
-302 distinct parameters bind to explicit stages, 197 belong to the still-opaque
-vision path, and the unused language-model head is the remaining tensor. The
-explicit stages reuse those parameters 1,681 times across the denoising loop.
+the real pinned `model.safetensors` header. Of 500 tensors, 499 bind to
+explicit graph stages; the language-model head is unused for action inference.
+Those 499 parameters have 2,272 stage uses across the camera and denoising
+loops.
 Names and shapes match the checkpoint; this is a static binding check, not
 numerical execution.
 
-The graph currently has 3,022 stages. Existing standalone primitives are
-identified for 2,212 stages; 810 stages still have no device implementation.
+The graph currently has 3,673 stages. Existing standalone primitives are
+identified for 2,719 stages; 954 stages still have no device implementation.
 The JSON breaks those gaps down by operator. A primitive annotation does not
 imply that the stage is wired into a shared-buffer executable.
 
@@ -102,8 +105,27 @@ absolute error is `1.08e-6`. The [NumPy result](smolvla-action-results.json)
 records stage hashes and confirms that changing either time or action input
 changes the output. This follows the pinned `embed_suffix` formula without
 instantiating the full LeRobot policy. It does not validate vision, expert
-attention, ten-step denoising, or a Radiance executable. The PyTorch check uses
-an optional local environment with `torch`, `safetensors`, and `numpy`:
+attention, ten-step denoising, or a Radiance executable. A separate
+[upstream policy run](smolvla-policy-results.json) strictly loads the pinned
+checkpoint in LeRobot 0.5.1 and produces one 50-action chunk with three
+deterministic, preprocessed camera images, 48 language token IDs, padded state,
+and fixed noise. It calls the vision model and connector three times each,
+then the action projection ten times. It produces a `[1,50,32]` action tensor.
+The independent NumPy action embedding agrees with the actual upstream
+`embed_suffix` method to `1.08e-6` maximum absolute error. This run supplies a
+reproducible software golden output. It does not establish that the stitched
+graph or Radiance computes the same values, and the inputs are synthetic rather
+than a robot observation. Reproduce it with the pinned checkpoint and a Python
+environment containing `lerobot==0.5.1` and `transformers==5.3.0`:
+
+```sh
+python3 kernels/evaluation/llm/verify_smolvla_policy.py \
+  --checkpoint-dir /path/to/lerobot/smolvla_base/snapshot \
+  --out kernels/evaluation/llm/smolvla-policy-results.json
+```
+
+The action-only PyTorch check uses an optional local environment with `torch`,
+`safetensors`, and `numpy`:
 
 ```sh
 python3 kernels/evaluation/llm/smolvla_action_reference.py \
@@ -155,7 +177,8 @@ against Transformers 5.9.0 in FP32. The file records the exact config and
 weight hashes, tensor binding counts, tolerances, and software versions.
 These checks establish the decoder dataflow for those two checkpoints; they
 do not validate MX quantization or produce device timing. Gemma's checkpoint
-is access gated here, and SmolVLA still needs a complete numerical backend.
+is access gated here. SmolVLA has an upstream golden policy run but still needs
+a stitched graph numerical backend and device comparison.
 
 | Model | Graph scope | Existing PR #1 primitives | Main device gaps |
 | --- | --- | --- | --- |
@@ -175,8 +198,8 @@ directory's NumPy executor; all three reduced builds also pass Cyclotron's
 functional device execution. One-token TinyLlama prefill followed by one cached
 decode step has passed VCS RTL; multi-token prefill plus decode still needs an
 RTL result, full-dimension tiling,
-real checkpoint weights, and MX-Gemmini integration. SmolVLA lacks complete
-vision and action numerical/device paths. Only completed device runs can
+real checkpoint weights, and MX-Gemmini integration. SmolVLA lacks a connected
+graph numerical/device path despite the upstream checkpoint golden run. Only completed device runs can
 produce end-to-end latency, utilization, cache, or memory measurements.
 
 This directory records candidate workload inputs for an initial Radiance

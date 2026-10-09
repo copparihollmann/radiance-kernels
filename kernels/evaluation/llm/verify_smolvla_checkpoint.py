@@ -46,7 +46,6 @@ def check(checkpoint_dir: Path) -> dict:
         raise ValueError("checkpoint weights differ from pinned SmolVLA checkpoint")
     header = safetensors_header(weight_path)
     graph = build("smolvla_base")
-    stages = {stage["id"]: stage for stage in graph.stages}
     explicit: dict[str, list[int]] = {}
 
     def bind(target: dict[str, list[int]], name: str, shape: list[int]) -> None:
@@ -61,6 +60,9 @@ def check(checkpoint_dir: Path) -> dict:
     parameter_uses = 0
     for stage in graph.stages:
         attrs = stage["attrs"]
+        for name, shape in attrs.get("parameters", {}).items():
+            bind(explicit, name, shape)
+            parameter_uses += 1
         name = attrs.get("parameter")
         if name is None:
             continue
@@ -70,37 +72,35 @@ def check(checkpoint_dir: Path) -> dict:
         bind(explicit, name, shape)
         parameter_uses += 1
 
-    opaque: dict[str, list[int]] = {}
+    def expect_binding(name: str, shape: list[int]) -> None:
+        if explicit.get(name) != shape:
+            raise ValueError(f"graph omits checkpoint parameter {name}")
+
     vision = "model.vlm_with_expert.vlm.model.vision_model"
     embedding = f"{vision}.embeddings"
-    for camera in range(spec["image_cameras"]):
-        if (stages[f"camera{camera}.patch_embed"]["attrs"]["parameter_base"] !=
-                embedding or
-                stages[f"camera{camera}.vision_encoder"]["attrs"]["parameter_base"] !=
-                vision or
-                stages[f"camera{camera}.vision_encoder"]["attrs"]["num_layers"] !=
-                spec["num_vision_layers"]):
-            raise ValueError("vision stage does not declare its checkpoint parameters")
+    for branch in graph.execution_schedule["prefix_once_per_refill"]["camera_branches"]:
+        if len(branch["vision_layers"]) != spec["num_vision_layers"]:
+            raise ValueError("vision loop does not match the pinned checkpoint")
     vh, vi = spec["vision_hidden_size"], spec["vision_intermediate_size"]
     patches = (spec["image_size"] // spec["patch_size"]) ** 2
-    bind(opaque, f"{embedding}.patch_embedding.weight",
-         [vh, 3, spec["patch_size"], spec["patch_size"]])
-    bind(opaque, f"{embedding}.patch_embedding.bias", [vh])
-    bind(opaque, f"{embedding}.position_embedding.weight", [patches, vh])
+    expect_binding(f"{embedding}.patch_embedding.weight",
+                   [vh, 3, spec["patch_size"], spec["patch_size"]])
+    expect_binding(f"{embedding}.patch_embedding.bias", [vh])
+    expect_binding(f"{embedding}.position_embedding.weight", [patches, vh])
     for layer in range(spec["num_vision_layers"]):
         base = f"{vision}.encoder.layers.{layer}"
         for norm in ("layer_norm1", "layer_norm2"):
             for kind in ("weight", "bias"):
-                bind(opaque, f"{base}.{norm}.{kind}", [vh])
+                expect_binding(f"{base}.{norm}.{kind}", [vh])
         for projection in ("q_proj", "k_proj", "v_proj", "out_proj"):
-            bind(opaque, f"{base}.self_attn.{projection}.weight", [vh, vh])
-            bind(opaque, f"{base}.self_attn.{projection}.bias", [vh])
-        bind(opaque, f"{base}.mlp.fc1.weight", [vi, vh])
-        bind(opaque, f"{base}.mlp.fc1.bias", [vi])
-        bind(opaque, f"{base}.mlp.fc2.weight", [vh, vi])
-        bind(opaque, f"{base}.mlp.fc2.bias", [vh])
+            expect_binding(f"{base}.self_attn.{projection}.weight", [vh, vh])
+            expect_binding(f"{base}.self_attn.{projection}.bias", [vh])
+        expect_binding(f"{base}.mlp.fc1.weight", [vi, vh])
+        expect_binding(f"{base}.mlp.fc1.bias", [vi])
+        expect_binding(f"{base}.mlp.fc2.weight", [vh, vi])
+        expect_binding(f"{base}.mlp.fc2.bias", [vh])
     for kind in ("weight", "bias"):
-        bind(opaque, f"{vision}.post_layernorm.{kind}", [vh])
+        expect_binding(f"{vision}.post_layernorm.{kind}", [vh])
 
     eh, action = spec["expert_hidden_size"], spec["action_dim"]
     for name, width in (("action_in_proj", action),
@@ -111,11 +111,9 @@ def check(checkpoint_dir: Path) -> dict:
         if explicit.get(f"model.{name}.bias") != [eh]:
             raise ValueError(f"action embedding bias is not bound: {name}")
 
-    if set(explicit) & set(opaque):
-        raise ValueError("explicit and opaque weight bindings overlap")
     unused = {"model.vlm_with_expert.vlm.lm_head.weight"}
-    if set(header) != set(explicit) | set(opaque) | unused:
-        missing = sorted(set(header) - set(explicit) - set(opaque) - unused)
+    if set(header) != set(explicit) | unused:
+        missing = sorted(set(header) - set(explicit) - unused)
         raise ValueError(f"checkpoint weights without graph binding: {missing[:8]}")
     if header[next(iter(unused))]["shape"] != [spec["vlm_vocab_size"],
                                                   spec["vlm_hidden_size"]]:
@@ -132,7 +130,7 @@ def check(checkpoint_dir: Path) -> dict:
         "checkpoint_tensors": len(header),
         "explicit_stage_parameter_uses": parameter_uses,
         "distinct_explicit_parameters": len(explicit),
-        "opaque_vision_parameters": len(opaque),
+        "unbound_checkpoint_parameters": len(set(header) - set(explicit) - unused),
         "unused_lm_head_parameters": len(unused),
         "graph_stage_count": len(graph.stages),
         "stage_status": dict(stage_status),

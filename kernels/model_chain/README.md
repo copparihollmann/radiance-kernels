@@ -31,7 +31,7 @@ Generated ELF files and logs remain local under `generated/`.
 | TinyLlama | 22 layers | 1 layer, prefill and decode | 22 layers against Transformers | 1-token prefill and 1 cached decode passed |
 | DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 1 layer, prefill and decode | 28 layers against Transformers | Pending |
 | Gemma-2-2B | 26 layers | 1 layer, prefill and decode | Checkpoint access pending | Pending |
-| SmolVLA-base | Vision and action topology; 16 VLM layers and 160 expert layer calls decomposed | Pending | Static binding of all 500 checkpoint tensors; numerical reference pending | Pending |
+| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Pending | 499 used tensors bound; one full upstream 10-step action chunk run; stitched graph comparison pending | Pending |
 
 The full-dimension schedules are dependency graphs, not compiled model runs.
 The checkpoint checks are Python reference checks described in
@@ -146,8 +146,10 @@ The remaining work to compile the four **full** models is substantial:
    wall-clock limit without a result.
 4. Implement SmolVLA's vision encoder, connector, masks, expert attention,
    and action denoising on the device with a checkpoint numerical control.
-   The VLM and expert layers are decomposed in `stitch.py` and their parameter
-   shapes match the pinned checkpoint, but the graph is not a numerical backend.
+   All vision, VLM, and expert layers are decomposed in `stitch.py`; 499 used
+   checkpoint parameters bind by name and shape. The pinned upstream policy
+   produces a complete 10-step action chunk, but the graph is not yet a
+   numerical backend or executable.
 
 Until those steps pass, the full four-model compilation and end-to-end
 performance evaluation remain open. `kernels/evaluation/llm/README.md`

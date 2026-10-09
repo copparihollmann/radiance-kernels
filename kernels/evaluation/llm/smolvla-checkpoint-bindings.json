@@ -5,25 +5,28 @@
   "checkpoint_revision": "c83c3163b8ca9b7e67c509fffd9121e66cb96205",
   "checkpoint_config_sha256": "650584b56c104720f7a3c91d1ec6bec9e8de8ac11e60c92ba2fa82d93eda147d",
   "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
-  "model_specs_sha256": "c63a2dff2838133ba732ce0e5bd7b82e0d7f6fa68a7b00dc8e303587c8b3f1e0",
+  "model_specs_sha256": "1e0627ce805ec815d32f0a002a0c6b769422ee97a00c420d25711801b111a469",
   "checkpoint_tensors": 500,
-  "explicit_stage_parameter_uses": 1681,
-  "distinct_explicit_parameters": 302,
-  "opaque_vision_parameters": 197,
+  "explicit_stage_parameter_uses": 2272,
+  "distinct_explicit_parameters": 499,
+  "unbound_checkpoint_parameters": 0,
   "unused_lm_head_parameters": 1,
-  "graph_stage_count": 3022,
+  "graph_stage_count": 3673,
   "stage_status": {
-    "primitive_only": 2212,
-    "missing_device_stage": 810
+    "primitive_only": 2719,
+    "missing_device_stage": 954
   },
   "missing_device_operations": {
+    "bidirectional_mha": 36,
     "broadcast_tokens": 10,
     "concat_features": 10,
     "embedding": 1,
     "euler_step": 10,
+    "gelu_tanh": 36,
+    "layernorm": 75,
     "masked_gqa": 176,
     "multimodal_merge": 1,
-    "pixel_shuffle_connector": 3,
+    "pixel_shuffle": 3,
     "prefix_attention_groups": 1,
     "prefix_attention_mask": 1,
     "prefix_attention_slice": 80,
@@ -38,8 +41,7 @@
     "suffix_local_position_ids": 10,
     "suffix_pad_mask": 10,
     "suffix_position_ids": 10,
-    "timestep_constant": 10,
-    "vision_encoder": 3
+    "timestep_constant": 10
   },
   "numerical_execution": false,
   "device_execution": false

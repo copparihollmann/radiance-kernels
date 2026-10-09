@@ -79,6 +79,13 @@ def main() -> None:
             policy["vision_hidden_size"] != backbone["vision_config"]["hidden_size"] or
             policy["patch_size"] != backbone["vision_config"]["patch_size"]):
         raise ValueError("SmolVLA backbone dimensions differ")
+    vision = backbone["vision_config"]
+    if (policy["vision_intermediate_size"] != vision.get("intermediate_size", 3072) or
+            policy["num_vision_layers"] != vision.get("num_hidden_layers", 12) or
+            policy["vision_num_attention_heads"] != vision["num_attention_heads"] or
+            policy["vision_layer_norm_eps"] != vision.get("layer_norm_eps", 1e-6) or
+            policy["vision_hidden_act"] != vision.get("hidden_act", "gelu_pytorch_tanh")):
+        raise ValueError("SmolVLA vision encoder settings differ")
     if policy["expert_hidden_size"] != int(backbone["text_config"]["hidden_size"] *
                                          config["expert_width_multiplier"]):
         raise ValueError("SmolVLA expert width differs")
@@ -94,7 +101,9 @@ def main() -> None:
     implementation = json.loads((Path(__file__).resolve().parent /
                                  "smolvla-implementation.json").read_text())
     for source, digest in (("modeling_source", "modeling_source_sha256"),
-                           ("expert_source", "expert_source_sha256")):
+                           ("expert_source", "expert_source_sha256"),
+                           ("vision_source", "vision_source_sha256"),
+                           ("vision_config_source", "vision_config_source_sha256")):
         fetch_bytes(implementation[source], implementation[digest])
     print("smolvla_base: pinned policy, backbone, and LeRobot sources match")
     print("gemma_2_2b_it: official config access gated; fields were not network-verified")
