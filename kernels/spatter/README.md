@@ -122,6 +122,12 @@ python3 run.py --suite smoke.json --case 0 --out runs/smoke-0 --build-only
 pattern. It is not performance-equivalent to the original repetition count.
 The output directory contains `kernel.soc.elf`, `result.json`, and `build.log`.
 
+For the newer hashed `RadianceHBMConfig` with direct DRAM loading (`+loadmem`
+or FireSim LoadMem), set `MU_ADDR_HASH=1` when building. The hash parameters
+must match the RTL. Use `MU_ADDR_HASH=0` for the earlier unhashed image or a
+TSI loader. The Makefile rebuilds the fused ELF when the hash setting changes;
+the FPGA and RTL results below remain measurements of their recorded images.
+
 The RV64 host clears the complete output before releasing Muon reset. This is
 required for U250 FireSim: the fused RV32 BSS output has no initialized ELF
 payload, and unwritten Scatter destinations otherwise retain stale memory.

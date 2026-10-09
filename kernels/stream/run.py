@@ -95,6 +95,9 @@ def prepare(kind: str, elements: int, out: Path,
     ]
     (ROOT / "data.S").write_text("\n".join(asm) + "\n")
     source = hashlib.sha256()
+    build_rules = ROOT.parent / "addr_hash_stamp.mk"
+    source.update(build_rules.name.encode())
+    source.update(build_rules.read_bytes())
     for name in ("run.py", "Makefile", "kernel.cpp", "host.cpp", "emit_symbols.py"):
         source.update((ROOT / name).read_bytes())
     case = {"kind": f"stream-{kind}", "stream_operation": kind,

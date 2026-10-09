@@ -4,6 +4,7 @@ HOST_SRCS = host.cpp
 MU_BIN_OBJS = data.mu.o
 
 include ../common.mk
+include ../addr_hash_stamp.mk
 
 MU_CFLAGS += -isystem $(LLVM_MUON)/include/c++/v1
 HOST_CXXFLAGS += -O3

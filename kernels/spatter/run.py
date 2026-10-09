@@ -394,6 +394,9 @@ def git_revision(path: Path) -> str | None:
 
 def source_hash() -> str:
     digest = hashlib.sha256()
+    build_rules = ROOT.parent / "addr_hash_stamp.mk"
+    digest.update(str(build_rules.name).encode())
+    digest.update(build_rules.read_bytes())
     for name in ("run.py", "plan.py", "Makefile", "kernel.cpp", "spatter_ops.hpp", "host.cpp",
                  "emit_symbols.py", "cyclotron-no-trace.patch"):
         digest.update(name.encode())

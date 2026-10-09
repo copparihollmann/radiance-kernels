@@ -31,6 +31,12 @@ complete output. `output_elements` in the manifest is the number of 64-bit
 pairs passed to Spatter's reusable Cyclotron checker; `stream_elements` is the
 actual number of float32 values.
 
+Set `MU_ADDR_HASH=1` for the newer hashed `RadianceHBMConfig` when loading
+DRAM directly with `+loadmem` or FireSim LoadMem; the hash parameters must
+match the RTL. Use `MU_ADDR_HASH=0` for the earlier unhashed image or a TSI
+loader. The Makefile rebuilds the fused ELF when the hash setting changes.
+The results below remain tied to their recorded hardware image and ELF.
+
 For a complete host check on a larger array, add `--full-host-check`. Add
 `--host-timing` to print `HOST_RELEASE_TO_DONE_CYCLES` in the guest UART. This
 counts RV64 host cycles from just before Muon reset release until the
