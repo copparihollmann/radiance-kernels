@@ -181,6 +181,16 @@ class ModelStitchTest(unittest.TestCase):
             with self.subTest(model=model):
                 self.assertTrue(check_small(model)["passed"])
 
+    def test_full_decoder_depth_preserves_cached_decode(self):
+        for model, layers in (("tinyllama", 22),
+                              ("deepseek_r1_distill_qwen_1_5b", 28),
+                              ("gemma_2_2b_it", 26)):
+            with self.subTest(model=model):
+                result = check_small(model, layers)
+                self.assertEqual(result["layers"], layers)
+                self.assertLess(result["maximum_absolute_error"], 1e-5)
+                self.assertGreater(result["changed_decode_token_max_abs_delta"], 0)
+
     def test_decode_control_detects_changed_token(self):
         model = "tinyllama"
         spec = reduced_spec(model_specs()[model])

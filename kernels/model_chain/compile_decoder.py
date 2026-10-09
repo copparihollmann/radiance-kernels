@@ -140,7 +140,12 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
 
 def generate(model: str, layers: int, prefill: int, decode: int,
              generation: str, out_root: Path,
-             device_check_all_stages: bool = False) -> Path:
+             device_check_all_stages: bool = False,
+             device_opt: str = "O3", stages_per_object: int = 0) -> Path:
+    if device_opt not in ("O1", "O2", "O3"):
+        raise ValueError(f"unsupported device optimization level: {device_opt}")
+    if stages_per_object < 0:
+        raise ValueError("stages per object cannot be negative")
     specs = stitch.model_specs()
     spec = reference.reduced_spec(specs[model])
     spec["num_hidden_layers"] = layers
@@ -181,6 +186,32 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     for i, stage in enumerate(graph.stages):
         param = param_data(stage)
         stage_src.append(emit_stage(i, stage, graph, param[0] if param else None))
+    stage_files = []
+    if stages_per_object:
+        for first in range(0, len(graph.stages), stages_per_object):
+            last = min(first + stages_per_object, len(graph.stages))
+            filename = f"stage_chunk_{first // stages_per_object:03d}.cpp"
+            stage_files.append(filename)
+            symbols = {}
+            for stage in graph.stages[first:last]:
+                for tensor_name in (*stage["reads"], stage["writes"]):
+                    tensor = graph.tensors[tensor_name]
+                    symbols[symbol(tensor_name)] = (
+                        "int32_t" if tensor["dtype"] == "int32" else "float")
+                param = param_data(stage)
+                if param:
+                    symbols[param[0]] = "float"
+                if stage["op"] == "rope":
+                    symbols["v_rope_cos"] = "float"
+                    symbols["v_rope_sin"] = "float"
+            externs = "\n".join(f"extern __global {dtype} {name}[];"
+                                for name, dtype in sorted(symbols.items()))
+            source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
+                      "#include <stdint.h>\n#include \"pipeline_math.hpp\"\n"
+                      + externs + "\n"
+                      + "\n".join(item.replace("static void stage_", "void stage_", 1)
+                                  for item in stage_src[first:last]))
+            write_if_changed(target / filename, source)
     device_checks = []
     for name in graph.outputs:
         gold = values[name].astype(np.float32)
@@ -217,6 +248,23 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         integer_checks.append((symbol(name), gold_name, gold.size))
     if device_check_all_stages:
         declarations.extend(native_extra)
+    device_source_files = list(stage_files)
+    if stage_files:
+        data_file = "model_data.cpp"
+        write_if_changed(target / data_file,
+                         "#include <mu_intrinsics.h>\n#include <stdint.h>\n"
+                         + "\n".join(declarations))
+        device_source_files.append(data_file)
+        externs = []
+        for declaration in declarations:
+            match = re.match(r"alignas\(64\) __global (float|int32_t) (\w+)\[",
+                             declaration)
+            if not match:
+                raise ValueError("generated data declaration cannot be externed")
+            externs.append(f"extern __global {match.group(1)} {match.group(2)}[];")
+        device_declarations = "\n".join(externs)
+    else:
+        device_declarations = "\n".join(declarations)
     schedule = "\n".join(f"  mu_schedule(stage_{i}, nullptr, 1);\n"
                          "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();"
                          for i in range(len(graph.stages)))
@@ -242,11 +290,56 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             f"  for (uint32_t i = 0; i < {count}; ++i) "
             f"if (!mu_close({out}[i], {gold}[i], 5e-3f, 5e-4f)) ++errors;"
             for out, gold, count in device_checks)
+    if stage_files and device_check_all_stages:
+        all_checks = [(out, gold, count, "float")
+                      for out, gold, count in native_checks]
+        all_checks += [(out, gold, count, "int32_t")
+                       for out, gold, count in integer_checks]
+        verifier_files = []
+        for first in range(0, len(all_checks), stages_per_object):
+            selected = all_checks[first:first + stages_per_object]
+            filename = f"verify_chunk_{first // stages_per_object:03d}.cpp"
+            verifier_files.append(filename)
+            externs = {name: dtype for out, gold, _, dtype in selected
+                       for name in (out, gold)}
+            checks = []
+            for offset, (out, gold, count, dtype) in enumerate(selected):
+                index = first + offset
+                comparison = (f"!mu_close({out}[i], {gold}[i], 5e-3f, 5e-4f)"
+                              if dtype == "float" else f"{out}[i] != {gold}[i]")
+                checks.append(
+                    f"  errors = 0; uint32_t first_{index} = {count};\n"
+                    f"  for (uint32_t i = 0; i < {count}; ++i) "
+                    f"if ({comparison}) "
+                    f"{{ if (!errors) first_{index} = i; ++errors; }}\n"
+                    f"  if (errors) {{ mu_tohost(({index + 1}u << 16) | "
+                    f"(first_{index} << 1) | 1u); return false; }}")
+            source = ("#include <mu_intrinsics.h>\n#include <stdint.h>\n"
+                      "#include \"kernel_verify.h\"\n"
+                      + "\n".join(f"extern __global {dtype} {name}[];"
+                                  for name, dtype in sorted(externs.items()))
+                      + f"\nbool verify_chunk_{first // stages_per_object:03d}() {{\n"
+                      "  uint32_t errors = 0;\n" + "\n".join(checks)
+                      + "\n  return true;\n}\n")
+            write_if_changed(target / filename, source)
+        device_source_files.extend(verifier_files)
+        device_declarations = ""
+        verify = "\n".join(
+            f"  if (!verify_chunk_{index:03d}()) return 0;"
+            for index in range(len(verifier_files)))
+        verify_prototypes = "\n".join(
+            f"bool verify_chunk_{index:03d}();"
+            for index in range(len(verifier_files)))
+    else:
+        verify_prototypes = ""
+    device_stages = ("\n".join(f"void stage_{i}(void*, uint32_t, uint32_t, uint32_t);"
+                                for i in range(len(stage_src))) if stage_files
+                     else "\n".join(stage_src))
     cpp = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
            "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
            "#include \"pipeline_math.hpp\"\n"
            "extern \"C\" uint32_t __mu_num_warps = 1;\n"
-           + "\n".join(declarations) + "\n" + "\n".join(stage_src) +
+           + device_declarations + "\n" + device_stages + "\n" + verify_prototypes +
            "\nint main() {\n" + schedule +
            "\n  if (mu_hart_id() != 0) { for (;;) {} }\n"
            "  uint32_t errors = 0;\n" + verify +
@@ -278,16 +371,24 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     write_if_changed(target / "host.cpp", (HERE / "host.cpp").read_text())
     write_if_changed(target / "Makefile",
         "PROJECT = model_chain\nMU_SRCS = kernel.cpp\nHOST_SRCS = host.cpp\n"
-        f"RADIANCE_LIB_PATH := {ROOT / 'lib'}\n"
+        + ("MU_SRC_DEPS = " + " ".join(device_source_files) + "\n"
+           if device_source_files else "")
+        + (f"EXTRA_MU_CFLAGS += -{device_opt}\n" if device_opt != "O3" else "")
+        + f"RADIANCE_LIB_PATH := {ROOT / 'lib'}\n"
         "RADIANCE_INCLUDE_PATH := $(RADIANCE_LIB_PATH)/include\n"
         "GEMMINI_SW_PATH := $(RADIANCE_LIB_PATH)/mxgemmini\n"
         f"SOC_DIR := {ROOT / 'soc'}\n"
         f"LLVM_MUON ?= {ROOT / 'llvm/llvm-muon'}\n"
         f"EXTRA_MU_CFLAGS += -I{HERE}\n"
         f"include {ROOT / 'kernels/common.mk'}\n"
-        f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}\n")
+        f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}\n"
+        + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
+           + f": {HERE / 'pipeline_math.hpp'}\n" if stage_files else ""))
     manifest = {
         "model": model, "scope": "reduced_synthetic_decoder",
+        "device_optimization": device_opt,
+        "stages_per_device_object": stages_per_object,
+        "device_source_files": ["kernel.cpp", *device_source_files],
         "device_source_generated": True, "device_elf_built": False,
         "device_execution": False, "measured_cycles": None,
         "checkpoint_weights": False,
@@ -380,6 +481,8 @@ def main() -> None:
                         default="teacher_forced")
     parser.add_argument("--out-root", type=Path, default=HERE / "generated")
     parser.add_argument("--device-check-all-stages", action="store_true")
+    parser.add_argument("--device-opt", choices=("O1", "O2", "O3"), default="O3")
+    parser.add_argument("--stages-per-object", type=int, default=0)
     parser.add_argument("--verify-native", action="store_true")
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
@@ -387,7 +490,8 @@ def main() -> None:
         parser.error("layers/prefill must be positive and decode steps nonnegative")
     target = generate(args.model, args.layers, args.prefill,
                       args.decode_steps, args.generation, args.out_root,
-                      args.device_check_all_stages)
+                      args.device_check_all_stages, args.device_opt,
+                      args.stages_per_object)
     if args.verify_native or args.build:
         print(verify_native(target))
     if args.build:

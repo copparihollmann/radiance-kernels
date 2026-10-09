@@ -27,6 +27,13 @@
     "action_time_mlp_out": 10,
     "action_out_proj": 10
   },
+  "observed_layer_calls": {
+    "vision": 36,
+    "vlm": 16,
+    "expert": 160
+  },
+  "graph_order_and_shapes_match_upstream": true,
+  "layer_event_sequence_sha256": "d78ad4498df8e5f1b83b0debf22240bc2ca55c6010dc792051404dcfe052252b",
   "action_embedding_upstream_max_abs_error": 1.0728836059570312e-06,
   "output_shape": [
     1,

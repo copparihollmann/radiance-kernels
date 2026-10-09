@@ -26,12 +26,48 @@ Generated ELF files and logs remain local under `generated/`.
 | DeepSeek-R1-Distill-Qwen-1.5B | 46 | `1.07e-6` | 130,278 |
 | Gemma-2-2B | 46 | `1.07e-6` | 123,153 |
 
+The [full-depth native checks](evaluation/full-depth-native-results.json) and
+[Cyclotron runs](evaluation/full-depth-functional-results.json) use
+the original layer counts while keeping the small synthetic tensor dimensions.
+They execute one prefill token and one cached decode token through every stage:
+
+| Decoder family | Layers | Checked device stages | Native maximum error | Cyclotron functional cycles |
+| --- | ---: | ---: | ---: | ---: |
+| TinyLlama | 22 | 754 | `5.72e-6` | 1,197,586 |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 | 1,126 | `7.15e-6` | 1,539,629 |
+| Gemma-2-2B | 26 | 996 | `1.81e-5` | 1,272,040 |
+
+The separate [full-depth reference controls](evaluation/full-depth-tinyllama-reference.json)
+([DeepSeek](evaluation/full-depth-deepseek-reference.json),
+[Gemma](evaluation/full-depth-gemma-reference.json)) compare cached decode
+with one full causal pass, then change a decode token and confirm that the
+logits respond. These are CPU checks of graph wiring. The native results do
+not by themselves establish device execution; the linked Cyclotron result
+checks every stage and reports `tohost=0` for all three.
+Reproduce the controls with `reference.py --model MODEL --layers N` and
+`compile_decoder.py --model MODEL --layers N --prefill 1 --decode-steps 1
+--device-check-all-stages --verify-native --out-root
+kernels/model_chain/generated/full-depth`, using `N=22,28,26` for the models
+above. `record_full_depth.py` checks the generated manifests and logs before
+writing the native result record. The
+[sharded build control](evaluation/sharded-control-functional-results.json)
+passes all 40 stages of a one-layer TinyLlama program in Cyclotron at `-O3`.
+`--stages-per-object 20` puts stage functions, initialized data, and device
+checks into smaller object files while preserving one linked ELF and the same
+schedule. It is the build route for the full-depth device check. Reproduce the
+device runs using the same `compile_decoder.py` arguments with `--build
+--stages-per-object 20`, then run `run_functional.py --generated-root
+kernels/model_chain/generated/full-depth --sim-cycles 10000000 --timeout 600`.
+The larger simulator limit is required because the default 1,000,000 cycles
+ends before these programs finish. The functional cycles are not performance
+latency measurements.
+
 | Model | Full-dimension schedule | Reduced Radiance ELF | Full-checkpoint numerical check | VCS RTL |
 | --- | --- | --- | --- | --- |
-| TinyLlama | 22 layers | 1 layer, prefill and decode | 22 layers against Transformers | 1-token prefill and 1 cached decode passed |
-| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 1 layer, prefill and decode | 28 layers against Transformers | Pending |
-| Gemma-2-2B | 26 layers | 1 layer, prefill and decode | Checkpoint access pending | Pending |
-| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Pending | 499 used tensors bound; one full upstream 10-step action chunk run; stitched graph comparison pending | Pending |
+| TinyLlama | 22 layers | 22 reduced layers, prefill and decode | 22 layers against Transformers | 1-token prefill and 1 cached decode passed |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | 28 layers against Transformers | Pending |
+| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | Checkpoint access pending | Pending |
+| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Pending | 499 used tensors bound; upstream action chunk and runtime layer order/shape checked; graph numerical comparison pending | Pending |
 
 The full-dimension schedules are dependency graphs, not compiled model runs.
 The checkpoint checks are Python reference checks described in
@@ -140,8 +176,8 @@ The remaining work to compile the four **full** models is substantial:
    connect the existing MX-Gemmini kernels through the shared-buffer path and
    specify FP8/BF16 conversions. The current executable uses scalar FP32 SIMT.
 3. Validate multi-token prefill and cached decode together on RTL, then run
-   complete workloads with input and output checks. The three decoder ELFs
-   have passed Cyclotron functional execution; one-token TinyLlama prefill and
+   complete workloads with input and output checks. The three full-depth
+   reduced decoder ELFs have passed Cyclotron functional execution; one-token TinyLlama prefill and
    cached decode passed RTL. The three-token prefill attempt reached its first
    wall-clock limit without a result.
 4. Implement SmolVLA's vision encoder, connector, masks, expert attention,

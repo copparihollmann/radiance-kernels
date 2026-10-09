@@ -57,6 +57,14 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
     cycle_matches = re.findall(r"simulation finished after (\d+) cycles", output)
     passed = (return_code == 0 and "isa-test passed with tohost=0" in output
               and len(cycle_matches) == 1)
+    failure_reason = None
+    if not passed:
+        if return_code == 124:
+            failure_reason = "wall_clock_timeout"
+        elif return_code == 1 and output.rstrip().endswith("Error: 0"):
+            failure_reason = "simulator_cycle_limit_reached"
+        else:
+            failure_reason = "device_or_simulator_failure"
     result = {
         "model": model,
         "scope": manifest["scope"],
@@ -68,16 +76,24 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "checked_integer_stages": manifest.get("native_verified_integer_stages", 0),
         "simulation": "Cyclotron functional ISA model",
         "status": "passed" if passed else "failed",
+        "failure_reason": failure_reason,
         "cycles_functional": int(cycle_matches[0]) if cycle_matches else None,
         "tohost": 0 if passed else None,
         "process_exit_code": return_code,
         "device_elf_sha256": sha256(elf),
         "generated_source_sha256": sha256(target / "kernel.cpp"),
+        "device_source_files_sha256": {
+            name: sha256(target / name)
+            for name in manifest.get("device_source_files", ["kernel.cpp"])},
+        "device_optimization": manifest.get("device_optimization", "O3"),
+        "stages_per_device_object": manifest.get("stages_per_device_object", 0),
         "portable_ops_sha256": sha256(HERE / "pipeline_math.hpp"),
         "numpy_reference_sha256": sha256(ROOT / "kernels/evaluation/llm/reference.py"),
         "model_specs_sha256": manifest["source_spec_sha256"],
         "simulator_sha256": sha256(simulator),
         "config_sha256": sha256(config),
+        "simulator_cycle_limit": int(re.search(
+            r"(?m)^timeout\s*=\s*(\d+)", config.read_text()).group(1)),
         "log_sha256": sha256(target / "functional.log"),
         "checkpoint_weights": False,
         "original_model_dimensions": False,
@@ -98,6 +114,8 @@ def main() -> None:
     parser.add_argument("--cyclotron-root", type=Path,
                         default=ROOT.parent / "generators/radiance/cyclotron")
     parser.add_argument("--timeout", type=int, default=60)
+    parser.add_argument("--sim-cycles", type=int,
+                        help="override the Cyclotron cycle limit in a local config copy")
     parser.add_argument("--out", type=Path,
                         default=HERE / "evaluation/functional-results.json")
     args = parser.parse_args()
@@ -106,6 +124,20 @@ def main() -> None:
     config = simulator_root / "config.toml"
     if not simulator.is_file() or not config.is_file():
         parser.error("Cyclotron binary or config is missing")
+    if args.sim_cycles is not None:
+        if args.sim_cycles <= 0:
+            parser.error("--sim-cycles must be positive")
+        source = config.read_text()
+        modified, replacements = re.subn(
+            r"(?m)^timeout\s*=\s*\d+", f"timeout = {args.sim_cycles}",
+            source, count=1)
+        if replacements != 1:
+            parser.error("Cyclotron config has no unique simulation timeout")
+        modified = modified.replace('"config/timing/',
+                                    f'"{simulator_root}/config/timing/')
+        args.generated_root.mkdir(parents=True, exist_ok=True)
+        config = (args.generated_root / "cyclotron-config.toml").resolve()
+        config.write_text(modified)
     results = [run(model, args.generated_root.resolve(), simulator, config,
                    simulator_root, args.timeout) for model in args.models]
     args.out.parent.mkdir(parents=True, exist_ok=True)

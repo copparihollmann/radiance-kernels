@@ -1,0 +1,16 @@
+{
+  "model": "deepseek_r1_distill_qwen_1_5b",
+  "layers": 28,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "graph_stages": 1689,
+  "control": "synthetic_small_cached_decode_vs_full_prefill",
+  "passed": true,
+  "maximum_absolute_error": 0.0,
+  "changed_decode_token_max_abs_delta": 2.257817268371582,
+  "output_sha256": "a38effd3378de0da5e02e8b4cdcad3cf42d9019a5ecd00d14e55382f319fc759",
+  "device_execution": false,
+  "checkpoint_weights": false,
+  "original_model_dimensions": false,
+  "upstream_execution_equivalent": false
+}

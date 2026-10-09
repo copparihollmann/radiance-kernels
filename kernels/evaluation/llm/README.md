@@ -115,7 +115,10 @@ The independent NumPy action embedding agrees with the actual upstream
 `embed_suffix` method to `1.08e-6` maximum absolute error. This run supplies a
 reproducible software golden output. It does not establish that the stitched
 graph or Radiance computes the same values, and the inputs are synthetic rather
-than a robot observation. Reproduce it with the pinned checkpoint and a Python
+than a robot observation. Runtime hooks also match the graph's order and input
+shapes for 36 vision-layer calls, 16 VLM-layer calls, and 160 expert-layer
+calls. This checks loop structure, not intermediate numerical values.
+Reproduce it with the pinned checkpoint and a Python
 environment containing `lerobot==0.5.1` and `transformers==5.3.0`:
 
 ```sh
@@ -192,18 +195,20 @@ The `kernel` field in a schedule means a standalone primitive exists. It does
 generates fixed inputs and a separate ELF for each kernel. The first device
 milestone now has a [connected reduced decoder build](../../model_chain/README.md)
 for TinyLlama, DeepSeek, and Gemma. It emits a single Radiance ELF per family,
-with shared activation/KV buffers, one synthetic decoder layer, prefill, and
-cached decode. Native checks compare every floating-point stage with this
-directory's NumPy executor; all three reduced builds also pass Cyclotron's
-functional device execution. One-token TinyLlama prefill followed by one cached
+with shared activation/KV buffers, prefill, and cached decode. The
+[full-depth reduced builds](../../model_chain/evaluation/full-depth-functional-results.json)
+execute 22, 28, and 26 synthetic decoder layers, respectively. Native checks
+compare every floating-point stage with this directory's NumPy executor;
+all three full-depth reduced builds pass Cyclotron's functional device execution.
+One-token TinyLlama prefill followed by one cached
 decode step has passed VCS RTL; multi-token prefill plus decode still needs an
 RTL result, full-dimension tiling,
 real checkpoint weights, and MX-Gemmini integration. SmolVLA lacks a connected
-graph numerical/device path despite the upstream checkpoint golden run. Only completed device runs can
+graph numerical/device path despite the upstream checkpoint golden run. Only timed device runs can
 produce end-to-end latency, utilization, cache, or memory measurements.
 
 This directory records candidate workload inputs for an initial Radiance
-performance evaluation. It contains no measured LLM cycles. The
+performance evaluation. It contains no timed LLM performance measurements. The
 [model source table](inputs/sources.csv) pins five official
 checkpoint revisions and SHA-256 hashes for their small `config.json` files;
 the files are retained under `inputs/`. The weights, tokenizer, example

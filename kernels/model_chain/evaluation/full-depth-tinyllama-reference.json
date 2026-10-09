@@ -1,0 +1,16 @@
+{
+  "model": "tinyllama",
+  "layers": 22,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "graph_stages": 1131,
+  "control": "synthetic_small_cached_decode_vs_full_prefill",
+  "passed": true,
+  "maximum_absolute_error": 0.0,
+  "changed_decode_token_max_abs_delta": 0.9615989923477173,
+  "output_sha256": "41f8848902d751879173abf9058fa4d315a1867b48f3ca5ba7edd122dffc1e6c",
+  "device_execution": false,
+  "checkpoint_weights": false,
+  "original_model_dimensions": false,
+  "upstream_execution_equivalent": false
+}

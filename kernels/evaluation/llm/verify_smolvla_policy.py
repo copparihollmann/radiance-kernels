@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from stitch import model_specs
+from stitch import build, model_specs
 from smolvla_action_reference import Checkpoint, action_embedding
 from verify_smolvla_checkpoint import sha256
 
@@ -43,8 +43,10 @@ def run(checkpoint_dir: Path) -> dict:
     # separate backbone first; strict=True still requires every policy weight.
     config.load_vlm_weights = False
     policy = SmolVLAPolicy.from_pretrained(checkpoint_dir, config=config, strict=True)
+    graph = build("smolvla_base")
     counts = Counter()
     handles = []
+    events = []
 
     def count(name: str):
         def hook(_module, _inputs, _output):
@@ -60,6 +62,28 @@ def run(checkpoint_dir: Path) -> dict:
                          ("action_time_mlp_out", model.action_time_mlp_out),
                          ("action_out_proj", model.action_out_proj)):
         handles.append(module.register_forward_hook(count(name)))
+
+    def trace(kind: str, layer: int, expected_shape: list[int]):
+        def hook(_module, inputs, _output):
+            actual_shape = tuple(inputs[0].shape)
+            if actual_shape != tuple(expected_shape):
+                raise ValueError(f"{kind}:{layer} shape {actual_shape} != {expected_shape}")
+            events.append(f"{kind}:{layer}")
+        return hook
+
+    vlm = model.vlm_with_expert.get_vlm_model()
+    expert = model.vlm_with_expert.lm_expert
+    for layer, module in enumerate(vlm.vision_model.encoder.layers):
+        expected_shape = graph.tensors[f"camera0.vision.layer{layer:02d}.norm1"]["shape"]
+        handles.append(module.register_forward_hook(trace("vision", layer, expected_shape)))
+    for layer, module in enumerate(vlm.text_model.layers):
+        expected_shape = graph.tensors[f"vlm.layer{layer:02d}.input_norm"]["shape"]
+        handles.append(module.input_layernorm.register_forward_hook(
+            trace("vlm", layer, expected_shape)))
+    for layer, module in enumerate(expert.layers):
+        expected_shape = graph.tensors[f"denoise0.expert{layer:02d}.input_norm"]["shape"]
+        handles.append(module.input_layernorm.register_forward_hook(
+            trace("expert", layer, expected_shape)))
 
     image = torch.linspace(-1.0, 1.0, 3 * spec["image_size"] ** 2,
                            dtype=torch.float32).reshape(1, 3, spec["image_size"],
@@ -85,6 +109,7 @@ def run(checkpoint_dir: Path) -> dict:
         if suffix_max_error > 2e-5:
             raise ValueError(f"action embedding differs from upstream: {suffix_max_error}")
         counts.clear()
+        events.clear()
         output = model.sample_actions(images, img_masks, lang_tokens,
                                       lang_masks, state, noise=noise)
     for handle in handles:
@@ -95,6 +120,19 @@ def run(checkpoint_dir: Path) -> dict:
                        "action_out_proj": spec["num_denoise_steps"]}
     if dict(counts) != expected_counts:
         raise ValueError(f"policy loop counts differ: {dict(counts)}")
+    schedule = graph.execution_schedule
+    expected_events = [f"vision:{layer}"
+                       for branch in schedule["prefix_once_per_refill"]["camera_branches"]
+                       for layer, _ in enumerate(branch["vision_layers"])]
+    expected_events += [f"vlm:{layer}" for layer, _ in enumerate(
+        schedule["prefix_once_per_refill"]["vlm_layers"])]
+    expected_events += [f"expert:{layer}"
+                        for iteration in schedule["denoise_loop"]["iterations"]
+                        for layer, _ in enumerate(iteration["expert_layers"])]
+    if events != expected_events:
+        first = next((index for index, pair in enumerate(zip(events, expected_events))
+                      if pair[0] != pair[1]), min(len(events), len(expected_events)))
+        raise ValueError(f"policy execution order differs from graph at event {first}")
     if tuple(output.shape) != (1, spec["chunk_size"], spec["action_dim"]):
         raise ValueError(f"policy output shape differs: {tuple(output.shape)}")
     if not torch.isfinite(output).all():
@@ -117,6 +155,14 @@ def run(checkpoint_dir: Path) -> dict:
         "input_sha256": {name: hashlib.sha256(value.tobytes()).hexdigest()
                          for name, value in inputs.items()},
         "observed_module_calls": dict(counts),
+        "observed_layer_calls": {
+            "vision": sum(event.startswith("vision:") for event in events),
+            "vlm": sum(event.startswith("vlm:") for event in events),
+            "expert": sum(event.startswith("expert:") for event in events),
+        },
+        "graph_order_and_shapes_match_upstream": True,
+        "layer_event_sequence_sha256": hashlib.sha256(
+            "\n".join(events).encode()).hexdigest(),
         "action_embedding_upstream_max_abs_error": suffix_max_error,
         "output_shape": list(values.shape),
         "output_sha256": hashlib.sha256(values.tobytes()).hexdigest(),

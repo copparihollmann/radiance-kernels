@@ -154,11 +154,14 @@ def reduced_spec(spec: dict) -> dict:
     return result
 
 
-def check_small(model: str) -> dict:
+def check_small(model: str, layers: int = 2) -> dict:
     """A prefill followed by two cached decode steps must equal full prefill."""
+    if layers <= 0:
+        raise ValueError("layers must be positive")
     spec = reduced_spec(model_specs()[model])
     if spec["family"] == "smolvla":
         raise ValueError("SmolVLA needs a separate vision/action reference")
+    spec["num_hidden_layers"] = layers
     graph = build(model, prefill=3, decode_steps=2, specs={model: spec})
     token_ids = np.arange(1, 6, dtype=np.int32)
     inputs = {"prefill.token_ids": token_ids[:3][None],
@@ -170,18 +173,30 @@ def check_small(model: str) -> dict:
     maximum_error = float(np.max(np.abs(incremental - full_logits)))
     if not np.allclose(incremental, full_logits, rtol=1e-4, atol=1e-5):
         raise AssertionError(f"{model}: cached decode differs from full causal pass")
-    return {"model": model, "control": "synthetic_small_cached_decode_vs_full_prefill",
+    changed_inputs = dict(inputs)
+    changed_inputs["decode1.token_ids"] = token_ids[4:5][None] + 1
+    changed_logits = execute(graph, changed_inputs)[graph.outputs[-1]]
+    changed_token_delta = float(np.max(np.abs(incremental - changed_logits)))
+    if changed_token_delta <= 0:
+        raise AssertionError(f"{model}: final logits ignored the changed decode token")
+    return {"model": model, "layers": layers, "prefill_tokens": 3,
+            "decode_steps": 2, "graph_stages": len(graph.stages),
+            "control": "synthetic_small_cached_decode_vs_full_prefill",
             "passed": True, "maximum_absolute_error": maximum_error,
+            "changed_decode_token_max_abs_delta": changed_token_delta,
             "output_sha256": hashlib.sha256(incremental.tobytes()).hexdigest(),
-            "device_execution": False, "checkpoint_weights": False}
+            "device_execution": False, "checkpoint_weights": False,
+            "original_model_dimensions": False,
+            "upstream_execution_equivalent": False}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", choices=model_specs(), required=True)
+    parser.add_argument("--layers", type=int, default=2)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    result = check_small(args.model)
+    result = check_small(args.model, args.layers)
     text = json.dumps(result, indent=2) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
