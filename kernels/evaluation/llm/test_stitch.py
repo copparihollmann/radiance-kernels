@@ -13,6 +13,38 @@ from stitch import build, model_specs
 
 
 class ModelStitchTest(unittest.TestCase):
+    def test_full_decoder_graph_keeps_logical_head_and_cache_axes(self):
+        for model in ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it"):
+            with self.subTest(model=model):
+                spec = model_specs()[model]
+                graph = build(model, batch=1, prefill=3, decode_steps=1)
+                h = spec["hidden_size"]
+                qh = spec["num_attention_heads"]
+                kvh = spec["num_key_value_heads"]
+                d = spec["head_dim"]
+                f = spec["intermediate_size"]
+                expected = {
+                    "prefill.embedding": [1, 3, h],
+                    "prefill.layer00.q_proj": [1, 3, qh, d],
+                    "prefill.layer00.k_proj": [1, 3, kvh, d],
+                    "prefill.layer00.v_proj": [1, 3, kvh, d],
+                    "prefill.layer00.q_rope": [1, 3, qh, d],
+                    "prefill.layer00.k_cache": [1, 3, kvh, d],
+                    "prefill.layer00.attention": [1, 3, qh * d],
+                    "prefill.layer00.o_proj": [1, 3, h],
+                    "prefill.layer00.gate_proj": [1, 3, f],
+                    "decode0.layer00.k_cache": [1, 4, kvh, d],
+                    "decode0.layer00.v_cache": [1, 4, kvh, d],
+                }
+                for name, shape in expected.items():
+                    self.assertEqual(graph.tensors[name]["shape"], shape, name)
+                attention = next(stage for stage in graph.stages
+                                 if stage["id"] == "decode0.layer00.attention")
+                self.assertEqual(attention["attrs"]["query_start"], 3)
+                self.assertEqual(attention["attrs"]["q_heads"], qh)
+                self.assertEqual(attention["attrs"]["kv_heads"], kvh)
+                self.assertEqual(attention["attrs"]["head_dim"], d)
+
     def test_decoder_graphs_have_pinned_layers_and_complete_cache_chain(self):
         for model in ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it"):
             with self.subTest(model=model):
@@ -45,19 +77,35 @@ class ModelStitchTest(unittest.TestCase):
         graph = build("smolvla_base")
         ops = [stage["op"] for stage in graph.stages]
         self.assertEqual(ops.count("patch_embed"), 3)
+        self.assertEqual(ops.count("embedding_scale"), 4)
         self.assertEqual(ops.count("vlm_decoder_layer"), 16)
         self.assertEqual(ops.count("expert_self_attention_layer"), 80)
         self.assertEqual(ops.count("expert_cross_attention_layer"), 80)
         self.assertEqual(ops.count("euler_step"), 10)
         self.assertEqual(graph.tensors[graph.outputs[0]]["shape"], [1, 50, 32])
         self.assertEqual(graph.tensors["vlm.layer00.k_cache"]["shape"], [1, 241, 5, 64])
+        self.assertEqual(graph.tensors["camera0.scale"]["shape"], [1, 64, 960])
+        self.assertEqual(graph.tensors["prefix.attention_mask"]["shape"], [1, 241, 241])
+        self.assertEqual(graph.tensors["denoise0.attention_mask"]["shape"], [1, 50, 291])
+        self.assertEqual(graph.tensors["denoise0.position_ids"]["shape"], [1, 50])
         stages = {stage["id"]: stage for stage in graph.stages}
         self.assertEqual(stages["denoise0.euler"]["attrs"]["step_size"], -0.1)
         self.assertIn("vlm.layer00.k_cache", stages["denoise0.expert00.k_append"]["reads"])
-        self.assertIn("denoise0.expert00.k_crop",
+        self.assertIn("vlm.layer00.k_cache",
                       stages["denoise1.expert00.k_append"]["reads"])
         self.assertIn("vlm.layer01.k_cache", stages["denoise1.expert01"]["reads"])
+        self.assertIn("denoise1.attention_mask", stages["denoise1.expert01"]["reads"])
+        self.assertNotIn("cache_crop", ops)
         self.assertFalse(graph.report()["device_execution"])
+        self.assertFalse(graph.report()["network_execution_validated"])
+
+    def test_smolvla_rejects_unsupported_shape_changes(self):
+        original = model_specs()["smolvla_base"]
+        for change in ({"image_size": 500}, {"num_expert_layers": 8}):
+            with self.subTest(change=change):
+                spec = {**original, **change}
+                with self.assertRaises(ValueError):
+                    build("smolvla_base", specs={"smolvla_base": spec})
 
     def test_cached_decode_equals_full_prefill_on_small_numerical_controls(self):
         for model in ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it"):

@@ -1,0 +1,7 @@
+{
+  "lerobot_version": "v0.5.1",
+  "modeling_source": "https://raw.githubusercontent.com/huggingface/lerobot/v0.5.1/src/lerobot/policies/smolvla/modeling_smolvla.py",
+  "modeling_source_sha256": "be4463140f1abc5bce61f8a8c849ba6ba23f37777d19ad9159c2e1ffff60c1c5",
+  "expert_source": "https://raw.githubusercontent.com/huggingface/lerobot/v0.5.1/src/lerobot/policies/smolvla/smolvlm_with_expert.py",
+  "expert_source_sha256": "b70356145870c7da1e92a2195ee4626f7e9f9387576c6bed5ba2bfefae2a38d9"
+}

@@ -61,6 +61,8 @@ class Graph:
         return {
             "model": self.model, "source": self.spec["source"],
             "mode": "tensor_dataflow_plan",
+            "tensor_shapes": "logical_ranks_from_spec",
+            "network_execution_validated": False,
             "generation": getattr(self, "generation", None),
             "device_execution": False,
             "measured_cycles": None, "outputs": self.outputs,
@@ -174,6 +176,8 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
         raise ValueError("batch and prefill must be positive; decode_steps must be nonnegative")
     if spec["num_attention_heads"] % spec["num_key_value_heads"]:
         raise ValueError("query heads must be a multiple of KV heads")
+    if spec["head_dim"] % 2:
+        raise ValueError("rotary head dimension must be even")
     if generation not in ("teacher_forced", "greedy"):
         raise ValueError("generation must be teacher_forced or greedy")
     graph = Graph(model, spec)
@@ -195,34 +199,58 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
 def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
     if batch <= 0:
         raise ValueError("batch must be positive")
+    if spec["num_expert_layers"] != spec["num_vlm_layers"]:
+        raise ValueError("this SmolVLA graph requires one expert layer per VLM layer")
     graph = Graph(model, spec)
     image_size, patch = spec["image_size"], spec["patch_size"]
+    if image_size % (4 * patch):
+        raise ValueError("image size must be divisible by the 4x4 connector patch group")
     patches = (image_size // patch) ** 2
     image_tokens = patches // 16  # SmolVLM2 pixel shuffle factor 4 in each spatial axis.
     prefix_parts = []
+    camera_valids = []
     for camera in range(spec["image_cameras"]):
         image = graph.input(f"camera{camera}.image", (batch, 3, image_size, image_size), "fp32")
-        graph.input(f"camera{camera}.valid", (batch,), "bool")
+        camera_valids.append(graph.input(f"camera{camera}.valid", (batch,), "bool"))
         tokens = graph.add(f"camera{camera}.patch_embed", "patch_embed", (image,),
                            (batch, patches, spec["vision_hidden_size"]), "patch_embed")
         tokens = graph.add(f"camera{camera}.vision_encoder", "vision_encoder", (tokens,),
                            (batch, patches, spec["vision_hidden_size"]))
         tokens = graph.add(f"camera{camera}.connector", "pixel_shuffle_connector",
                            (tokens,), (batch, image_tokens, spec["vlm_hidden_size"]))
+        tokens = graph.add(f"camera{camera}.scale", "embedding_scale", (tokens,),
+                           (batch, image_tokens, spec["vlm_hidden_size"]),
+                           "embed_scale", {"scale": spec["vlm_hidden_size"] ** 0.5})
         prefix_parts.append(tokens)
     language = graph.input("language.ids", (batch, spec["language_tokens"]), "int32")
-    graph.input("language.valid", (batch, spec["language_tokens"]), "bool")
+    language_valid = graph.input("language.valid", (batch, spec["language_tokens"]), "bool")
     language = graph.add("language.embedding", "embedding", (language,),
                          (batch, spec["language_tokens"], spec["vlm_hidden_size"]))
+    language = graph.add("language.scale", "embedding_scale", (language,),
+                         (batch, spec["language_tokens"], spec["vlm_hidden_size"]),
+                         "embed_scale", {"scale": spec["vlm_hidden_size"] ** 0.5})
     state = graph.input("robot.state", (batch, spec["action_dim"]), "fp32")
     state = graph.add("robot.state_proj", "linear", (state,),
                       (batch, 1, spec["vlm_hidden_size"]), "gemm_mxgemmini")
     prefix_length = spec["image_cameras"] * image_tokens + spec["language_tokens"] + 1
     prefix = graph.add("prefix.merge", "multimodal_merge",
                        tuple(prefix_parts + [language, state] +
-                             [f"camera{camera}.valid" for camera in range(spec["image_cameras"])] +
-                             ["language.valid"]),
+                             camera_valids + [language_valid]),
                        (batch, prefix_length, spec["vlm_hidden_size"]))
+    prefix_pad = graph.add("prefix.pad_mask", "prefix_pad_mask",
+                           tuple(camera_valids + [language_valid]),
+                           (batch, prefix_length), dtype="bool",
+                           attrs={"image_tokens_per_camera": image_tokens,
+                                  "language_tokens": spec["language_tokens"],
+                                  "state_tokens": 1})
+    prefix_groups = graph.add("prefix.attention_groups", "prefix_attention_groups",
+                              (prefix_pad,), (batch, prefix_length), dtype="bool",
+                              attrs={"image_language_group": 0, "state_group": 1})
+    prefix_mask = graph.add("prefix.attention_mask", "prefix_attention_mask",
+                            (prefix_pad, prefix_groups),
+                            (batch, prefix_length, prefix_length), dtype="bool")
+    prefix_positions = graph.add("prefix.position_ids", "prefix_position_ids",
+                                 (prefix_pad,), (batch, prefix_length), dtype="int32")
     # The VLM prefill saves K/V separately at every layer. The cross-attention
     # expert layers read these saved tensors without appending suffix tokens.
     cache_shape = (batch, prefix_length, spec["vlm_num_key_value_heads"],
@@ -230,11 +258,14 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
     prefix_caches = {}
     for layer in range(spec["num_vlm_layers"]):
         layer_input = prefix
-        prefix = graph.add(f"vlm.layer{layer:02d}", "vlm_decoder_layer", (prefix,),
+        prefix = graph.add(f"vlm.layer{layer:02d}", "vlm_decoder_layer",
+                           (prefix, prefix_mask, prefix_positions),
                            (batch, prefix_length, spec["vlm_hidden_size"]))
-        key = graph.add(f"vlm.layer{layer:02d}.k_cache", "cache_capture", (layer_input,),
+        key = graph.add(f"vlm.layer{layer:02d}.k_cache", "cache_capture",
+                        (layer_input, prefix_positions),
                         cache_shape, attrs={"component": "k", "layer": layer})
-        value = graph.add(f"vlm.layer{layer:02d}.v_cache", "cache_capture", (layer_input,),
+        value = graph.add(f"vlm.layer{layer:02d}.v_cache", "cache_capture",
+                          (layer_input, prefix_positions),
                           cache_shape, attrs={"component": "v", "layer": layer})
         prefix_caches[layer] = (key, value)
     action = graph.input("action.noise", (batch, spec["chunk_size"],
@@ -245,6 +276,19 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
                            (action, timestep),
                            (batch, spec["chunk_size"], spec["expert_hidden_size"]),
                            attrs={"time": 1.0 - step / spec["num_denoise_steps"]})
+        suffix_pad = graph.add(f"denoise{step}.suffix_pad_mask", "suffix_pad_mask",
+                               (expert,), (batch, spec["chunk_size"]), dtype="bool")
+        suffix_groups = graph.add(f"denoise{step}.suffix_attention_groups",
+                                  "suffix_attention_groups", (suffix_pad,),
+                                  (batch, spec["chunk_size"]), dtype="bool",
+                                  attrs={"action_tokens_start_new_group": True})
+        suffix_mask = graph.add(f"denoise{step}.attention_mask", "suffix_attention_mask",
+                                (prefix_pad, suffix_pad, suffix_groups),
+                                (batch, spec["chunk_size"],
+                                 prefix_length + spec["chunk_size"]), dtype="bool")
+        suffix_positions = graph.add(f"denoise{step}.position_ids", "suffix_position_ids",
+                                     (prefix_pad, suffix_pad),
+                                     (batch, spec["chunk_size"]), dtype="int32")
         for layer in range(spec["num_expert_layers"]):
             mode = "self" if layer % spec["self_attn_every_n_layers"] == 0 else "cross"
             key, value = prefix_caches[layer]
@@ -252,27 +296,17 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
                 extended_shape = (batch, prefix_length + spec["chunk_size"],
                                   spec["vlm_num_key_value_heads"], spec["vlm_head_dim"])
                 key = graph.add(f"denoise{step}.expert{layer:02d}.k_append",
-                                "suffix_kv_append", (key, expert), extended_shape,
+                                "suffix_kv_append", (key, expert, suffix_positions), extended_shape,
                                 attrs={"component": "k", "layer": layer})
                 value = graph.add(f"denoise{step}.expert{layer:02d}.v_append",
-                                  "suffix_kv_append", (value, expert), extended_shape,
+                                  "suffix_kv_append", (value, expert, suffix_positions), extended_shape,
                                   attrs={"component": "v", "layer": layer})
             expert = graph.add(f"denoise{step}.expert{layer:02d}",
-                               f"expert_{mode}_attention_layer", (expert, key, value),
+                               f"expert_{mode}_attention_layer",
+                               (expert, key, value, suffix_mask, suffix_positions),
                                (batch, spec["chunk_size"], spec["expert_hidden_size"]),
                                attrs={"layer": layer, "cache_mode":
                                       "temporary_suffix" if mode == "self" else "read_prefix"})
-            if mode == "self":
-                # LeRobot crops the in-place cache to its prefix length after
-                # each denoising step, so the next step sees the same prefix.
-                prefix_caches[layer] = (
-                    graph.add(f"denoise{step}.expert{layer:02d}.k_crop",
-                              "cache_crop", (key, expert), cache_shape,
-                              attrs={"prefix_length": prefix_length}),
-                    graph.add(f"denoise{step}.expert{layer:02d}.v_crop",
-                              "cache_crop", (value, expert), cache_shape,
-                              attrs={"prefix_length": prefix_length}),
-                )
         velocity = graph.add(f"denoise{step}.action_out", "linear", (expert,),
                              (batch, spec["chunk_size"], spec["action_dim"]),
                              "gemm_mxgemmini")

@@ -19,20 +19,40 @@ buffers produced by the previous step. DeepSeek's pinned config has
 `use_sliding_window=false`; its declared window is therefore not applied.
 The default `teacher_forced` mode accepts fixed decode token IDs for checking;
 `--generation greedy` adds an argmax stage from each pass's last logits to the
-next pass's token input. The argmax stage has no device kernel yet.
+next pass's token input. The standalone PR #1 kernels have no argmax driver;
+the reduced connected build below includes one.
 The graph checks tensor definitions, positive shapes, and named kernel
 directories before export.
+The full-dimension tests keep query head, KV head, head width, sequence, and
+cache axes distinct. Gemma-2 is a useful check: its attention output width is
+`8 × 256 = 2048`, while the residual stream is 2304 wide; the output
+projection bridges those widths. A flat element count alone would miss this
+contract. The graph still needs checkpoint execution to establish numerical
+equivalence, especially for Gemma.
 
-SmolVLA's graph covers three image inputs, patch embedding, vision encoding,
+SmolVLA's graph starts after the policy's image resize/pad to `512×512`,
+state pad to 32 features, and language tokenization up to 48 tokens. It covers
+three image inputs, patch embedding, vision encoding,
 the connector, language and state inputs, 16 VLM layers with per-layer prefix
 K/V caches, and 10 action denoising iterations with 16 expert layers each.
-Self-attention temporarily appends action K/V then crops back to the prefix;
-cross-attention reads the prefix cache. The Euler steps run from time 1 to 0.
-It marks the
-vision encoder, multimodal connector, cross-attention, and action operations
+It keeps the prefix padding mask, attention mask, and position IDs as distinct
+logical tensors; each denoising step has a `[batch, action tokens, prefix + action
+tokens]` attention mask. Self-attention concatenates action K/V for its local
+attention call while later steps read the same prefix cache. Cross-attention
+reads that prefix cache directly. The Euler steps run from time 1 to 0.
+It marks the vision encoder, multimodal connector, cross-attention, and action operations
 as missing device stages. Its fixed 512-pixel and maximum-token shapes are
 planning assumptions from the pinned configs; real image preprocessing,
-padding, masks, and action-expert behavior still need a checkpoint reference.
+padding, mask values, and action-expert behavior still need a checkpoint
+reference. Image and language embedding scale stages are explicit. The mask
+tensors in the graph encode required rank and dependencies;
+they do not claim a mask implementation or numerical equivalence to LeRobot.
+The branch and cache-lifetime interpretation is checked against the pinned
+policy and backbone configs plus [LeRobot v0.5.1 sources](smolvla-implementation.json).
+That implementation concatenates suffix K/V for a self-attention call without
+replacing the stored prefix cache. The graph therefore keeps the prefix cache
+as the input to every denoising step. This source-level check does not replace
+a checkpoint run with real images, masks, and action outputs.
 
 Run, for example:
 
@@ -89,10 +109,16 @@ is access gated here, and SmolVLA still needs a complete numerical backend.
 The `kernel` field in a schedule means a standalone primitive exists. It does
 **not** mean that primitive accepts the preceding stage's output: PR #1
 generates fixed inputs and a separate ELF for each kernel. The first device
-milestone is a shared-buffer ABI for one checked TinyLlama decoder layer,
-including Q/K/V layout and KV append. Then tile all heads, repeat layers,
-bind pinned checkpoint weights and reference intermediate outputs, and run
-the same process for the other architectures. Only completed device runs can
+milestone now has a [connected reduced decoder build](../../model_chain/README.md)
+for TinyLlama, DeepSeek, and Gemma. It emits a single Radiance ELF per family,
+with shared activation/KV buffers, one synthetic decoder layer, prefill, and
+cached decode. Native checks compare every floating-point stage with this
+directory's NumPy executor; all three reduced builds also pass Cyclotron's
+functional device execution. One-token TinyLlama prefill followed by one cached
+decode step has passed VCS RTL; multi-token prefill plus decode still needs an
+RTL result, full-dimension tiling,
+real checkpoint weights, and MX-Gemmini integration. SmolVLA lacks complete
+vision and action numerical/device paths. Only completed device runs can
 produce end-to-end latency, utilization, cache, or memory measurements.
 
 This directory records candidate workload inputs for an initial Radiance

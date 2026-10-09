@@ -3,18 +3,23 @@
 
 import hashlib
 import json
+from pathlib import Path
 from urllib.request import urlopen
 
 from stitch import model_specs
 
 
-def fetch(url: str, expected_hash: str) -> dict:
+def fetch_bytes(url: str, expected_hash: str) -> bytes:
     with urlopen(url, timeout=30) as response:
         raw = response.read()
     digest = hashlib.sha256(raw).hexdigest()
     if digest != expected_hash:
-        raise ValueError(f"config SHA-256 mismatch: {url}")
-    return json.loads(raw)
+        raise ValueError(f"source SHA-256 mismatch: {url}")
+    return raw
+
+
+def fetch(url: str, expected_hash: str) -> dict:
+    return json.loads(fetch_bytes(url, expected_hash))
 
 
 def check_fields(spec: dict, config: dict, fields: tuple[str, ...]) -> None:
@@ -48,6 +53,8 @@ def main() -> None:
         raise ValueError("SmolVLA camera count differs")
     if policy["action_dim"] != config["max_action_dim"]:
         raise ValueError("SmolVLA action dimension differs")
+    if policy["action_dim"] != config["max_state_dim"]:
+        raise ValueError("SmolVLA padded state dimension differs")
     if (policy["language_tokens"] != config["tokenizer_max_length"]
             or [policy["image_size"]] * 2 != config["resize_imgs_with_padding"]
             or config["add_image_special_tokens"] or config["prefix_length"]):
@@ -71,7 +78,12 @@ def main() -> None:
         raise ValueError("SmolVLA VLM KV dimensions differ")
     if backbone["scale_factor"] != 4:
         raise ValueError("SmolVLA image connector scale differs")
-    print("smolvla_base: pinned policy and backbone configs match")
+    implementation = json.loads((Path(__file__).resolve().parent /
+                                 "smolvla-implementation.json").read_text())
+    for source, digest in (("modeling_source", "modeling_source_sha256"),
+                           ("expert_source", "expert_source_sha256")):
+        fetch_bytes(implementation[source], implementation[digest])
+    print("smolvla_base: pinned policy, backbone, and LeRobot sources match")
     print("gemma_2_2b_it: official config access gated; fields were not network-verified")
 
 
