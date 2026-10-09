@@ -52,6 +52,8 @@ def main() -> None:
         raise ValueError("SmolVLA graph does not model real-time chunking")
     if policy["num_denoise_steps"] != config["num_steps"]:
         raise ValueError("SmolVLA denoising step count differs")
+    if policy["min_period"] != config["min_period"] or policy["max_period"] != config["max_period"]:
+        raise ValueError("SmolVLA time embedding periods differ")
     if policy["image_cameras"] != sum(
             feature["type"] == "VISUAL" for feature in config["input_features"].values()):
         raise ValueError("SmolVLA camera count differs")
@@ -71,12 +73,19 @@ def main() -> None:
         raise ValueError("SmolVLA expert depth differs")
     backbone = fetch(policy["backbone_source"], policy["backbone_source_sha256"])
     if (policy["vlm_hidden_size"] != backbone["text_config"]["hidden_size"] or
+            policy["vlm_intermediate_size"] != backbone["text_config"]["intermediate_size"] or
+            policy["vlm_num_attention_heads"] !=
+            backbone["text_config"]["num_attention_heads"] or
             policy["vision_hidden_size"] != backbone["vision_config"]["hidden_size"] or
             policy["patch_size"] != backbone["vision_config"]["patch_size"]):
         raise ValueError("SmolVLA backbone dimensions differ")
     if policy["expert_hidden_size"] != int(backbone["text_config"]["hidden_size"] *
                                          config["expert_width_multiplier"]):
         raise ValueError("SmolVLA expert width differs")
+    expert_width = policy["expert_hidden_size"]
+    expert_intermediate = 256 * ((4 * int(2 * expert_width / 3) + 255) // 256)
+    if policy["expert_intermediate_size"] != expert_intermediate:
+        raise ValueError("SmolVLA expert FFN width differs")
     if (policy["vlm_num_key_value_heads"] != backbone["text_config"]["num_key_value_heads"]
             or policy["vlm_head_dim"] != backbone["text_config"]["head_dim"]):
         raise ValueError("SmolVLA VLM KV dimensions differ")

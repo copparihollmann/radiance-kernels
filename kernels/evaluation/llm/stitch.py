@@ -223,11 +223,19 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
         image = graph.input(f"camera{camera}.image", (batch, 3, image_size, image_size), "fp32")
         camera_valids.append(graph.input(f"camera{camera}.valid", (batch,), "bool"))
         tokens = graph.add(f"camera{camera}.patch_embed", "patch_embed", (image,),
-                           (batch, patches, spec["vision_hidden_size"]), "patch_embed")
+                           (batch, patches, spec["vision_hidden_size"]), "patch_embed",
+                           {"parameter_base": "model.vlm_with_expert.vlm.model.vision_model.embeddings"})
         tokens = graph.add(f"camera{camera}.vision_encoder", "vision_encoder", (tokens,),
-                           (batch, patches, spec["vision_hidden_size"]))
+                           (batch, patches, spec["vision_hidden_size"]),
+                           attrs={"parameter_base":
+                                  "model.vlm_with_expert.vlm.model.vision_model",
+                                  "num_layers": spec["num_vision_layers"]})
         tokens = graph.add(f"camera{camera}.connector", "pixel_shuffle_connector",
-                           (tokens,), (batch, image_tokens, spec["vlm_hidden_size"]))
+                           (tokens,), (batch, image_tokens, spec["vlm_hidden_size"]),
+                           attrs={"parameter": "model.vlm_with_expert.vlm.model.connector."
+                                  "modality_projection.proj.weight",
+                                  "checkpoint_shape": [spec["vlm_hidden_size"],
+                                                       16 * spec["vision_hidden_size"]]})
         tokens = graph.add(f"camera{camera}.scale", "embedding_scale", (tokens,),
                            (batch, image_tokens, spec["vlm_hidden_size"]),
                            "embed_scale", {"scale": spec["vlm_hidden_size"] ** 0.5})
@@ -237,13 +245,24 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
     language = graph.input("language.ids", (batch, spec["language_tokens"]), "int32")
     language_valid = graph.input("language.valid", (batch, spec["language_tokens"]), "bool")
     language = graph.add("language.embedding", "embedding", (language,),
-                         (batch, spec["language_tokens"], spec["vlm_hidden_size"]))
+                         (batch, spec["language_tokens"], spec["vlm_hidden_size"]),
+                         attrs={"parameter": "model.vlm_with_expert.vlm.model.text_model."
+                                "embed_tokens.weight",
+                                "checkpoint_shape": [spec["vlm_vocab_size"],
+                                                     spec["vlm_hidden_size"]],
+                                "vocab_size": spec["vlm_vocab_size"]})
     language = graph.add("language.scale", "embedding_scale", (language,),
                          (batch, spec["language_tokens"], spec["vlm_hidden_size"]),
                          "embed_scale", {"scale": spec["vlm_hidden_size"] ** 0.5})
     state = graph.input("robot.state", (batch, spec["action_dim"]), "fp32")
-    state = graph.add("robot.state_proj", "linear", (state,),
-                      (batch, 1, spec["vlm_hidden_size"]), "gemm_mxgemmini")
+    state = graph.add("robot.state_linear", "linear", (state,),
+                      (batch, 1, spec["vlm_hidden_size"]), "gemm_mxgemmini",
+                      {"parameter": "model.state_proj.weight",
+                       "weight_shape": [spec["action_dim"], spec["vlm_hidden_size"]],
+                       "checkpoint_shape": [spec["vlm_hidden_size"], spec["action_dim"]]})
+    state = graph.add("robot.state_proj", "bias_add", (state,),
+                      (batch, 1, spec["vlm_hidden_size"]), "qkv_bias",
+                      {"parameter": "model.state_proj.bias"})
     prefix_length = spec["image_cameras"] * image_tokens + spec["language_tokens"] + 1
     prefix = graph.add("prefix.merge", "multimodal_merge",
                        tuple(prefix_parts + [language, state] +
@@ -267,19 +286,85 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
     # expert layers read these saved tensors without appending suffix tokens.
     cache_shape = (batch, prefix_length, spec["vlm_num_key_value_heads"],
                    spec["vlm_head_dim"])
+    q_width = spec["vlm_num_attention_heads"] * spec["vlm_head_dim"]
+    kv_width = spec["vlm_num_key_value_heads"] * spec["vlm_head_dim"]
+    if q_width != spec["vlm_hidden_size"]:
+        raise ValueError("SmolVLA VLM query width differs from its attention output")
+
+    def linear(name: str, source: str, shape: tuple[int, ...],
+               parameter: str, kernel: str | None = "gemm_mxgemmini") -> str:
+        source_shape = graph.tensors[source]["shape"]
+        in_width = 1
+        for width in source_shape[2:]:
+            in_width *= width
+        out_width = 1
+        for width in shape[2:]:
+            out_width *= width
+        return graph.add(name, "linear", (source,), shape, kernel,
+                         {"parameter": parameter,
+                          "weight_shape": [in_width, out_width],
+                          "checkpoint_shape": [out_width, in_width]})
+
+    def norm(name: str, source: str, width: int, parameter: str) -> str:
+        shape = tuple(graph.tensors[source]["shape"][:-1]) + (width,)
+        return graph.add(name, "rmsnorm", (source,), shape, "rmsnorm_qkv_fused",
+                         {"parameter": parameter, "epsilon": 1e-5,
+                          "gemma_weight_offset": False})
+
+    def feed_forward(base: str, hidden: str, residual: str,
+                     width: int, intermediate: int, parameter_base: str) -> str:
+        tokens = graph.tensors[hidden]["shape"][1]
+        ffn_in = norm(f"{base}.ffn_norm", hidden, width,
+                      f"{parameter_base}.post_attention_layernorm.weight")
+        gate = linear(f"{base}.gate_proj", ffn_in, (batch, tokens, intermediate),
+                      f"{parameter_base}.mlp.gate_proj.weight")
+        up = linear(f"{base}.up_proj", ffn_in, (batch, tokens, intermediate),
+                    f"{parameter_base}.mlp.up_proj.weight")
+        activated = graph.add(f"{base}.activation", "gated_activation", (gate, up),
+                              (batch, tokens, intermediate), "swiglu",
+                              {"function": "silu"})
+        down = linear(f"{base}.down_proj", activated, (batch, tokens, width),
+                      f"{parameter_base}.mlp.down_proj.weight")
+        return graph.add(f"{base}.ffn_residual", "add", (residual, down),
+                         (batch, tokens, width), "vecadd")
+
+    vlm_parameter_base = "model.vlm_with_expert.vlm.model.text_model"
+    expert_parameter_base = "model.vlm_with_expert.lm_expert"
     prefix_caches = {}
     for layer in range(spec["num_vlm_layers"]):
-        layer_input = prefix
-        prefix = graph.add(f"vlm.layer{layer:02d}", "vlm_decoder_layer",
-                           (prefix, prefix_mask, prefix_positions),
-                           (batch, prefix_length, spec["vlm_hidden_size"]))
-        key = graph.add(f"vlm.layer{layer:02d}.k_cache", "cache_capture",
-                        (layer_input, prefix_positions),
-                        cache_shape, attrs={"component": "k", "layer": layer})
-        value = graph.add(f"vlm.layer{layer:02d}.v_cache", "cache_capture",
-                          (layer_input, prefix_positions),
-                          cache_shape, attrs={"component": "v", "layer": layer})
+        base = f"vlm.layer{layer:02d}"
+        params = f"{vlm_parameter_base}.layers.{layer}"
+        attn_in = norm(f"{base}.input_norm", prefix, spec["vlm_hidden_size"],
+                       f"{params}.input_layernorm.weight")
+        q = linear(f"{base}.q_proj", attn_in,
+                   (batch, prefix_length, spec["vlm_num_attention_heads"], spec["vlm_head_dim"]),
+                   f"{params}.self_attn.q_proj.weight")
+        k = linear(f"{base}.k_proj", attn_in, cache_shape,
+                   f"{params}.self_attn.k_proj.weight")
+        value = linear(f"{base}.v_cache", attn_in, cache_shape,
+                       f"{params}.self_attn.v_proj.weight")
+        q = graph.add(f"{base}.q_rope", "rope_with_positions", (q, prefix_positions),
+                      (batch, prefix_length, spec["vlm_num_attention_heads"],
+                       spec["vlm_head_dim"]))
+        key = graph.add(f"{base}.k_cache", "rope_with_positions", (k, prefix_positions),
+                        cache_shape)
         prefix_caches[layer] = (key, value)
+        attn = graph.add(f"{base}.attention", "masked_gqa",
+                         (q, key, value, prefix_mask),
+                         (batch, prefix_length, q_width),
+                         attrs={"q_heads": spec["vlm_num_attention_heads"],
+                                "kv_heads": spec["vlm_num_key_value_heads"],
+                                "head_dim": spec["vlm_head_dim"]})
+        attn_out = linear(f"{base}.o_proj", attn,
+                          (batch, prefix_length, spec["vlm_hidden_size"]),
+                          f"{params}.self_attn.o_proj.weight")
+        after_attn = graph.add(f"{base}.attn_residual", "add", (prefix, attn_out),
+                               (batch, prefix_length, spec["vlm_hidden_size"]), "vecadd")
+        prefix = feed_forward(base, after_attn, after_attn,
+                              spec["vlm_hidden_size"], spec["vlm_intermediate_size"],
+                              params)
+    prefix = norm("vlm.final_norm", prefix, spec["vlm_hidden_size"],
+                  f"{vlm_parameter_base}.norm.weight")
     prefix_stages = [stage["id"] for stage in graph.stages]
     action = graph.input("action.noise", (batch, spec["chunk_size"],
                                           spec["action_dim"]), "fp32")
@@ -291,10 +376,38 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
         time = 1.0 + step * step_size
         timestep = graph.add(f"denoise{step}.timestep", "timestep_constant", (),
                              (batch,), attrs={"value": time}, dtype="fp32")
-        expert = graph.add(f"denoise{step}.action_embed", "action_time_embed",
-                           (action, timestep),
+        action_projection = linear(f"denoise{step}.action_in_linear", action,
+                                   (batch, spec["chunk_size"], spec["expert_hidden_size"]),
+                                   "model.action_in_proj.weight")
+        action_projection = graph.add(f"denoise{step}.action_in", "bias_add",
+                                      (action_projection,),
+                                      (batch, spec["chunk_size"], spec["expert_hidden_size"]),
+                                      "qkv_bias", {"parameter": "model.action_in_proj.bias"})
+        time_embedding = graph.add(f"denoise{step}.time_embedding",
+                                   "sinusoidal_time_embedding", (timestep,),
+                                   (batch, spec["expert_hidden_size"]),
+                                   attrs={"min_period": spec["min_period"],
+                                          "max_period": spec["max_period"]})
+        time_broadcast = graph.add(f"denoise{step}.time_broadcast", "broadcast_tokens",
+                                   (time_embedding,),
+                                   (batch, spec["chunk_size"], spec["expert_hidden_size"]))
+        action_time = graph.add(f"denoise{step}.action_time_concat", "concat_features",
+                                (action_projection, time_broadcast),
+                                (batch, spec["chunk_size"], 2 * spec["expert_hidden_size"]))
+        expert = linear(f"denoise{step}.action_time_mlp_in_linear", action_time,
+                        (batch, spec["chunk_size"], spec["expert_hidden_size"]),
+                        "model.action_time_mlp_in.weight")
+        expert = graph.add(f"denoise{step}.action_time_mlp_in", "bias_add", (expert,),
                            (batch, spec["chunk_size"], spec["expert_hidden_size"]),
-                           attrs={"time": time})
+                           "qkv_bias", {"parameter": "model.action_time_mlp_in.bias"})
+        expert = graph.add(f"denoise{step}.action_time_silu", "silu", (expert,),
+                           (batch, spec["chunk_size"], spec["expert_hidden_size"]))
+        expert = linear(f"denoise{step}.action_time_mlp_out_linear", expert,
+                        (batch, spec["chunk_size"], spec["expert_hidden_size"]),
+                        "model.action_time_mlp_out.weight")
+        expert = graph.add(f"denoise{step}.action_embed", "bias_add", (expert,),
+                           (batch, spec["chunk_size"], spec["expert_hidden_size"]),
+                           "qkv_bias", {"parameter": "model.action_time_mlp_out.bias"})
         suffix_pad = graph.add(f"denoise{step}.suffix_pad_mask", "suffix_pad_mask",
                                (expert,), (batch, spec["chunk_size"]), dtype="bool")
         suffix_groups = graph.add(f"denoise{step}.suffix_attention_groups",
@@ -308,34 +421,83 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
         suffix_positions = graph.add(f"denoise{step}.position_ids", "suffix_position_ids",
                                      (prefix_pad, suffix_pad),
                                      (batch, spec["chunk_size"]), dtype="int32")
+        local_positions = graph.add(f"denoise{step}.local_position_ids",
+                                    "suffix_local_position_ids", (suffix_positions,),
+                                    (batch, spec["chunk_size"]), dtype="int32")
         for layer in range(spec["num_expert_layers"]):
             mode = "self" if layer % spec["self_attn_every_n_layers"] == 0 else "cross"
+            base = f"denoise{step}.expert{layer:02d}"
+            params = f"{expert_parameter_base}.layers.{layer}"
+            attn_in = norm(f"{base}.input_norm", expert, spec["expert_hidden_size"],
+                           f"{params}.input_layernorm.weight")
+            q = linear(f"{base}.q_proj", attn_in,
+                       (batch, spec["chunk_size"], spec["vlm_num_attention_heads"],
+                        spec["vlm_head_dim"]), f"{params}.self_attn.q_proj.weight")
+            q = graph.add(f"{base}.q_rope", "rope_with_positions",
+                          (q, suffix_positions if mode == "self" else local_positions),
+                          (batch, spec["chunk_size"], spec["vlm_num_attention_heads"],
+                           spec["vlm_head_dim"]))
             key, value = prefix_caches[layer]
             if mode == "self":
+                suffix_shape = (batch, spec["chunk_size"],
+                                spec["vlm_num_key_value_heads"], spec["vlm_head_dim"])
+                suffix_key = linear(f"{base}.k_proj", attn_in, suffix_shape,
+                                    f"{params}.self_attn.k_proj.weight")
+                suffix_value = linear(f"{base}.v_proj", attn_in, suffix_shape,
+                                      f"{params}.self_attn.v_proj.weight")
+                suffix_key = graph.add(f"{base}.k_rope", "rope_with_positions",
+                                       (suffix_key, suffix_positions), suffix_shape)
                 extended_shape = (batch, prefix_length + spec["chunk_size"],
                                   spec["vlm_num_key_value_heads"], spec["vlm_head_dim"])
-                key = graph.add(f"denoise{step}.expert{layer:02d}.k_append",
-                                "suffix_kv_append", (key, expert, suffix_positions), extended_shape,
+                key = graph.add(f"{base}.k_append", "suffix_kv_append",
+                                (key, suffix_key), extended_shape,
                                 attrs={"component": "k", "layer": layer})
-                value = graph.add(f"denoise{step}.expert{layer:02d}.v_append",
-                                  "suffix_kv_append", (value, expert, suffix_positions), extended_shape,
+                value = graph.add(f"{base}.v_append", "suffix_kv_append",
+                                  (value, suffix_value), extended_shape,
                                   attrs={"component": "v", "layer": layer})
-            expert = graph.add(f"denoise{step}.expert{layer:02d}",
-                               f"expert_{mode}_attention_layer",
-                               (expert, key, value, suffix_mask, suffix_positions),
-                               (batch, spec["chunk_size"], spec["expert_hidden_size"]),
-                               attrs={"layer": layer, "cache_mode":
-                                      "temporary_suffix" if mode == "self" else "read_prefix"})
-        velocity = graph.add(f"denoise{step}.action_out", "linear", (expert,),
+                attention_mask = suffix_mask
+            else:
+                key = linear(f"{base}.k_cross_proj", key, cache_shape,
+                             f"{params}.self_attn.k_proj.weight")
+                value = linear(f"{base}.v_cross_proj", value, cache_shape,
+                               f"{params}.self_attn.v_proj.weight")
+                attention_mask = graph.add(f"{base}.cross_attention_mask",
+                                           "prefix_attention_slice", (suffix_mask,),
+                                           (batch, spec["chunk_size"], prefix_length),
+                                           dtype="bool")
+            attn = graph.add(f"{base}.attention", "masked_gqa",
+                             (q, key, value, attention_mask),
+                             (batch, spec["chunk_size"], q_width),
+                             attrs={"q_heads": spec["vlm_num_attention_heads"],
+                                    "kv_heads": spec["vlm_num_key_value_heads"],
+                                    "head_dim": spec["vlm_head_dim"],
+                                    "mode": mode,
+                                    "cache_mode": "temporary_suffix" if mode == "self"
+                                    else "read_prefix"})
+            attn_out = linear(f"{base}.o_proj", attn,
+                              (batch, spec["chunk_size"], spec["expert_hidden_size"]),
+                              f"{params}.self_attn.o_proj.weight")
+            after_attn = graph.add(f"{base}.attn_residual", "add", (expert, attn_out),
+                                   (batch, spec["chunk_size"], spec["expert_hidden_size"]),
+                                   "vecadd")
+            expert = feed_forward(base, after_attn, after_attn,
+                                  spec["expert_hidden_size"],
+                                  spec["expert_intermediate_size"], params)
+        expert = norm(f"denoise{step}.expert_final_norm", expert,
+                      spec["expert_hidden_size"], f"{expert_parameter_base}.norm.weight")
+        velocity = linear(f"denoise{step}.action_out_linear", expert,
+                          (batch, spec["chunk_size"], spec["action_dim"]),
+                          "model.action_out_proj.weight")
+        velocity = graph.add(f"denoise{step}.action_out", "bias_add", (velocity,),
                              (batch, spec["chunk_size"], spec["action_dim"]),
-                             "gemm_mxgemmini")
+                             "qkv_bias", {"parameter": "model.action_out_proj.bias"})
         action = graph.add(f"denoise{step}.euler", "euler_step", (action, velocity),
                            (batch, spec["chunk_size"], spec["action_dim"]),
                            attrs={"step_size": step_size})
         denoise_iterations.append({
             "step": step, "time": time, "action_input": action_input,
             "action_output": action,
-            "expert_layers": [f"denoise{step}.expert{layer:02d}"
+            "expert_layers": [f"denoise{step}.expert{layer:02d}.ffn_residual"
                               for layer in range(spec["num_expert_layers"])],
             "stages": [stage["id"] for stage in graph.stages[iteration_start:]],
         })
@@ -354,7 +516,7 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
             "camera_branches": camera_branches,
             "vision_encoder_internal_layers": "opaque",
             "stages": prefix_stages,
-            "vlm_layers": [f"vlm.layer{layer:02d}"
+            "vlm_layers": [f"vlm.layer{layer:02d}.ffn_residual"
                            for layer in range(spec["num_vlm_layers"])],
             "read_only_cache": [name for pair in prefix_caches.values() for name in pair],
         },

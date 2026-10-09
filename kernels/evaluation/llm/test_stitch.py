@@ -78,9 +78,8 @@ class ModelStitchTest(unittest.TestCase):
         ops = [stage["op"] for stage in graph.stages]
         self.assertEqual(ops.count("patch_embed"), 3)
         self.assertEqual(ops.count("embedding_scale"), 4)
-        self.assertEqual(ops.count("vlm_decoder_layer"), 16)
-        self.assertEqual(ops.count("expert_self_attention_layer"), 80)
-        self.assertEqual(ops.count("expert_cross_attention_layer"), 80)
+        self.assertEqual(ops.count("masked_gqa"), 16 + 10 * 16)
+        self.assertEqual(ops.count("gated_activation"), 16 + 10 * 16)
         self.assertEqual(ops.count("euler_step"), 10)
         self.assertEqual(graph.tensors[graph.outputs[0]]["shape"], [1, 50, 32])
         self.assertEqual(graph.tensors["vlm.layer00.k_cache"]["shape"], [1, 241, 5, 64])
@@ -90,11 +89,17 @@ class ModelStitchTest(unittest.TestCase):
         self.assertEqual(graph.tensors["denoise0.position_ids"]["shape"], [1, 50])
         stages = {stage["id"]: stage for stage in graph.stages}
         self.assertEqual(stages["denoise0.euler"]["attrs"]["step_size"], -0.1)
+        self.assertEqual(stages["vlm.layer00.k_cache"]["op"], "rope_with_positions")
+        self.assertIn("vlm.layer00.k_proj", stages["vlm.layer00.k_cache"]["reads"])
         self.assertIn("vlm.layer00.k_cache", stages["denoise0.expert00.k_append"]["reads"])
         self.assertIn("vlm.layer00.k_cache",
                       stages["denoise1.expert00.k_append"]["reads"])
-        self.assertIn("vlm.layer01.k_cache", stages["denoise1.expert01"]["reads"])
-        self.assertIn("denoise1.attention_mask", stages["denoise1.expert01"]["reads"])
+        self.assertIn("vlm.layer01.k_cache",
+                      stages["denoise1.expert01.k_cross_proj"]["reads"])
+        self.assertIn("denoise1.expert01.cross_attention_mask",
+                      stages["denoise1.expert01.attention"]["reads"])
+        self.assertIn("denoise1.local_position_ids",
+                      stages["denoise1.expert01.q_rope"]["reads"])
         self.assertNotIn("cache_crop", ops)
         self.assertFalse(graph.report()["device_execution"])
         self.assertFalse(graph.report()["network_execution_validated"])
@@ -119,6 +124,7 @@ class ModelStitchTest(unittest.TestCase):
         prefix = schedule["prefix_once_per_refill"]
         self.assertEqual(len(prefix["camera_branches"]), 3)
         self.assertEqual(len(prefix["vlm_layers"]), 16)
+        self.assertEqual(prefix["vlm_layers"][0], "vlm.layer00.ffn_residual")
         self.assertEqual(len(prefix["read_only_cache"]), 32)
         self.assertEqual(prefix["vision_encoder_internal_layers"], "opaque")
 
@@ -139,8 +145,15 @@ class ModelStitchTest(unittest.TestCase):
             timestep = stage_ids[f"denoise{step}.timestep"]
             self.assertEqual(timestep["op"], "timestep_constant")
             self.assertAlmostEqual(timestep["attrs"]["value"], iteration["time"])
-            self.assertEqual(stage_ids[f"denoise{step}.action_embed"]["reads"],
-                             [carried_action, timestep["id"]])
+            self.assertEqual(stage_ids[f"denoise{step}.action_in_linear"]["reads"],
+                             [carried_action])
+            self.assertEqual(stage_ids[f"denoise{step}.time_embedding"]["reads"],
+                             [timestep["id"]])
+            self.assertEqual(stage_ids[f"denoise{step}.action_time_concat"]["reads"],
+                             [f"denoise{step}.action_in",
+                              f"denoise{step}.time_broadcast"])
+            self.assertEqual(stage_ids[f"denoise{step}.action_embed"]["attrs"]["parameter"],
+                             "model.action_time_mlp_out.bias")
             self.assertEqual(stage_ids[f"denoise{step}.euler"]["reads"],
                              [carried_action, f"denoise{step}.action_out"])
             for cache in prefix["read_only_cache"]:

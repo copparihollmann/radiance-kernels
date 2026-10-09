@@ -35,6 +35,12 @@ state pad to 32 features, and language tokenization up to 48 tokens. It covers
 three image inputs, patch embedding, vision encoding,
 the connector, language and state inputs, 16 VLM layers with per-layer prefix
 K/V caches, and 10 action denoising iterations with 16 expert layers each.
+The VLM and expert layers expose their RMSNorm, Q/K/V projection, RoPE,
+masked attention, output projection, residual, and gated FFN stages. Prefix
+K/V is captured after projection and K rotation. Cross-attention projects the
+stored prefix K/V into the expert space; self-attention appends temporary
+action K/V. The logical graph uses the checkpoint's 960-wide VLM stream,
+720-wide expert stream, 15 query heads, 5 KV heads, and 64-element head width.
 The JSON `execution_schedule` records the loop boundaries as well as the
 flattened dependencies. One `sample_actions` call builds the camera embeddings
 and prefix cache once. It then runs 10 sequential denoising iterations. Each
@@ -42,7 +48,7 @@ iteration evaluates 16 ordered expert layers, alternating self- and
 cross-attention, and carries the updated 50-token action tensor into the next
 iteration. The timestep is a generated constant `1 - step/10`, and the Euler
 update uses `-1/10`. The prefix K/V tensors remain read-only throughout those
-iterations. The SigLIP vision encoder's internal layers are still one opaque
+iterations. The SigLIP vision encoder's 12 internal layers are still one opaque
 stage per camera; their loops have not been decomposed into device operations.
 At the policy boundary, `select_action` refills its queue with one 50-action
 chunk when empty, then returns one action per call, unpadded from 32 to 6
@@ -67,6 +73,44 @@ That implementation concatenates suffix K/V for a self-attention call without
 replacing the stored prefix cache. The graph therefore keeps the prefix cache
 as the input to every denoising step. This source-level check does not replace
 a checkpoint run with real images, masks, and action outputs.
+
+The [SmolVLA checkpoint binding check](smolvla-checkpoint-bindings.json) reads
+the real pinned `model.safetensors` header. All 500 tensors are accounted for:
+302 distinct parameters bind to explicit stages, 197 belong to the still-opaque
+vision path, and the unused language-model head is the remaining tensor. The
+explicit stages reuse those parameters 1,681 times across the denoising loop.
+Names and shapes match the checkpoint; this is a static binding check, not
+numerical execution.
+
+The graph currently has 3,022 stages. Existing standalone primitives are
+identified for 2,212 stages; 810 stages still have no device implementation.
+The JSON breaks those gaps down by operator. A primitive annotation does not
+imply that the stage is wired into a shared-buffer executable.
+
+Regenerate the binding and gap record with:
+
+```sh
+python3 kernels/evaluation/llm/verify_smolvla_checkpoint.py \
+  --checkpoint-dir /path/to/lerobot/smolvla_base/snapshot \
+  --out kernels/evaluation/llm/smolvla-checkpoint-bindings.json
+```
+
+The [action embedding control](smolvla-action-pytorch-results.json) executes
+the six real action/time embedding tensors for one 50-token chunk at time 1.
+The separate NumPy and PyTorch calculations agree at every stage; the largest
+absolute error is `1.08e-6`. The [NumPy result](smolvla-action-results.json)
+records stage hashes and confirms that changing either time or action input
+changes the output. This follows the pinned `embed_suffix` formula without
+instantiating the full LeRobot policy. It does not validate vision, expert
+attention, ten-step denoising, or a Radiance executable. The PyTorch check uses
+an optional local environment with `torch`, `safetensors`, and `numpy`:
+
+```sh
+python3 kernels/evaluation/llm/smolvla_action_reference.py \
+  --checkpoint-dir /path/to/lerobot/smolvla_base/snapshot
+python3 kernels/evaluation/llm/verify_smolvla_action.py \
+  --checkpoint-dir /path/to/lerobot/smolvla_base/snapshot
+```
 
 Run, for example:
 

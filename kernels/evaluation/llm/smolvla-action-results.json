@@ -1,0 +1,31 @@
+{
+  "model": "smolvla_base",
+  "scope": "checkpoint_action_time_embedding_only",
+  "checkpoint_revision": "c83c3163b8ca9b7e67c509fffd9121e66cb96205",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "input_shape": [
+    1,
+    50,
+    32
+  ],
+  "output_shape": [
+    1,
+    50,
+    720
+  ],
+  "timestep": 1.0,
+  "stage_output_sha256": {
+    "action_projection": "aa02e101ac66fdac6ee2b6beebb1c56d21fb491779947ef5d81d494c458788dc",
+    "time_embedding": "6d89e80149a916b5b87006ed6fba4bc653ff2b81f9a819ac8e24340ded4ae224",
+    "action_time_concat": "da0e7b28f5d47262ff28ce01348722c2662c44bdbbc675f5925dfde56f8b7900",
+    "mlp_in": "c51a26159b3dea98b479b9e8ff60f2f23938f6a5f57358954d7bdf8ed040d0be",
+    "activation": "a9357d90c1c06e7b7b27165e404327cdf2e8a6f367a46fe139fa7d65b5d462b4",
+    "output": "dae564615b8a2b1f47dddc9d223986cf3b32ced96e8ae9d656e00d5120650791"
+  },
+  "time_change_max_abs_delta": 0.8417171239852905,
+  "action_change_max_abs_delta": 0.039107322692871094,
+  "all_finite": true,
+  "upstream_pytorch_comparison": false,
+  "full_model_execution": false,
+  "device_execution": false
+}
