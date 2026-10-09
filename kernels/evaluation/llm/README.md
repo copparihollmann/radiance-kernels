@@ -35,11 +35,25 @@ state pad to 32 features, and language tokenization up to 48 tokens. It covers
 three image inputs, patch embedding, vision encoding,
 the connector, language and state inputs, 16 VLM layers with per-layer prefix
 K/V caches, and 10 action denoising iterations with 16 expert layers each.
+The JSON `execution_schedule` records the loop boundaries as well as the
+flattened dependencies. One `sample_actions` call builds the camera embeddings
+and prefix cache once. It then runs 10 sequential denoising iterations. Each
+iteration evaluates 16 ordered expert layers, alternating self- and
+cross-attention, and carries the updated 50-token action tensor into the next
+iteration. The timestep is a generated constant `1 - step/10`, and the Euler
+update uses `-1/10`. The prefix K/V tensors remain read-only throughout those
+iterations. The SigLIP vision encoder's internal layers are still one opaque
+stage per camera; their loops have not been decomposed into device operations.
+At the policy boundary, `select_action` refills its queue with one 50-action
+chunk when empty, then returns one action per call, unpadded from 32 to 6
+features. These queue operations are schedule metadata, outside the graph's
+`sample_actions` scope. The pinned configuration has no real-time chunking
+configuration; that alternate path is not represented.
 It keeps the prefix padding mask, attention mask, and position IDs as distinct
 logical tensors; each denoising step has a `[batch, action tokens, prefix + action
 tokens]` attention mask. Self-attention concatenates action K/V for its local
 attention call while later steps read the same prefix cache. Cross-attention
-reads that prefix cache directly. The Euler steps run from time 1 to 0.
+reads that prefix cache directly. The last Euler update reaches time 0.
 It marks the vision encoder, multimodal connector, cross-attention, and action operations
 as missing device stages. Its fixed 512-pixel and maximum-token shapes are
 planning assumptions from the pinned configs; real image preprocessing,

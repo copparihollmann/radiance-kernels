@@ -70,6 +70,8 @@
     "self_attn_every_n_layers": 2,
     "language_tokens": 48,
     "chunk_size": 50,
+    "n_action_steps": 50,
+    "output_action_dim": 6,
     "action_dim": 32,
     "num_denoise_steps": 10
   }

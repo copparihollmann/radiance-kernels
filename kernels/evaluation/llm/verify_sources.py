@@ -45,7 +45,11 @@ def main() -> None:
 
     policy = specs["smolvla_base"]
     config = fetch(policy["source"], policy["source_sha256"])
-    check_fields(policy, config, ("num_vlm_layers", "chunk_size"))
+    check_fields(policy, config, ("num_vlm_layers", "chunk_size", "n_action_steps"))
+    if policy["output_action_dim"] != config["output_features"]["action"]["shape"][0]:
+        raise ValueError("SmolVLA returned action dimension differs")
+    if config.get("rtc_config") is not None:
+        raise ValueError("SmolVLA graph does not model real-time chunking")
     if policy["num_denoise_steps"] != config["num_steps"]:
         raise ValueError("SmolVLA denoising step count differs")
     if policy["image_cameras"] != sum(

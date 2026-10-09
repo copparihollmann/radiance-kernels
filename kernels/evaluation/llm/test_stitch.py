@@ -107,6 +107,55 @@ class ModelStitchTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     build("smolvla_base", specs={"smolvla_base": spec})
 
+    def test_smolvla_schedule_preserves_nested_loops_and_action_queue(self):
+        graph = build("smolvla_base")
+        schedule = graph.report()["execution_schedule"]
+        self.assertEqual(schedule["entrypoint"], "sample_actions")
+        queue = schedule["policy_select_action"]
+        self.assertEqual(queue["queued_actions_per_refill"], 50)
+        self.assertEqual(queue["returned_action_dim"], 6)
+        self.assertEqual(queue["model_calls_per_refill"], 1)
+
+        prefix = schedule["prefix_once_per_refill"]
+        self.assertEqual(len(prefix["camera_branches"]), 3)
+        self.assertEqual(len(prefix["vlm_layers"]), 16)
+        self.assertEqual(len(prefix["read_only_cache"]), 32)
+        self.assertEqual(prefix["vision_encoder_internal_layers"], "opaque")
+
+        loop = schedule["denoise_loop"]
+        self.assertEqual(len(loop["iterations"]), 10)
+        self.assertEqual(loop["expert_attention_mode"], ["self", "cross"] * 8)
+        self.assertEqual(loop["step_size"], -0.1)
+        stage_ids = {stage["id"]: stage for stage in graph.stages}
+        scheduled = list(prefix["stages"])
+        carried_action = "action.noise"
+        for step, iteration in enumerate(loop["iterations"]):
+            self.assertEqual(iteration["step"], step)
+            self.assertAlmostEqual(iteration["time"], 1.0 - step / 10)
+            self.assertEqual(iteration["action_input"], carried_action)
+            self.assertEqual(len(iteration["expert_layers"]), 16)
+            self.assertEqual(iteration["stages"][0], f"denoise{step}.timestep")
+            self.assertEqual(iteration["stages"][-1], f"denoise{step}.euler")
+            timestep = stage_ids[f"denoise{step}.timestep"]
+            self.assertEqual(timestep["op"], "timestep_constant")
+            self.assertAlmostEqual(timestep["attrs"]["value"], iteration["time"])
+            self.assertEqual(stage_ids[f"denoise{step}.action_embed"]["reads"],
+                             [carried_action, timestep["id"]])
+            self.assertEqual(stage_ids[f"denoise{step}.euler"]["reads"],
+                             [carried_action, f"denoise{step}.action_out"])
+            for cache in prefix["read_only_cache"]:
+                self.assertIn(cache, graph.tensors)
+                self.assertNotIn(cache, iteration["stages"])
+            scheduled.extend(iteration["stages"])
+            carried_action = iteration["action_output"]
+        self.assertEqual(scheduled, [stage["id"] for stage in graph.stages])
+        self.assertEqual(graph.outputs, [carried_action])
+
+    def test_smolvla_rejects_zero_length_denoise_loop(self):
+        spec = {**model_specs()["smolvla_base"], "num_denoise_steps": 0}
+        with self.assertRaises(ValueError):
+            build("smolvla_base", specs={"smolvla_base": spec})
+
     def test_cached_decode_equals_full_prefill_on_small_numerical_controls(self):
         for model in ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it"):
             with self.subTest(model=model):

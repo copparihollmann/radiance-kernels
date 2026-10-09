@@ -29,6 +29,7 @@ class Graph:
         self.tensors: dict[str, dict] = {}
         self.stages: list[dict] = []
         self.outputs: list[str] = []
+        self.execution_schedule: dict | None = None
 
     def input(self, name: str, shape: tuple[int, ...], dtype: str = "bf16") -> str:
         self._tensor(name, shape, dtype)
@@ -67,6 +68,7 @@ class Graph:
             "device_execution": False,
             "measured_cycles": None, "outputs": self.outputs,
             "stage_count": len(self.stages), "stage_status": dict(counts),
+            "execution_schedule": self.execution_schedule,
             "tensors": self.tensors, "stages": self.stages,
         }
 
@@ -201,6 +203,12 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
         raise ValueError("batch must be positive")
     if spec["num_expert_layers"] != spec["num_vlm_layers"]:
         raise ValueError("this SmolVLA graph requires one expert layer per VLM layer")
+    if spec["num_denoise_steps"] <= 0 or spec["self_attn_every_n_layers"] <= 0:
+        raise ValueError("SmolVLA loop counts and attention interval must be positive")
+    if not 0 < spec["n_action_steps"] <= spec["chunk_size"]:
+        raise ValueError("SmolVLA queued action count must fit the generated chunk")
+    if not 0 < spec["output_action_dim"] <= spec["action_dim"]:
+        raise ValueError("SmolVLA returned action width must fit the padded action")
     graph = Graph(model, spec)
     image_size, patch = spec["image_size"], spec["patch_size"]
     if image_size % (4 * patch):
@@ -209,7 +217,9 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
     image_tokens = patches // 16  # SmolVLM2 pixel shuffle factor 4 in each spatial axis.
     prefix_parts = []
     camera_valids = []
+    camera_branches = []
     for camera in range(spec["image_cameras"]):
+        camera_start = len(graph.stages)
         image = graph.input(f"camera{camera}.image", (batch, 3, image_size, image_size), "fp32")
         camera_valids.append(graph.input(f"camera{camera}.valid", (batch,), "bool"))
         tokens = graph.add(f"camera{camera}.patch_embed", "patch_embed", (image,),
@@ -222,6 +232,8 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
                            (batch, image_tokens, spec["vlm_hidden_size"]),
                            "embed_scale", {"scale": spec["vlm_hidden_size"] ** 0.5})
         prefix_parts.append(tokens)
+        camera_branches.append({"camera": camera,
+                                "stages": [stage["id"] for stage in graph.stages[camera_start:]]})
     language = graph.input("language.ids", (batch, spec["language_tokens"]), "int32")
     language_valid = graph.input("language.valid", (batch, spec["language_tokens"]), "bool")
     language = graph.add("language.embedding", "embedding", (language,),
@@ -268,14 +280,21 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
                           (layer_input, prefix_positions),
                           cache_shape, attrs={"component": "v", "layer": layer})
         prefix_caches[layer] = (key, value)
+    prefix_stages = [stage["id"] for stage in graph.stages]
     action = graph.input("action.noise", (batch, spec["chunk_size"],
                                           spec["action_dim"]), "fp32")
+    step_size = -1.0 / spec["num_denoise_steps"]
+    denoise_iterations = []
     for step in range(spec["num_denoise_steps"]):
-        timestep = graph.input(f"denoise{step}.timestep", (batch,), "fp32")
+        iteration_start = len(graph.stages)
+        action_input = action
+        time = 1.0 + step * step_size
+        timestep = graph.add(f"denoise{step}.timestep", "timestep_constant", (),
+                             (batch,), attrs={"value": time}, dtype="fp32")
         expert = graph.add(f"denoise{step}.action_embed", "action_time_embed",
                            (action, timestep),
                            (batch, spec["chunk_size"], spec["expert_hidden_size"]),
-                           attrs={"time": 1.0 - step / spec["num_denoise_steps"]})
+                           attrs={"time": time})
         suffix_pad = graph.add(f"denoise{step}.suffix_pad_mask", "suffix_pad_mask",
                                (expert,), (batch, spec["chunk_size"]), dtype="bool")
         suffix_groups = graph.add(f"denoise{step}.suffix_attention_groups",
@@ -312,8 +331,43 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
                              "gemm_mxgemmini")
         action = graph.add(f"denoise{step}.euler", "euler_step", (action, velocity),
                            (batch, spec["chunk_size"], spec["action_dim"]),
-                           attrs={"step_size": -1 / spec["num_denoise_steps"]})
+                           attrs={"step_size": step_size})
+        denoise_iterations.append({
+            "step": step, "time": time, "action_input": action_input,
+            "action_output": action,
+            "expert_layers": [f"denoise{step}.expert{layer:02d}"
+                              for layer in range(spec["num_expert_layers"])],
+            "stages": [stage["id"] for stage in graph.stages[iteration_start:]],
+        })
     graph.outputs.append(action)
+    graph.execution_schedule = {
+        "entrypoint": "sample_actions",
+        "scope": "one_action_chunk_from_preprocessed_inputs",
+        "policy_select_action": {
+            "refill_condition": "action_queue_empty",
+            "model_calls_per_refill": 1,
+            "queued_actions_per_refill": spec["n_action_steps"],
+            "actions_returned_per_call": 1,
+            "returned_action_dim": spec["output_action_dim"],
+        },
+        "prefix_once_per_refill": {
+            "camera_branches": camera_branches,
+            "vision_encoder_internal_layers": "opaque",
+            "stages": prefix_stages,
+            "vlm_layers": [f"vlm.layer{layer:02d}"
+                           for layer in range(spec["num_vlm_layers"])],
+            "read_only_cache": [name for pair in prefix_caches.values() for name in pair],
+        },
+        "denoise_loop": {
+            "iterations": denoise_iterations,
+            "step_size": step_size,
+            "timestep_rule": "1 + step * step_size",
+            "expert_attention_mode": [
+                "self" if layer % spec["self_attn_every_n_layers"] == 0 else "cross"
+                for layer in range(spec["num_expert_layers"])],
+            "prefix_cache_lifetime": "read_only_across_iterations",
+        },
+    }
     return graph
 
 
