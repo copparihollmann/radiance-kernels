@@ -1,4 +1,99 @@
-# Inputs for the LLM evaluation proposal
+# LLM workload inputs and model schedules
+
+## PR #1 model stitching
+
+[`pr1-models.json`](pr1-models.json) pins the four models named in
+[radiance-kernels PR #1](https://github.com/ucb-bar/radiance-kernels/pull/1):
+TinyLlama-1.1B, DeepSeek-R1-Distill-Qwen-1.5B, Gemma-2-2B, and SmolVLA-base.
+The decoder dimensions and SmolVLA policy settings come from the linked,
+revision-pinned model configs. Gemma's official config is access gated here;
+its fields are cross-checked against PR #1 and the existing Gemma kernels.
+
+[`stitch.py`](stitch.py) emits a tensor dependency graph at model dimensions.
+For TinyLlama, DeepSeek, and Gemma it orders embedding, every decoder layer,
+Q/K/V projections, optional QKV bias, RoPE, per-layer KV append, causal GQA,
+output projection, residuals, gated FFN, final norm, and LM head. It includes
+Gemma's four-norm layer wiring, alternating local/global attention, attention
+score cap, and final-logit cap. Prefill and each decode step consume the KV
+buffers produced by the previous step. DeepSeek's pinned config has
+`use_sliding_window=false`; its declared window is therefore not applied.
+The default `teacher_forced` mode accepts fixed decode token IDs for checking;
+`--generation greedy` adds an argmax stage from each pass's last logits to the
+next pass's token input. The argmax stage has no device kernel yet.
+The graph checks tensor definitions, positive shapes, and named kernel
+directories before export.
+
+SmolVLA's graph covers three image inputs, patch embedding, vision encoding,
+the connector, language and state inputs, 16 VLM layers with per-layer prefix
+K/V caches, and 10 action denoising iterations with 16 expert layers each.
+Self-attention temporarily appends action K/V then crops back to the prefix;
+cross-attention reads the prefix cache. The Euler steps run from time 1 to 0.
+It marks the
+vision encoder, multimodal connector, cross-attention, and action operations
+as missing device stages. Its fixed 512-pixel and maximum-token shapes are
+planning assumptions from the pinned configs; real image preprocessing,
+padding, masks, and action-expert behavior still need a checkpoint reference.
+
+Run, for example:
+
+```sh
+python3 kernels/evaluation/llm/stitch.py --model tinyllama \
+  --batch 1 --prefill 128 --decode-steps 4 --out /tmp/tinyllama-schedule.json
+python3 kernels/evaluation/llm/stitch.py --model tinyllama \
+  --batch 1 --prefill 128 --decode-steps 4 --generation greedy \
+  --out /tmp/tinyllama-greedy-schedule.json
+python3 kernels/evaluation/llm/stitch.py --model smolvla_base \
+  --batch 1 --out /tmp/smolvla-schedule.json
+python3 kernels/evaluation/llm/reference.py --model tinyllama
+python3 kernels/evaluation/llm/verify_sources.py
+python3 -m unittest discover -s kernels/evaluation/llm -p 'test_*.py'
+```
+
+[`reference.py`](reference.py) executes the three decoder graphs with small
+dimensions and deterministic generated weights. It checks that a three-token
+prefill followed by two cached decode steps gives the same final logits as a
+single five-token causal pass. The test also changes a decode token to ensure
+the output responds. This checks the software handoff and masks; it does not
+check checkpoint fidelity, MX quantization, or device execution. SmolVLA has
+only a topology graph because the PR #1 kernels do not implement its complete
+vision and action path.
+
+[`checkpoint.py`](checkpoint.py) binds graph parameters to their checkpoint
+tensor names. With optional PyTorch, Transformers, and safetensors packages,
+[`verify_checkpoint.py`](verify_checkpoint.py) runs real checkpoint weights
+through the stitched NumPy graph and compares its last logits to an independent
+Transformers full causal pass. For example:
+
+```sh
+python3 kernels/evaluation/llm/verify_checkpoint.py --model tinyllama \
+  --checkpoint-dir /path/to/pinned/TinyLlama/snapshot --full
+```
+
+The recorded [checkpoint checks](checkpoint-results.json) use the pinned
+TinyLlama and DeepSeek checkpoint revisions, three prefill tokens, and two
+cached decode tokens. All 22 TinyLlama layers passed with maximum absolute
+logit error `1.86e-5`; all 28 DeepSeek layers passed with error `3.67e-5`
+against Transformers 5.9.0 in FP32. The file records the exact config and
+weight hashes, tensor binding counts, tolerances, and software versions.
+These checks establish the decoder dataflow for those two checkpoints; they
+do not validate MX quantization or produce device timing. Gemma's checkpoint
+is access gated here, and SmolVLA still needs a complete numerical backend.
+
+| Model | Graph scope | Existing PR #1 primitives | Main device gaps |
+| --- | --- | --- | --- |
+| TinyLlama | 22 decoder layers, prefill and decode | MX GEMM/GEMV, RMSNorm-QKV, RoPE-QKV, d=64 causal GQA, SwiGLU | Shared activation/KV buffers, full-head tiling, embedding/final head, checked multi-layer launch. |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 decoder layers, prefill and decode | MX GEMM/GEMV, QKV bias, RoPE, SwiGLU | d=128 attention, shared buffers/KV, full-head tiling and launch. |
+| Gemma-2-2B | 26 decoder layers, alternating local/global attention | Gemma norms, GeGLU, score and logit caps, d=256 attention | Shared buffers/KV; Gemma attention output lacks an on-device numerical readback in PR #1. |
+| SmolVLA-base | 3 cameras, 16 VLM layers, 16 expert layers × 10 denoising steps | Patch embedding, LayerNorm, GeGLU, bias and MX projections | Vision encoder, connector, multimodal masks, expert cross-attention, action flow, shared buffers. |
+
+The `kernel` field in a schedule means a standalone primitive exists. It does
+**not** mean that primitive accepts the preceding stage's output: PR #1
+generates fixed inputs and a separate ELF for each kernel. The first device
+milestone is a shared-buffer ABI for one checked TinyLlama decoder layer,
+including Q/K/V layout and KV append. Then tile all heads, repeat layers,
+bind pinned checkpoint weights and reference intermediate outputs, and run
+the same process for the other architectures. Only completed device runs can
+produce end-to-end latency, utilization, cache, or memory measurements.
 
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no measured LLM cycles. The
