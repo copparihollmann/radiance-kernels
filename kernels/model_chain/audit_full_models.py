@@ -42,13 +42,16 @@ MULTITOKEN_RECORDS = {
 }
 ONE_LAYER_MULTITOKEN_RECORDS = {
     "tinyllama": ("tinyllama-one-layer-multitoken-build.json",
-                  "tinyllama-one-layer-multitoken-reference.json"),
+                  "tinyllama-one-layer-multitoken-reference.json",
+                  "tinyllama-one-layer-multitoken-native-results.json"),
     "deepseek_r1_distill_qwen_1_5b": (
         "deepseek-one-layer-multitoken-build.json",
-        "deepseek-one-layer-multitoken-reference.json"),
+        "deepseek-one-layer-multitoken-reference.json",
+        "deepseek-one-layer-multitoken-native-results.json"),
     "gemma_2_2b_it": (
         "gemma-one-layer-int8-fp16-tied-multitoken-build.json",
-        "gemma-checkpoint-one-layer-reference.json"),
+        "gemma-checkpoint-one-layer-reference.json",
+        "gemma-one-layer-int8-fp16-tied-multitoken-native-results.json"),
 }
 UPSTREAM_TOKEN_IDS = {"prefill.token_ids": [1, 2, 3],
                       "decode0.token_ids": [4], "decode1.token_ids": [5]}
@@ -454,12 +457,14 @@ def audit_multitoken(model: str, generated_root: Path) -> dict:
 
 
 def audit_one_layer_multitoken(model: str, generated_root: Path) -> dict:
-    build_name, reference_name = ONE_LAYER_MULTITOKEN_RECORDS[model]
+    build_name, reference_name, native_name = ONE_LAYER_MULTITOKEN_RECORDS[model]
     target = (generated_root / "checkpoint-one-layer-multitoken-upstream-elf" /
               model).resolve()
     build_path = HERE / "evaluation" / build_name
     reference_path = HERE / "evaluation" / reference_name
-    if not (build_path.exists() and reference_path.exists()):
+    native_path = HERE / "evaluation" / native_name
+    if not (build_path.exists() and reference_path.exists() and
+            native_path.exists()):
         return {"status": "pending"}
     manifest = json.loads((target / "manifest.json").read_text())
     tracked = json.loads(build_path.read_text())
@@ -496,6 +501,25 @@ def audit_one_layer_multitoken(model: str, generated_root: Path) -> dict:
             reference["cached_decode_tokens"] == 2 and
             reference_hash == manifest["checkpoint_sha256"],
             f"{model}: one-layer upstream reference differs from ELF")
+    native = json.loads(native_path.read_text())
+    sources = native["device_source_files_sha256"]
+    require(native["scope"] == "partial_checkpoint_generated_cpp_on_cpu" and
+            native["status"] == "passed" and
+            native["process_exit_code"] == 0 and
+            native["layers"] == 1 and
+            native["stage_count"] == manifest["stages"] and
+            native["checked_float_stages"] +
+            native["checked_integer_stages"] == manifest["stages"] and
+            native["input_token_ids"] == UPSTREAM_TOKEN_IDS and
+            native["device_elf_sha256"] == manifest["radiance_elf_sha256"] and
+            native["weight_image_sha256"] == manifest["weight_image_sha256"] and
+            native["reference_output_sha256"] ==
+            manifest["reference_output_sha256"] and
+            set(sources) == set(manifest["device_source_files"]) and
+            all(sha256(target / name) == digest
+                for name, digest in sources.items()) and
+            sha256(Path(native["log_path"])) == native["log_sha256"],
+            f"{model}: one-layer generated C++ check is stale or incomplete")
     device_path = target / "functional-result.json"
     device = {"status": "pending"}
     if device_path.exists():
@@ -524,7 +548,9 @@ def audit_one_layer_multitoken(model: str, generated_root: Path) -> dict:
             "checkpoint_weight_format": manifest["checkpoint_weight_format"],
             "radiance_elf_sha256": manifest["radiance_elf_sha256"],
             "upstream_reference": str(reference_path),
-            "build_record": str(build_path), "device_check": device}
+            "build_record": str(build_path),
+            "host_check": {"status": "passed", "path": str(native_path)},
+            "device_check": device}
 
 
 def main() -> None:
@@ -553,6 +579,13 @@ def main() -> None:
                    "passed" and item[
                        "upstream_token_one_layer_device_control"][
                            "device_check"]["status"] == "passed"
+                   for item in entries if item["model"] in
+                   ONE_LAYER_MULTITOKEN_RECORDS),
+               "all_upstream_token_one_layer_host_controls_passed": all(
+                   item["upstream_token_one_layer_device_control"]["status"] ==
+                   "passed" and item[
+                       "upstream_token_one_layer_device_control"][
+                           "host_check"]["status"] == "passed"
                    for item in entries if item["model"] in
                    ONE_LAYER_MULTITOKEN_RECORDS),
                "models": entries, "rtl_execution": False,

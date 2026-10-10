@@ -1,0 +1,64 @@
+{
+  "model": "gemma_2_2b_it",
+  "scope": "partial_checkpoint_generated_cpp_on_cpu",
+  "layers": 1,
+  "stage_count": 69,
+  "checked_float_stages": 69,
+  "checked_integer_stages": 0,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "input_token_ids": {
+    "decode0.token_ids": [
+      4
+    ],
+    "decode1.token_ids": [
+      5
+    ],
+    "prefill.token_ids": [
+      1,
+      2,
+      3
+    ]
+  },
+  "checkpoint_weight_format": "int8_fp16_tied",
+  "checkpoint_sha256": "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a",
+  "weight_image_sha256": "75ed32abd6a5a4a530f96aad80f30a95929ef9942c4e20bce9e65580682aa1aa",
+  "reference_output_sha256": "ddda4aa7c0202d0da3f7089d451435b05cd404aec88224101f9b1fe578eac2e7",
+  "comparison_tolerance": {
+    "rtol": 0.005,
+    "atol": 0.0005
+  },
+  "status": "passed",
+  "process_exit_code": 0,
+  "failed_check_chunk": null,
+  "tohost": 0,
+  "host_threads": 4,
+  "native_binary_sha256": "276a757eced7f8529885539629e005b4caea44d9816491179442e5056e3c7342",
+  "native_main_sha256": "d1084b41fd17850de718a3718d3ad933fb0e763273fbad7cf2615ac94d80264d",
+  "device_elf_sha256": "cdd3c387fa6f4a7cc64a158600fbd0152f4e22ad62db7fb371b5d6fb92903683",
+  "device_source_files_sha256": {
+    "kernel.cpp": "2aa406548d8be06085dca6c16c8ab6e454b68597264ca4c34bf691db2dffdef9",
+    "stage_chunk_000.cpp": "44829a6bc3e23ac25a2f90fbaafeb2cf33ab22fc436d363d69b723b7cdcf32bf",
+    "stage_chunk_001.cpp": "640415e6d81ee6ec6d5c57c88134f039e1e8d16deb18ccb66b070392c3331728",
+    "stage_chunk_002.cpp": "c4d88cc8484e2431f7c0a2eee645a523cedb9f8066e791a7bcaeb18259787418",
+    "stage_chunk_003.cpp": "289572d06321c26aa2442fb878f2b12466d643e402daecda95daa3471ae6e82e",
+    "stage_chunk_004.cpp": "39ba681a1525db9d81849c16ac600784a7868da978dff59bf12ad5bcc6595a09",
+    "stage_chunk_005.cpp": "03f8a5509976e5790e6c9c944c1c4a8ebfd8c9ca5da13e04efdddcc94c0a8d7a",
+    "stage_chunk_006.cpp": "6e7670051b59772cfe44bfa50a16bfaf4117171c1b810e6d31f99ae7cace8acd",
+    "model_data.cpp": "37391e82e41fc88223f0fdfa6074482605ced94904a0febca7fb7e304723ab55",
+    "verify_chunk_000.cpp": "7ee92f84016284b5d5b6b8440f09bffc71b3bf3ce76655ab2edde48640f997ee",
+    "verify_chunk_001.cpp": "5c5791d8d53b5469ca9b6097b2d2a201ffe893e2f365964e74247f4e868a60ec",
+    "verify_chunk_002.cpp": "7d84e97defe377c69b8d44baa04c255b774fd77b0a21236836a40136a8df039b",
+    "verify_chunk_003.cpp": "c7d022d47d54e18f56ef2571989f7ddd35aee3f46ae8f6c036a20ac330bd2342",
+    "verify_chunk_004.cpp": "dfc62e792e13d23b56f3a78b3f6fd3b3a494ec6f62c256301a10ea0c2b57e663",
+    "verify_chunk_005.cpp": "67d73a42f59f023d4aac8eeba1d46903cc3f9512f8abd39e080c0a24c22474a8",
+    "verify_chunk_006.cpp": "7d2dae61bcffd36ff9cdd32f369bd3a9738e9dc48dcb88522b66b06437f5a4d9"
+  },
+  "model_specs_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "log_sha256": "638fe3f6de3f7b054ed1a35f5c29a94d6390b76dbc81a287535be46e9cff3853",
+  "log_path": "/scratch/agustin/projects/chipyard/radiance-kernels-firesim/kernels/model_chain/generated/checkpoint-one-layer-multitoken-upstream-elf/gemma_2_2b_it/native-check/native.log",
+  "log_tail": "completed 69/69 stages\nstages=69 check_chunks=7 tohost=0\n",
+  "device_execution": false,
+  "rtl_execution": false,
+  "performance_measurement": false
+}

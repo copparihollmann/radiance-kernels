@@ -161,16 +161,19 @@ def build(target: Path, native: Path, jobs: int) -> Path:
 
 
 def run(model: str, generated_root: Path, threads: int, jobs: int,
-        out: Path | None) -> dict:
+        out: Path | None, allow_partial: bool = False) -> dict:
     target = (generated_root / model).resolve()
     manifest = json.loads((target / "manifest.json").read_text())
     specs = model_specs()
+    full_layers = specs[model]["num_hidden_layers"]
     if (manifest["model"] != model or not manifest["device_elf_built"] or
             not manifest["checkpoint_weights"] or
             not manifest["device_check_all_stages"] or
             manifest["stage_limit"] is not None or
-            manifest["layers"] != specs[model]["num_hidden_layers"]):
-        raise ValueError("native check requires a full-depth checkpoint ELF")
+            not 1 <= manifest["layers"] <= full_layers or
+            (manifest["layers"] != full_layers and not allow_partial)):
+        raise ValueError("native check requires a full-depth checkpoint ELF "
+                         "unless --allow-partial is set")
     elf = target / "kernel.radiance.elf"
     if sha256(elf) != manifest["radiance_elf_sha256"]:
         raise ValueError("ELF differs from its build manifest")
@@ -193,7 +196,10 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
               int(success.group(1)) == manifest["stages"] and
               int(success.group(2)) == len(list(target.glob("verify_chunk_*.cpp"))))
     record = {
-        "model": model, "scope": "full_checkpoint_generated_cpp_on_cpu",
+        "model": model,
+        "scope": ("full_checkpoint_generated_cpp_on_cpu"
+                  if manifest["layers"] == full_layers else
+                  "partial_checkpoint_generated_cpp_on_cpu"),
         "layers": manifest["layers"], "stage_count": manifest["stages"],
         "checked_float_stages": manifest["native_verified_float_stages"],
         "checked_integer_stages": manifest["native_verified_integer_stages"],
@@ -238,10 +244,13 @@ def main() -> None:
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--allow-partial", action="store_true",
+                        help="check all stages of a selected checkpoint layer subset")
     args = parser.parse_args()
     if args.threads <= 0 or args.threads > 32 or args.jobs <= 0:
         parser.error("threads must be 1..32 and jobs must be positive")
-    run(args.model, args.generated_root, args.threads, args.jobs, args.out)
+    run(args.model, args.generated_root, args.threads, args.jobs, args.out,
+        args.allow_partial)
 
 
 if __name__ == "__main__":

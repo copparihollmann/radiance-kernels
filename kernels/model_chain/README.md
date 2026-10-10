@@ -516,17 +516,19 @@ DeepSeek use their FP32 checkpoint images; Gemma uses the INT8 body with
 tied FP16 embedding. The independent one-layer Transformers controls pass
 for this input:
 
-| Model | Checked stages in one ELF | Radiance build | One-layer upstream reference | Cyclotron |
-| --- | ---: | --- | --- | --- |
-| TinyLlama | 60 | [build](evaluation/tinyllama-one-layer-multitoken-build.json) | [passed, max logit error `6.68e-6`](evaluation/tinyllama-one-layer-multitoken-reference.json) | Running |
-| DeepSeek-R1-Distill-Qwen-1.5B | 69 | [build](evaluation/deepseek-one-layer-multitoken-build.json) | [passed, max logit error `2.86e-5`](evaluation/deepseek-one-layer-multitoken-reference.json) | Running |
-| Gemma-2-2B-it | 69 | [build](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-build.json) | [passed, max logit error `1.72e-5`](evaluation/gemma-checkpoint-one-layer-reference.json) | Running |
+| Model | Checked stages in one ELF | Radiance build | One-layer upstream reference | Generated C++ | Cyclotron |
+| --- | ---: | --- | --- | --- | --- |
+| TinyLlama | 60 | [build](evaluation/tinyllama-one-layer-multitoken-build.json) | [passed, max logit error `6.68e-6`](evaluation/tinyllama-one-layer-multitoken-reference.json) | [60 stages passed](evaluation/tinyllama-one-layer-multitoken-native-results.json) | Running |
+| DeepSeek-R1-Distill-Qwen-1.5B | 69 | [build](evaluation/deepseek-one-layer-multitoken-build.json) | [passed, max logit error `2.86e-5`](evaluation/deepseek-one-layer-multitoken-reference.json) | [69 stages passed](evaluation/deepseek-one-layer-multitoken-native-results.json) | Running |
+| Gemma-2-2B-it | 69 | [build](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-build.json) | [passed, max logit error `1.72e-5`](evaluation/gemma-checkpoint-one-layer-reference.json) | [69 stages passed](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-native-results.json) | Running |
 
 These device controls exercise nontrivial causal masks and KV handoffs with
 real checkpoint data. The one-layer upstream errors refer to the original
 unquantized checkpoint. Gemma's one-layer mapped INT8/FP16 final logits also
 differ from that checkpoint by up to `0.206` for this input. A passing
 one-layer device result will not by itself prove full-depth device execution.
+`run_checkpoint_native.py --allow-partial` reproduces the generated-C++
+one-layer checks; without that flag it requires the full pinned layer count.
 
 To rebuild a row, set `MODEL`, `LAYERS`, `CHECKPOINT_DIR`, and `WEIGHT_IMAGE`
 to its pinned model name, full layer count, local checkpoint snapshot, and
