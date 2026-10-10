@@ -180,6 +180,7 @@ def audit(model: str, generated_root: Path) -> dict:
                   "failure_reason": candidate.get("failure_reason")}
     probe = None
     euler_chain_probe = None
+    expert_attention_probe = None
     if model == "smolvla_base":
         probe_path = HERE / "evaluation/smolvla-final-euler-functional-results.json"
         if probe_path.exists():
@@ -254,6 +255,100 @@ def audit(model: str, generated_root: Path) -> dict:
                         sha256(negative_target / "functional.log"),
                         "SmolVLA Euler negative control is stale or incomplete")
                 euler_chain_probe["negative_control"] = "passed"
+        attention_path = (HERE / "evaluation" /
+                          "smolvla-expert-attention-functional-results.json")
+        if attention_path.exists():
+            import numpy as np
+            from probe_smolvla_attention import attention_reference
+
+            candidate = json.loads(attention_path.read_text())
+            attention_target = (generated_root /
+                                "smolvla-attention-probe/smolvla_base")
+            fixture_root = generated_root / "smolvla-attention-fixture"
+            fixture = json.loads((fixture_root / "fixture-result.json").read_text())
+            traces = fixture_root / "traces"
+            read_names = ["denoise0.expert00.q_rope",
+                          "denoise0.expert00.k_append",
+                          "denoise0.expert00.v_append",
+                          "denoise0.attention_mask"]
+            read_indices = [932, 936, 937, 927]
+            read_paths = [traces / f"{index:04d}.bin" for index in read_indices]
+            require(candidate["status"] == "passed" and
+                    candidate["tohost"] == 0 and
+                    candidate["process_exit_code"] == 0 and
+                    candidate["stage_id"] == "denoise0.expert00.attention" and
+                    candidate["stage_index_one_based"] == 938 and
+                    candidate["zero_output_rejected_elements"] > 0 and
+                    candidate["source_full_elf_sha256"] ==
+                    manifest["radiance_elf_sha256"] and
+                    candidate["source_native_result_sha256"] ==
+                    sha256(native_path) and
+                    fixture["status"] == "passed" and
+                    fixture["stage_count"] == 938 and
+                    fixture["generated_source_sha256"] ==
+                    native["generated_source_sha256"] and
+                    fixture["native_binary_sha256"] ==
+                    candidate["fixture_native_binary_sha256"] and
+                    fixture["log_sha256"] ==
+                    candidate["fixture_native_log_sha256"] and
+                    sha256(Path(fixture["log_path"])) ==
+                    fixture["log_sha256"] and
+                    sha256(fixture_root /
+                           "smolvla_base/native/smolvla_native") ==
+                    fixture["native_binary_sha256"] and
+                    all(candidate["fixture_input_sha256"][name] == sha256(path)
+                        for name, path in zip(read_names, read_paths)) and
+                    candidate["fixture_native_output_sha256"] ==
+                    sha256(traces / "0938.bin") and
+                    candidate["source_stage_chunk_sha256"] ==
+                    sha256(target / candidate["source_stage_chunk_name"]) ==
+                    sha256(attention_target / candidate[
+                        "source_stage_chunk_name"]) and
+                    candidate["device_elf_sha256"] ==
+                    sha256(attention_target / "kernel.radiance.elf") and
+                    candidate["log_sha256"] ==
+                    sha256(attention_target / "functional.log"),
+                    "SmolVLA expert attention probe is stale or incomplete")
+            q = np.fromfile(read_paths[0], dtype="<f4").reshape(50, 15, 64)
+            k = np.fromfile(read_paths[1], dtype="<f4").reshape(291, 5, 64)
+            v = np.fromfile(read_paths[2], dtype="<f4").reshape(291, 5, 64)
+            mask = np.fromfile(read_paths[3], dtype="<u4").reshape(50, 291)
+            expected = attention_reference(q, k, v, mask)
+            native_output = np.fromfile(traces / "0938.bin", dtype="<f4")
+            error = float(np.max(np.abs(expected - native_output)))
+            require(hashlib.sha256(expected.astype("<f4").tobytes()).hexdigest() ==
+                    candidate["independent_numpy_output_sha256"] and
+                    np.isclose(error, candidate[
+                        "independent_numpy_max_abs_error_vs_native"],
+                        rtol=1e-6, atol=1e-10) and
+                    np.allclose(expected, native_output, rtol=5e-3, atol=5e-4),
+                    "SmolVLA expert attention reference cannot be reproduced")
+            expert_attention_probe = {
+                "status": "passed", "stage_id": candidate["stage_id"],
+                "cycles_functional": candidate["cycles_functional"],
+                "independent_numpy_max_abs_error_vs_native": error,
+                "path": str(attention_path)}
+            negative_path = (HERE / "evaluation" /
+                             "smolvla-expert-attention-negative-control.json")
+            if negative_path.exists():
+                negative = json.loads(negative_path.read_text())
+                negative_target = (generated_root /
+                                   "smolvla-attention-probe-negative/smolvla_base")
+                require(negative["status"] == "failed" and
+                        negative["failure_reason"] == "device_output_mismatch" and
+                        negative["tohost"] == 1 and
+                        negative["mutation"] ==
+                        "first_expected_attention_value_replaced_by_1000000.0f" and
+                        negative["positive_probe_elf_sha256"] ==
+                        candidate["device_elf_sha256"] and
+                        negative["device_elf_sha256"] ==
+                        sha256(negative_target / "kernel.radiance.elf") and
+                        negative["mutated_probe_data_sha256"] ==
+                        sha256(negative_target / "probe_data.cpp") and
+                        negative["log_sha256"] ==
+                        sha256(negative_target / "functional.log"),
+                        "SmolVLA attention negative control is stale or incomplete")
+                expert_attention_probe["negative_control"] = "passed"
     return {
         "model": model, "graph_stages": len(graph.stages),
         "radiance_elf_sha256": manifest["radiance_elf_sha256"],
@@ -264,6 +359,7 @@ def audit(model: str, generated_root: Path) -> dict:
         "full_depth_device_check": device or {"status": "pending"},
         "targeted_device_probe": probe,
         "euler_chain_device_probe": euler_chain_probe,
+        "expert_attention_device_probe": expert_attention_probe,
     }
 
 

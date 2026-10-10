@@ -1,0 +1,51 @@
+{
+  "model": "smolvla_base",
+  "scope": "expert_masked_gqa_real_graph_state",
+  "stage_id": "denoise0.expert00.attention",
+  "stage_index_one_based": 938,
+  "source_full_elf_sha256": "67c0a211cdb1c5bf81f88128ba03cb719e7990c1ea99bda445b49a1da0d38a6c",
+  "source_stage_chunk_sha256": "b5c515b67892178258422fdbf91588c648c291e701bbbbd8cbab549e431f3b58",
+  "source_stage_chunk_name": "stage_chunk_023.cpp",
+  "source_native_result_sha256": "3d1267bd99e1f846ea327706ca433a507d63f56fbb0fe9b86533b2a396c4cf58",
+  "fixture_native_binary_sha256": "653e47e88b8ac285fe50e17c5df24ba4b16de55b74cd7ed6933bbe3a02393177",
+  "fixture_native_log_sha256": "2c2f3df3c5b2ed645888895353e05421adccc7f832a663cf1c282e6b8066f0cc",
+  "fixture_input_sha256": {
+    "denoise0.expert00.q_rope": "3ffd7dfdd73641165f9817d4165dcb2f73b8774d46e3684e7c6af3fdfc58eacb",
+    "denoise0.expert00.k_append": "501adba01c447b943d69e413270d615b46a33dce6d39d03dd9e7c0e6d0856279",
+    "denoise0.expert00.v_append": "3ca823f61b02a64ca0cfbb1cfd4d8c68f43fa69637eb4361396dfd50d4d4a94c",
+    "denoise0.attention_mask": "2fecef535ec294c1a6f775def38646f92ab8479cd600256be1f1ebf7701181ba"
+  },
+  "fixture_native_output_sha256": "e81615a00b69b57dbd0b881be1c90af4454e38d69e8a61c2ac1eef5538505ef8",
+  "independent_numpy_output_sha256": "803667d7a1934a33ac82d495aba895a0735ac4bcea03a774d28d55653e7d9197",
+  "independent_numpy_max_abs_error_vs_native": 3.5762786865234375e-07,
+  "zero_output_rejected_elements": 46551,
+  "input_offsets_bytes": [
+    13081536,
+    17278144,
+    17650624,
+    21966272
+  ],
+  "output_offset_bytes": 13327296,
+  "output_elements": 48000,
+  "output_check_tolerance": {
+    "rtol": 0.005,
+    "atol": 0.0005
+  },
+  "device_elf_built": true,
+  "device_execution": false,
+  "upstream_execution_equivalent": false,
+  "device_elf_sha256": "7a61ce108268406e5d7715c7d0c34c91db92c90c98bf35a08b65fc96193a6ed2",
+  "mutation": "first_expected_attention_value_replaced_by_1000000.0f",
+  "mutated_probe_data_sha256": "6419f5a5622c3be1ca3b45945372bbc84484ae2c92ae86f4afe904374c21ce41",
+  "positive_probe_elf_sha256": "64a3adc94311ea08262299f379b0f2f565b9c7331c8278e5364f5334e93824c5",
+  "status": "failed",
+  "cycles_functional": 16342348,
+  "tohost": 1,
+  "process_exit_code": 1,
+  "failure_reason": "device_output_mismatch",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+  "log_sha256": "74d180c78ffa75e549a5e95980b881c99d1aa002e3a7c953f30e21c05740005e",
+  "rtl_execution": false,
+  "performance_measurement": false
+}

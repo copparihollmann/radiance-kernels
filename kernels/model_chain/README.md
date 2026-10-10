@@ -221,6 +221,18 @@ changes the first expected action to `1000000.0f` in a separate probe ELF.
 Cyclotron rejects it at iteration 1, element 0 (`tohost=65537`), which checks
 that the intermediate device comparisons are active.
 
+The [expert attention probe](evaluation/smolvla-expert-attention-functional-results.json)
+checks the first `masked_gqa` stage of the action expert with its real query,
+291-token KV cache, and suffix attention mask. A separate NumPy grouped-query
+attention calculation matches the generated native stage to `3.58e-7`
+maximum absolute error. The copied generated stage then passed on Cyclotron
+against that independent output (`tohost=0`, 18,169,579 functional ISA cycles)
+for all 48,000 output values. The
+[negative control](evaluation/smolvla-expert-attention-negative-control.json)
+changes one expected value and is rejected at element 0 (`tohost=1`). This
+checks a representative expert attention operation; it does not establish
+device execution of every expert layer or the full action graph.
+
 To reproduce the exact-input SmolVLA build, set
 `SMOLVLA_CHECKPOINT_DIR` to the pinned checkpoint directory containing
 `config.json` and `model.safetensors`, then run from the repository root:
@@ -294,6 +306,31 @@ python3 kernels/model_chain/probe_smolvla_euler_chain.py \
   --out-root kernels/model_chain/generated/smolvla-euler-chain-probe \
   --out kernels/model_chain/evaluation/smolvla-euler-chain-functional-results.json \
   --negative-out kernels/model_chain/evaluation/smolvla-euler-chain-negative-control.json
+```
+
+To reproduce the expert attention probe, generate five trace tensors from a
+copy of the full generated sources. The copy keeps the audited full-native
+binary and its result untouched:
+
+```sh
+mkdir -p kernels/model_chain/generated/smolvla-attention-fixture
+cp -a kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf/smolvla_base kernels/model_chain/generated/smolvla-attention-fixture/
+python3 kernels/model_chain/run_smolvla_native.py \
+  --generated-root kernels/model_chain/generated/smolvla-attention-fixture \
+  --stage-limit 938 --threads 8 \
+  --trace-dir kernels/model_chain/generated/smolvla-attention-fixture/traces \
+  --trace-stage denoise0.expert00.q_rope \
+  --trace-stage denoise0.expert00.k_append \
+  --trace-stage denoise0.expert00.v_append \
+  --trace-stage denoise0.attention_mask \
+  --trace-stage denoise0.expert00.attention \
+  --out kernels/model_chain/generated/smolvla-attention-fixture/fixture-result.json
+python3 kernels/model_chain/probe_smolvla_attention.py \
+  --full-generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --fixture-root kernels/model_chain/generated/smolvla-attention-fixture \
+  --out-root kernels/model_chain/generated/smolvla-attention-probe \
+  --out kernels/model_chain/evaluation/smolvla-expert-attention-functional-results.json \
+  --negative-out kernels/model_chain/evaluation/smolvla-expert-attention-negative-control.json
 ```
 
 The full simulator run is compute intensive. The binary images, ELF, build

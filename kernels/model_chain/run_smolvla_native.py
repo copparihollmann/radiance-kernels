@@ -37,7 +37,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def generate(target: Path) -> Path:
+def generate(target: Path, extra_trace_stages: tuple[str, ...] = ()) -> Path:
     manifest = json.loads((target / "manifest.json").read_text())
     graph = build("smolvla_base")
     storage = plan(graph)
@@ -72,12 +72,16 @@ def generate(target: Path) -> Path:
             f"  memcpy(v_arena + {offset}u, "
             f"(const void*){item['gpu_address']}ull, {item['size_bytes']}u);")
     names = ["stage_" + symbol(stage["id"]) for stage in graph.stages]
+    unknown = set(extra_trace_stages) - {stage["id"] for stage in graph.stages}
+    if unknown:
+        raise ValueError(f"unknown trace stages: {sorted(unknown)}")
     prototypes = "\n".join(
         f"void {name}(void*, uint32_t, uint32_t, uint32_t);" for name in names)
 
     def trace_stage(stage: dict) -> bool:
         name = stage["id"]
-        return (name.endswith(("vision.final_norm", "connector", "state_proj",
+        return (name in extra_trace_stages or
+                name.endswith(("vision.final_norm", "connector", "state_proj",
                                "vlm.final_norm", "action_out")) or
                 name in ("prefix.merge", "prefix.attention_mask",
                          "prefix.position_ids") or
@@ -167,8 +171,9 @@ int main(int argc, char** argv) {
     return native
 
 
-def compile_native(target: Path, jobs: int = 2) -> Path:
-    native = generate(target)
+def compile_native(target: Path, jobs: int = 2,
+                   extra_trace_stages: tuple[str, ...] = ()) -> Path:
+    native = generate(target, extra_trace_stages)
     compiler = ["g++", "-std=c++17", "-O2", "-fopenmp", "-I", str(native),
                 "-I", str(HERE)]
     sources = [target / "model_data.cpp", *sorted(target.glob("stage_chunk_*.cpp")),
@@ -204,13 +209,17 @@ def main() -> None:
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--trace-dir", type=Path)
+    parser.add_argument("--trace-stage", action="append", default=[],
+                        help="also dump this stage output when --trace-dir is set")
     args = parser.parse_args()
     if args.stage_limit is not None and not 1 <= args.stage_limit <= 3673:
         parser.error("--stage-limit must be between 1 and 3673")
     if args.jobs <= 0:
         parser.error("--jobs must be positive")
     target = (args.generated_root / "smolvla_base").resolve()
-    binary = compile_native(target, args.jobs)
+    if args.trace_stage and not args.trace_dir:
+        parser.error("--trace-stage requires --trace-dir")
+    binary = compile_native(target, args.jobs, tuple(args.trace_stage))
     command = [str(binary)]
     if args.stage_limit is not None:
         command.append(str(args.stage_limit))
