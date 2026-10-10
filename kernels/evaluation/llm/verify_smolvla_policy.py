@@ -167,6 +167,7 @@ def run(checkpoint_dir: Path) -> dict:
         "output_shape": list(values.shape),
         "output_sha256": hashlib.sha256(values.tobytes()).hexdigest(),
         "output_min": float(np.min(values)), "output_max": float(np.max(values)),
+        "output_values": values.tolist(),
         "radiance_execution": False, "radiance_comparison": False,
     }
 

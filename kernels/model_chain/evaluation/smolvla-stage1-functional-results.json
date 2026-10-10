@@ -1,0 +1,20 @@
+{
+  "model": "smolvla_base",
+  "scope": "full_checkpoint_action_chunk",
+  "stage_count": 1,
+  "full_graph_stages": 3673,
+  "status": "passed",
+  "failure_reason": null,
+  "cycles_functional": 142591422,
+  "output_validation": "finite_range_only",
+  "golden_output_comparison": false,
+  "upstream_execution_equivalent": false,
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "process_exit_code": 0,
+  "device_elf_sha256": "0b0066b7e3cb5f644bb1eb8bbc02dad003566a774cf92c53af19d8bcc4ec512a",
+  "weight_image_sha256": "66173e02bf55e918c37cc0bd94406aeb0c50d0ee1e52f866e8e06f7b395e9501",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "645e49221e67eb39d52d129c55050b21e45a73fc346f652215d78b2ed89f6c5b",
+  "log_sha256": "f719b55d36f37d71f3114e6ba5c87e82545fb6dd727449b83b01695e7124df4d"
+}

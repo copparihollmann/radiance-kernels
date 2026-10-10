@@ -89,6 +89,122 @@ The compiler now rejects any stage whose weight interval intersects the
 reserved stack range before building an ELF. This is a software placement
 issue; no RTL was changed.
 
+### Full-depth checkpoint builds
+
+`export_decoder_fp16.py` stores linear and embedding weights as IEEE FP16,
+leaving norms and biases FP32. It uses two GMEM segments around the warp-stack
+reservation. The [TinyLlama image](evaluation/tinyllama-full-depth-fp16-image.json)
+contains all 201 logical parameters for 22 layers (2,200,281,088 bytes), and
+the [DeepSeek image](evaluation/deepseek-full-depth-fp16-image.json) contains
+all 339 parameters for 28 layers (3,554,465,792 bytes). The exporter checks
+the pinned checkpoint hashes and records every parameter address and packed
+hash. Both full-depth Radiance ELFs built and passed the cache-line layout
+check: [TinyLlama](evaluation/tinyllama-full-depth-fp16-build.json) has 754
+checked stages; [DeepSeek](evaluation/deepseek-full-depth-fp16-build.json) has
+1,126. Each ELF schedules one-token prefill and one cached decode token. Their
+full-depth Cyclotron runs have been started; these build records do **not**
+claim a completed device execution. Compared with the original FP32 NumPy
+checkpoint, FP16 changes the final logits by at most `2.48e-5` for TinyLlama
+and `9.18e-6` for DeepSeek on the recorded token input; the top logit index
+is unchanged. These numbers are software reference comparisons, not RTL
+performance data.
+
+The gated Gemma checkpoint is now locally available at the pinned revision.
+[Shard and shape validation](evaluation/gemma-checkpoint-binding.json) confirms
+all 288 checkpoint tensors bind to the 996-stage, 26-layer graph, including
+the tied input/output embedding. A one-layer NumPy graph matches the pinned
+Transformers model using eager attention: [the reference result](evaluation/gemma-checkpoint-one-layer-reference.json)
+reports maximum final-logit error `1.72e-5`. The
+[full 26-layer comparison](evaluation/gemma-checkpoint-full-reference.json)
+also passed, with maximum final-logit error `3.67e-5` for a three-token prefill
+and two cached decode tokens compared against a full causal Transformers pass.
+The default Transformers attention backend produced a larger difference, so
+both reference records name the eager backend explicitly.
+
+Gemma's full FP16 image does not fit the safe 32-bit GMEM regions. The
+[full-depth INT8 image](evaluation/gemma-full-depth-int8-image.json) uses
+per-output-channel scales for linear weights and per-row scales for embeddings;
+norms remain FP32. It contains 289 logical parameters in 3,209,761,792 bytes
+across two safe segments. The [996-stage ELF](evaluation/gemma-full-depth-int8-build.json)
+built and passed the layout check, but its full-depth functional run has not
+completed. The [three-stage checkpoint probe](evaluation/gemma-checkpoint-three-stage-int8-functional-results.json)
+passed in Cyclotron at `tohost=0`. INT8 is a lossy model variant: its full-depth
+NumPy logits differ from the original checkpoint by up to `2.67` after the
+final softcap (RMS `0.367`) for the recorded one-token input, although the top
+logit index is unchanged. It must not be reported as numerically equivalent
+to the original Gemma checkpoint.
+
+Gemma's checkpoint ties the input embedding and output head. A second
+[image layout](evaluation/gemma-full-depth-int8-fp16-tied-image.json) keeps
+that one table in FP16 and reads it transposed for the LM head, with the other
+matrix weights in per-channel INT8. It fits in 3,207,713,792 bytes. The
+[one-layer ELF](evaluation/gemma-one-layer-int8-fp16-tied-build.json) built
+and passed layout validation. Its one-layer NumPy final-logit error falls from
+`0.996` for the all-INT8 image to `0.421` maximum absolute error, and from
+`0.120` to `0.0285` RMS. The [full-depth tied ELF](evaluation/gemma-full-depth-int8-fp16-tied-build.json)
+also built with all 996 stages. Its full-depth NumPy final-logit error is
+`0.874` maximum and `0.184` RMS, compared with `2.67` and `0.367` for the
+all-INT8 image. The top logit index is unchanged on this input. This is still
+a lossy Gemma variant, and its device run has not completed.
+
+The [SmolVLA buffer plan](evaluation/smolvla-buffer-plan.json) computes
+lifetimes for all 3,683 graph tensors while retaining the three vision
+branches, one cached prefix, ten denoising iterations, and action carry between
+iterations. Reusing buffers reduces the calculated FP32 activation arena from
+3,937,703,552 to 47,193,024 bytes; the peak simultaneously live data is
+34,610,112 bytes. The
+[checkpoint image](evaluation/smolvla-full-checkpoint-image.json) now packs
+all 499 used weights in their device layouts (1,610,949,504 FP32 bytes) and
+checks their pinned checkpoint and per-parameter hashes. The
+[3,673-stage action-chunk ELF](evaluation/smolvla-full-action-chunk-build.json)
+also compiles and passes the Radiance buffer-layout check. It preserves the
+three vision branches, VLM prefix cache, ten expert denoising iterations,
+and action carry in one executable. That first ELF only checks for finite
+outputs. A second [full ELF](evaluation/smolvla-full-action-chunk-exact-golden-build.json)
+uses the exact [upstream input image](evaluation/smolvla-exact-input-image.json)
+and checks all 1,600 actions against the
+[golden CPU policy output](../evaluation/llm/smolvla-policy-results.json)
+at `rtol=1e-2, atol=1e-2`; it has compiled and passed the Radiance buffer
+layout check. Its complete Cyclotron run is in progress, so the output check
+has not yet passed on the device. The device math promotes BF16 checkpoint
+weights to FP32; any completed comparison must report that precision choice.
+The [first-stage Cyclotron probe](evaluation/smolvla-stage1-functional-results.json)
+passed the vision patch embedding with real weights after 142,591,422
+functional ISA cycles, checking only that its output is finite. It does not
+validate the full action chunk or its numerical output. An initial exact-input
+attempt [failed before the first stage](evaluation/smolvla-exact-input-overlap-failure.json)
+because the input blob at `0x10000000` overwrote the ELF entry point. The
+exporter now places it at `0x20000000`; the runner checks all preloads against
+ELF segments, reserved stacks, and each other before starting Cyclotron.
+
+To reproduce the exact-input SmolVLA build, set
+`SMOLVLA_CHECKPOINT_DIR` to the pinned checkpoint directory containing
+`config.json` and `model.safetensors`, then run from the repository root:
+
+```sh
+python3 kernels/evaluation/llm/verify_smolvla_policy.py \
+  --checkpoint-dir "$SMOLVLA_CHECKPOINT_DIR" \
+  --out kernels/evaluation/llm/smolvla-policy-results.json
+python3 kernels/model_chain/export_smolvla_weights.py \
+  --checkpoint-dir "$SMOLVLA_CHECKPOINT_DIR"
+python3 kernels/model_chain/export_smolvla_inputs.py \
+  --golden kernels/evaluation/llm/smolvla-policy-results.json \
+  --out-dir kernels/model_chain/generated/smolvla-exact-inputs
+python3 kernels/model_chain/compile_smolvla.py \
+  --weight-image kernels/model_chain/generated/checkpoint-smolvla/smolvla_base/weights-image.json \
+  --input-image kernels/model_chain/generated/smolvla-exact-inputs/inputs-image.json \
+  --golden-output kernels/evaluation/llm/smolvla-policy-results.json \
+  --out-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --stages-per-object 40 --build
+python3 kernels/model_chain/run_smolvla_functional.py \
+  --generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --sim-cycles 100000000000 --timeout 86400
+```
+
+The full simulator run is compute intensive. The binary images, ELF, build
+log, and simulator log remain under ignored `generated/`; the linked JSON
+manifests record their hashes and stage counts.
+
 The [capacity plan](evaluation/checkpoint-image-capacity.json) calculates the
 whole-model FP32 image sizes from the graph: 4,400,193,536 bytes for
 TinyLlama, 7,108,352,000 for DeepSeek, and 12,816,663,552 for Gemma. At the
@@ -191,16 +307,17 @@ latency measurements.
 
 | Model | Full-dimension schedule | Reduced Radiance ELF | Checkpoint device result | Full-checkpoint numerical check | VCS RTL |
 | --- | --- | --- | --- | --- | --- |
-| TinyLlama | 22 layers | 22 reduced layers, prefill and decode | One layer, one-token prefill and cached decode, 40 stages passed in Cyclotron | 22 layers against Transformers | Reduced one-token prefill and cached decode passed |
-| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | One layer, prefill and cached decode, 46 stages passed with segmented weights in Cyclotron | 28 layers against Transformers | Pending |
-| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | Pending | Checkpoint access pending | Pending |
-| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Pending | Pending | 499 used tensors bound; upstream action chunk and runtime layer order/shape checked; graph numerical comparison pending | Pending |
+| TinyLlama | 22 layers | 22 reduced layers, prefill and decode | One checkpoint layer passed; 754-stage full-checkpoint FP16 ELF built, functional run pending | 22 layers against Transformers; FP16 error measured | Reduced one-token prefill and cached decode passed |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | One checkpoint layer passed; 1,126-stage full-checkpoint FP16 ELF built, functional run pending | 28 layers against Transformers; FP16 error measured | Pending |
+| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | Three-stage INT8 checkpoint probe passed; 996-stage all-INT8 and tied-FP16 ELFs built, functional runs pending | All 26 layers match Transformers eager attention; quantized variants have measured error | Pending |
+| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Full 3,673-stage checkpoint ELF built | Exact-input device output comparison pending; 47 MB activation arena | 499 used tensors bound; full upstream action chunk and runtime layer order/shape checked | Pending |
 
-The full-dimension schedules are dependency graphs, not compiled full-model
-runs. The full-checkpoint Python controls are described in
-[`kernels/evaluation/llm/README.md`](../evaluation/llm/README.md). The three
-full-depth device ELFs in the table use small synthetic weights. The separate
-one-layer TinyLlama checkpoint ELF above uses real weights and full dimensions.
+The full-checkpoint Python controls are described in
+[`kernels/evaluation/llm/README.md`](../evaluation/llm/README.md). The reduced
+ELFs use small synthetic weights; the full-checkpoint ELFs in this table use
+the pinned checkpoints and original dimensions. A successful build and layout
+check establish compilation, while a pending functional run does not yet
+establish device correctness.
 The generated C++ stores tensors as contiguous arrays, but the schedule keeps
 query heads, KV heads, head width, token position, and cache lifetime as
 separate logical dimensions. The full-dimension graph tests check those shapes
