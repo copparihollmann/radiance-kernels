@@ -30,6 +30,18 @@ BUILDS = {
     "smolvla_base": ("checkpoint-smolvla-exact-golden-elf",
                      "smolvla-full-fp32-native-results.json"),
 }
+MULTITOKEN_RECORDS = {
+    "tinyllama": ("tinyllama-full-depth-fp16-multitoken-build.json",
+                  "tinyllama-full-depth-fp16-multitoken-native-results.json"),
+    "deepseek_r1_distill_qwen_1_5b": (
+        "deepseek-full-depth-fp16-multitoken-build.json",
+        "deepseek-full-depth-fp16-multitoken-native-results.json"),
+    "gemma_2_2b_it": (
+        "gemma-full-depth-int8-fp16-tied-multitoken-build.json",
+        "gemma-full-depth-int8-fp16-tied-multitoken-native-results.json"),
+}
+UPSTREAM_TOKEN_IDS = {"prefill.token_ids": [1, 2, 3],
+                      "decode0.token_ids": [4], "decode1.token_ids": [5]}
 
 
 def sha256(path: Path) -> str:
@@ -66,7 +78,9 @@ def upstream_reference(model: str, manifest: dict) -> dict:
         shards = hashlib.sha256(json.dumps(
             control["checkpoint_files_sha256"], sort_keys=True).encode()).hexdigest()
         require(control["passed"] and control["layers_checked"] ==
-                spec["num_hidden_layers"] and shards == manifest["checkpoint_sha256"],
+                spec["num_hidden_layers"] and
+                control["prefill_tokens"] == 3 and
+                control["cached_decode_tokens"] == 2 and shards == manifest["checkpoint_sha256"],
                 "Gemma full-depth upstream reference differs from the ELF")
         return {"path": str(path),
                 "maximum_absolute_error": control["maximum_absolute_error"],
@@ -76,6 +90,8 @@ def upstream_reference(model: str, manifest: dict) -> dict:
     matches = [item for item in controls if item["model"] == model and
                item["layers_checked"] == spec["num_hidden_layers"]]
     require(len(matches) == 1 and matches[0]["passed"] and
+            matches[0]["prefill_tokens"] == 3 and
+            matches[0]["cached_decode_tokens"] == 2 and
             matches[0]["checkpoint_sha256"] == manifest["checkpoint_sha256"],
             f"{model}: full-depth upstream reference differs from the ELF")
     return {"path": str(path),
@@ -363,6 +379,70 @@ def audit(model: str, generated_root: Path) -> dict:
     }
 
 
+def audit_multitoken(model: str, generated_root: Path) -> dict:
+    build_name, native_name = MULTITOKEN_RECORDS[model]
+    target = (generated_root / "checkpoint-multitoken-upstream-elf" / model).resolve()
+    build_path = HERE / "evaluation" / build_name
+    native_path = HERE / "evaluation" / native_name
+    if not (build_path.exists() and native_path.exists()):
+        return {"status": "pending"}
+    manifest = json.loads((target / "manifest.json").read_text())
+    tracked_build = json.loads(build_path.read_text())
+    graph = build(model, prefill=3, decode_steps=2)
+    require(manifest == tracked_build and manifest["model"] == model and
+            manifest["full_model_dimensions"] and
+            manifest["checkpoint_weights"] and
+            manifest["device_elf_built"] and
+            manifest["layers"] == model_specs()[model]["num_hidden_layers"] and
+            manifest["prefill_tokens"] == 3 and
+            manifest["decode_steps"] == 2 and
+            manifest["input_token_ids"] == UPSTREAM_TOKEN_IDS and
+            manifest["token_sequence_explicit"] and
+            manifest["stages"] == len(graph.stages) and
+            manifest["device_check_all_stages"] and
+            len(manifest["verified_tensors"]) == manifest["stages"],
+            f"{model}: upstream-token full-depth ELF is incomplete")
+    base_dir = BUILDS[model][0]
+    base_manifest = json.loads((generated_root / base_dir / model /
+                                "manifest.json").read_text())
+    require(manifest["weight_image_sha256"] ==
+            base_manifest["weight_image_sha256"] and
+            manifest["checkpoint_sha256"] ==
+            base_manifest["checkpoint_sha256"],
+            f"{model}: upstream-token ELF uses different checkpoint weights")
+    elf = target / "kernel.radiance.elf"
+    require(sha256(elf) == manifest["radiance_elf_sha256"],
+            f"{model}: upstream-token ELF differs from manifest")
+    image = json.loads(Path(manifest["weight_image_manifest"]).read_text())
+    verify_image_placement(elf, [image])
+    native = json.loads(native_path.read_text())
+    sources = native["device_source_files_sha256"]
+    require(native["status"] == "passed" and
+            native["process_exit_code"] == 0 and
+            native["layers"] == manifest["layers"] and
+            native["stage_count"] == manifest["stages"] and
+            native["checked_float_stages"] +
+            native["checked_integer_stages"] == manifest["stages"] and
+            native["input_token_ids"] == UPSTREAM_TOKEN_IDS and
+            native["device_elf_sha256"] == manifest["radiance_elf_sha256"] and
+            native["weight_image_sha256"] == manifest["weight_image_sha256"] and
+            native["reference_output_sha256"] ==
+            manifest["reference_output_sha256"] and
+            set(sources) == set(manifest["device_source_files"]) and
+            all(sha256(target / name) == digest
+                for name, digest in sources.items()) and
+            sha256(Path(native["log_path"])) == native["log_sha256"],
+            f"{model}: upstream-token host check is stale or incomplete")
+    return {"status": "passed", "layers": manifest["layers"],
+            "stage_count": manifest["stages"],
+            "input_token_ids": manifest["input_token_ids"],
+            "radiance_elf_sha256": manifest["radiance_elf_sha256"],
+            "checkpoint_weight_format": manifest["checkpoint_weight_format"],
+            "quantization_comparison": manifest["quantization_comparison"],
+            "build_record": str(build_path), "host_result": str(native_path),
+            "device_execution": False}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--generated-root", type=Path,
@@ -370,11 +450,18 @@ def main() -> None:
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     entries = [audit(model, args.generated_root) for model in BUILDS]
+    for entry in entries:
+        if entry["model"] in MULTITOKEN_RECORDS:
+            entry["upstream_token_sequence_build"] = audit_multitoken(
+                entry["model"], args.generated_root)
     summary = {"scope": "four_full_checkpoint_stitched_radiance_models",
                "all_elfs_built_and_host_checked": True,
                "all_full_depth_device_checks_passed": all(
                    item["full_depth_device_check"]["status"] == "passed"
                    for item in entries),
+               "all_upstream_token_sequence_builds_host_checked": all(
+                   item["upstream_token_sequence_build"]["status"] == "passed"
+                   for item in entries if item["model"] in MULTITOKEN_RECORDS),
                "models": entries, "rtl_execution": False,
                "performance_measurement": False}
     output = json.dumps(summary, indent=2) + "\n"

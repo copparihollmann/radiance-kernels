@@ -51,6 +51,27 @@ class DecoderCompilerTest(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 verify_native(target)
 
+    def test_explicit_teacher_forced_token_sequence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = generate("tinyllama", 1, 3, 2, "teacher_forced", root,
+                              device_check_all_stages=True,
+                              token_ids=[1, 2, 3, 4, 5])
+            manifest = json.loads((target / "manifest.json").read_text())
+            self.assertIn("errors=0", verify_native(target))
+            self.assertEqual(manifest["input_token_ids"], {
+                "prefill.token_ids": [1, 2, 3],
+                "decode0.token_ids": [4],
+                "decode1.token_ids": [5],
+            })
+            self.assertTrue(manifest["token_sequence_explicit"])
+            with self.assertRaises(ValueError):
+                generate("tinyllama", 1, 3, 2, "teacher_forced", root,
+                         token_ids=[1, 2, 3, 4])
+            with self.assertRaises(ValueError):
+                generate("tinyllama", 1, 3, 2, "greedy", root,
+                         token_ids=[1, 2, 3, 4, 5])
+
 
 if __name__ == "__main__":
     unittest.main()

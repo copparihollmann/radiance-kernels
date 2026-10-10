@@ -481,6 +481,55 @@ Run `python3 kernels/model_chain/audit_full_models.py`; add `--out
 kernels/model_chain/generated/four-model-readiness.json` for a local snapshot.
 The audit reports device validation as pending while those runs are active.
 
+### Full-depth upstream token sequence
+
+The pinned decoder controls in `verify_checkpoint.py` use token IDs
+`[1, 2, 3]` for prefill and `[4], [5]` for two cached decode steps. The
+compiler now accepts `--token-ids 1 2 3 4 5`, and the build manifest records
+the IDs bound to each graph input. This is an explicit choice: older default
+builds reused ID 1 for each decode input. The following separate ELFs use
+the pinned full layer counts, original tensor widths, the same checkpoint
+images as the one-token builds, and all-stage device checks:
+
+| Model | Layers | Stages | Radiance build | Full generated-C++ host check | Mapped vs original final-logit max error |
+| --- | ---: | ---: | --- | --- | ---: |
+| TinyLlama | 22 | 1,131 | [build](evaluation/tinyllama-full-depth-fp16-multitoken-build.json) | [passed](evaluation/tinyllama-full-depth-fp16-multitoken-native-results.json) | `1.41e-5` |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 | 1,689 | [build](evaluation/deepseek-full-depth-fp16-multitoken-build.json) | [passed](evaluation/deepseek-full-depth-fp16-multitoken-native-results.json) | `1.12e-5` |
+| Gemma-2-2B-it | 26 | 1,494 | [build](evaluation/gemma-full-depth-int8-fp16-tied-multitoken-build.json) | [passed](evaluation/gemma-full-depth-int8-fp16-tied-multitoken-native-results.json) | `0.674` |
+
+The original-precision NumPy graph was separately checked against the pinned
+Transformers checkpoints for this same three-plus-two token shape:
+[TinyLlama and DeepSeek](../evaluation/llm/checkpoint-results.json) and
+[Gemma](evaluation/gemma-checkpoint-full-reference.json). The host checks
+above compare every generated C++ stage against the mapped-precision NumPy
+graph. These controls establish the graph schedule and stage arithmetic on
+the host; the longer ELFs have **not** completed a full Cyclotron run. FP16
+has a small measured effect on the TinyLlama and DeepSeek final logits for
+this input. Gemma's INT8 body changes final logits substantially even though
+the top logit index is unchanged in all three recorded outputs. It is a
+quantized variant, not numerically equivalent to the unquantized checkpoint.
+These results contain no device latency or throughput measurement.
+
+To rebuild a row, set `MODEL`, `LAYERS`, `CHECKPOINT_DIR`, and `WEIGHT_IMAGE`
+to its pinned model name, full layer count, local checkpoint snapshot, and
+corresponding full-depth image manifest. The compiler verifies the checkpoint
+hashes and places all stages in one ELF. Use a Python environment with NumPy,
+PyTorch, and safetensors installed:
+
+```sh
+python3 kernels/model_chain/compile_decoder.py \
+  --model "$MODEL" --layers "$LAYERS" --prefill 3 --decode-steps 2 \
+  --token-ids 1 2 3 4 5 --device-check-all-stages \
+  --stages-per-object 20 --checkpoint-dir "$CHECKPOINT_DIR" \
+  --weight-image "$WEIGHT_IMAGE" \
+  --out-root kernels/model_chain/generated/checkpoint-multitoken-upstream-elf \
+  --build
+python3 kernels/model_chain/run_checkpoint_native.py \
+  --model "$MODEL" \
+  --generated-root kernels/model_chain/generated/checkpoint-multitoken-upstream-elf \
+  --threads 8 --jobs 2
+```
+
 Reproduce the decoder host checks with the compiled directories:
 
 ```sh

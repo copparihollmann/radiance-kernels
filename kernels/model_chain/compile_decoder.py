@@ -170,7 +170,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              device_opt: str = "O3", stages_per_object: int = 0,
              checkpoint_dir: Path | None = None,
              weight_image: Path | None = None,
-             stage_limit: int | None = None) -> Path:
+             stage_limit: int | None = None,
+             token_ids: list[int] | None = None) -> Path:
     if device_opt not in ("O1", "O2", "O3"):
         raise ValueError(f"unsupported device optimization level: {device_opt}")
     if stages_per_object < 0:
@@ -187,6 +188,12 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                          "all-stage checks, and teacher-forced tokens")
     specs = stitch.model_specs()
     spec = dict(specs[model]) if external else reference.reduced_spec(specs[model])
+    if token_ids is not None:
+        if generation != "teacher_forced" or len(token_ids) != prefill + decode:
+            raise ValueError("explicit token IDs require teacher-forced generation "
+                             "and one ID per prefill/decode token")
+        if any(token < 0 or token >= spec["vocab_size"] for token in token_ids):
+            raise ValueError("token ID is outside the model vocabulary")
     if not 1 <= layers <= specs[model]["num_hidden_layers"]:
         raise ValueError("layer count exceeds the pinned model")
     spec["num_hidden_layers"] = layers
@@ -252,6 +259,15 @@ def generate(model: str, layers: int, prefill: int, decode: int,
               for name, shape in graph.tensors.items()
               if name.endswith(".token_ids") and name.startswith(("prefill", "decode"))
               and name not in {stage["writes"] for stage in graph.stages}}
+    if token_ids is not None:
+        inputs["prefill.token_ids"] = np.asarray(token_ids[:prefill],
+                                                  dtype=np.int32)[None]
+        for step in range(decode):
+            name = f"decode{step}.token_ids"
+            if name not in inputs:
+                raise ValueError(f"graph has no teacher-forced input {name}")
+            inputs[name] = np.asarray([token_ids[prefill + step]],
+                                      dtype=np.int32)[None]
     values = reference.execute(graph, inputs, weights=provider)
     quantization_comparison = None
     if external and image_manifest["dtype"] in ("mixed_fp16", "int8_scaled",
@@ -584,6 +600,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "upstream_execution_equivalent": False,
         "buffers_cache_line_padded": True,
         "prefill_tokens": prefill, "decode_steps": decode,
+        "input_token_ids": {name: tensor.ravel().tolist()
+                            for name, tensor in sorted(inputs.items())},
+        "token_sequence_explicit": token_ids is not None,
         "generation": generation, "stages": len(graph.stages),
         "device_check_all_stages": device_check_all_stages,
         "verified_tensors": (
@@ -676,6 +695,8 @@ def main() -> None:
                         help="weights-image.json from export_decoder_weights.py")
     parser.add_argument("--stage-limit", type=int,
                         help="compile only the first N stages as a checkpoint probe")
+    parser.add_argument("--token-ids", type=int, nargs="+",
+                        help="teacher-forced prefill IDs followed by decode IDs")
     parser.add_argument("--verify-native", action="store_true")
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
@@ -685,7 +706,7 @@ def main() -> None:
                       args.decode_steps, args.generation, args.out_root,
                       args.device_check_all_stages, args.device_opt,
                       args.stages_per_object, args.checkpoint_dir,
-                      args.weight_image, args.stage_limit)
+                      args.weight_image, args.stage_limit, args.token_ids)
     if args.verify_native and args.weight_image:
         parser.error("native C++ checking is not supported for external weight images")
     if args.verify_native or (args.build and args.weight_image is None):
