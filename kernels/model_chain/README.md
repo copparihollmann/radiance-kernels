@@ -367,6 +367,32 @@ and passed at 960,681,976 functional cycles. Its final logits differ from the
 original unquantized checkpoint by up to `0.996` for this input; the result
 therefore establishes execution of the documented INT8 mapping, not numerical
 equivalence to the original checkpoint.
+
+Full-depth generated-stage C++ also runs on the host with the same checkpoint
+images and source files used to build the ELFs. `run_checkpoint_native.py`
+checks every stage tensor against the mapped-precision NumPy reference at
+`rtol=5e-3, atol=5e-4`:
+
+| Model and image | Layers | Stages checked | Host result |
+| --- | ---: | ---: | --- |
+| [TinyLlama FP16](evaluation/tinyllama-full-depth-fp16-native-results.json) | 22 | 754 | Passed |
+| [DeepSeek FP16](evaluation/deepseek-full-depth-fp16-native-results.json) | 28 | 1,126 | Passed |
+| [Gemma INT8 body, tied FP16 embedding](evaluation/gemma-full-depth-int8-fp16-tied-native-results.json) | 26 | 996 | Passed |
+
+The [SmolVLA full host result](evaluation/smolvla-full-fp32-native-results.json)
+checks its 3,673-stage action chunk against the pinned FP32 upstream policy.
+These host results validate full graph execution and mapped arithmetic, while
+the separate Cyclotron runs are needed to establish full-depth device
+instruction execution. The generated C++ uses scalar SIMT operations; these
+runs do not measure performance.
+
+Reproduce the decoder host checks with the compiled directories:
+
+```sh
+python3 kernels/model_chain/run_checkpoint_native.py --model tinyllama --generated-root kernels/model_chain/generated/checkpoint-fp16-full-depth-elf
+python3 kernels/model_chain/run_checkpoint_native.py --model deepseek_r1_distill_qwen_1_5b --generated-root kernels/model_chain/generated/checkpoint-fp16-full-depth-elf
+python3 kernels/model_chain/run_checkpoint_native.py --model gemma_2_2b_it --generated-root kernels/model_chain/generated/checkpoint-int8-fp16-tied-full-depth-elf
+```
 The generated C++ stores tensors as contiguous arrays, but the schedule keeps
 query heads, KV heads, head width, token position, and cache lifetime as
 separate logical dimensions. The full-dimension graph tests check those shapes
