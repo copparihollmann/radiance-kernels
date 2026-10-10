@@ -510,6 +510,24 @@ the top logit index is unchanged in all three recorded outputs. It is a
 quantized variant, not numerically equivalent to the unquantized checkpoint.
 These results contain no device latency or throughput measurement.
 
+For a shorter device control at the **original tensor dimensions**, one-layer
+ELFs use the same `[1, 2, 3] → [4] → [5]` token schedule. TinyLlama and
+DeepSeek use their FP32 checkpoint images; Gemma uses the INT8 body with
+tied FP16 embedding. The independent one-layer Transformers controls pass
+for this input:
+
+| Model | Checked stages in one ELF | Radiance build | One-layer upstream reference | Cyclotron |
+| --- | ---: | --- | --- | --- |
+| TinyLlama | 60 | [build](evaluation/tinyllama-one-layer-multitoken-build.json) | [passed, max logit error `6.68e-6`](evaluation/tinyllama-one-layer-multitoken-reference.json) | Running |
+| DeepSeek-R1-Distill-Qwen-1.5B | 69 | [build](evaluation/deepseek-one-layer-multitoken-build.json) | [passed, max logit error `2.86e-5`](evaluation/deepseek-one-layer-multitoken-reference.json) | Running |
+| Gemma-2-2B-it | 69 | [build](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-build.json) | [passed, max logit error `1.72e-5`](evaluation/gemma-checkpoint-one-layer-reference.json) | Running |
+
+These device controls exercise nontrivial causal masks and KV handoffs with
+real checkpoint data. The one-layer upstream errors refer to the original
+unquantized checkpoint. Gemma's one-layer mapped INT8/FP16 final logits also
+differ from that checkpoint by up to `0.206` for this input. A passing
+one-layer device result will not by itself prove full-depth device execution.
+
 To rebuild a row, set `MODEL`, `LAYERS`, `CHECKPOINT_DIR`, and `WEIGHT_IMAGE`
 to its pinned model name, full layer count, local checkpoint snapshot, and
 corresponding full-depth image manifest. The compiler verifies the checkpoint
