@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Compile a connected, reduced decoder graph into a Radiance SoC ELF.
+"""Compile a connected decoder graph into a Radiance SoC ELF.
 
-The input shapes and weights are deliberately small and generated. This is an
-operator handoff and compiler check, not a checkpoint or throughput result.
+The default uses reduced dimensions and deterministic weights to check stage
+handoffs. A checkpoint build uses the pinned full dimensions and an external
+FP32 weight image; it requires a separate Cyclotron run for device validation.
+Neither mode measures hardware performance.
 """
 
 from __future__ import annotations
@@ -24,6 +26,8 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "kernels/evaluation/llm"))
 import reference  # noqa: E402
 import stitch  # noqa: E402
+from checkpoint import SafeTensorWeights  # noqa: E402
+from export_decoder_weights import WARP_STACK_BOTTOM, WARP_STACK_TOP  # noqa: E402
 
 
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it")
@@ -56,6 +60,14 @@ def array_decl(name: str, data: np.ndarray | None, count: int,
 def write_if_changed(path: Path, content: str) -> None:
     if not path.exists() or path.read_text() != content:
         path.write_text(content)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
@@ -141,21 +153,80 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
 def generate(model: str, layers: int, prefill: int, decode: int,
              generation: str, out_root: Path,
              device_check_all_stages: bool = False,
-             device_opt: str = "O3", stages_per_object: int = 0) -> Path:
+             device_opt: str = "O3", stages_per_object: int = 0,
+             checkpoint_dir: Path | None = None,
+             weight_image: Path | None = None,
+             stage_limit: int | None = None) -> Path:
     if device_opt not in ("O1", "O2", "O3"):
         raise ValueError(f"unsupported device optimization level: {device_opt}")
     if stages_per_object < 0:
         raise ValueError("stages per object cannot be negative")
+    external = checkpoint_dir is not None or weight_image is not None
+    if external and (checkpoint_dir is None or weight_image is None):
+        raise ValueError("checkpoint directory and weight image are both required")
+    if stage_limit is not None and not external:
+        raise ValueError("stage limit is only for checkpoint device probes")
+    if external and (model not in ("tinyllama", "deepseek_r1_distill_qwen_1_5b")
+                     or stages_per_object <= 0 or not device_check_all_stages
+                     or generation != "teacher_forced"):
+        raise ValueError("checkpoint builds require a pinned model, sharded objects, "
+                         "all-stage checks, and teacher-forced tokens")
     specs = stitch.model_specs()
-    spec = reference.reduced_spec(specs[model])
+    spec = dict(specs[model]) if external else reference.reduced_spec(specs[model])
+    if not 1 <= layers <= specs[model]["num_hidden_layers"]:
+        raise ValueError("layer count exceeds the pinned model")
     spec["num_hidden_layers"] = layers
     graph = stitch.build(model, prefill=prefill, decode_steps=decode,
                          specs={model: spec}, generation=generation)
+    if stage_limit is not None:
+        if not 1 <= stage_limit <= len(graph.stages):
+            raise ValueError("stage limit is outside the decoder graph")
+        graph.stages = graph.stages[:stage_limit]
+        graph.outputs = [graph.stages[-1]["writes"]]
+    image_manifest = None
+    addresses = {}
+    provider = None
+    if external:
+        image_manifest = json.loads(weight_image.read_text())
+        if (image_manifest["model"] != model or image_manifest["layers"] != layers
+                or image_manifest["dtype"] != "fp32"
+                or not image_manifest["checkpoint_weights"]
+                or image_manifest["gpu_end_address_exclusive"] > (1 << 32)):
+            raise ValueError("weight image does not match the full-dimension graph")
+        image_parameters = {item["logical_name"]: item
+                            for item in image_manifest["parameters"]}
+        for stage in graph.stages:
+            logical = stage["attrs"].get("parameter")
+            if logical is None:
+                continue
+            if logical not in image_parameters:
+                raise ValueError(f"weight image lacks {logical}")
+            item = image_parameters[logical]
+            begin = item["gpu_address"]
+            end = begin + item["size_bytes"]
+            if begin < WARP_STACK_TOP and end > WARP_STACK_BOTTOM:
+                raise ValueError(
+                    f"{logical}: weight [{begin:#x}, {end:#x}) overlaps "
+                    f"Muon warp stacks [{WARP_STACK_BOTTOM:#x}, "
+                    f"{WARP_STACK_TOP:#x}); choose a different placement")
+        image_file = weight_image.parent / image_manifest["image_file"]
+        if (image_file.stat().st_size != image_manifest["image_size_bytes"]
+                or sha256_file(image_file) != image_manifest["image_sha256"]):
+            raise ValueError("weight-image bytes differ from manifest")
+        if sha256_file(checkpoint_dir / "config.json") != spec["source_sha256"]:
+            raise ValueError("checkpoint config differs from pinned model")
+        if sha256_file(checkpoint_dir / "model.safetensors") != image_manifest[
+                "checkpoint_weight_sha256"]:
+            raise ValueError("checkpoint weights differ from image source")
+        addresses = {item["logical_name"]: item["gpu_address"]
+                     for item in image_manifest["parameters"]}
+        provider = SafeTensorWeights(checkpoint_dir / "model.safetensors",
+                                     spec["family"])
     inputs = {name: np.arange(1, shape["shape"][1] + 1, dtype=np.int32)[None]
               for name, shape in graph.tensors.items()
               if name.endswith(".token_ids") and name.startswith(("prefill", "decode"))
               and name not in {stage["writes"] for stage in graph.stages}}
-    values = reference.execute(graph, inputs)
+    values = reference.execute(graph, inputs, weights=provider)
     target = (out_root / model).resolve()
     target.mkdir(parents=True, exist_ok=True)
     declarations = []
@@ -164,18 +235,30 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         dtype = "int32_t" if tensor["dtype"] == "int32" else "float"
         declarations.append(array_decl(symbol(name), data,
                                        int(np.prod(tensor["shape"])), dtype))
-    params = {}
-    for stage in graph.stages:
+    if not external:
+        params = {}
+        for stage in graph.stages:
+            item = param_data(stage)
+            if item is not None:
+                name, data = item
+                if name in params:
+                    if not np.array_equal(params[name], data):
+                        raise ValueError(f"inconsistent parameter {name}")
+                else:
+                    params[name] = data
+        for name, data in params.items():
+            declarations.append(array_decl(name, data, data.size))
+
+    def parameter_symbol(stage: dict) -> str | None:
+        if external:
+            logical = stage["attrs"].get("parameter")
+            if logical is None:
+                return None
+            if logical not in addresses:
+                raise ValueError(f"weight image lacks {logical}")
+            return symbol("parameter." + logical)
         item = param_data(stage)
-        if item is not None:
-            name, data = item
-            if name in params:
-                if not np.array_equal(params[name], data):
-                    raise ValueError(f"inconsistent parameter {name}")
-            else:
-                params[name] = data
-    for name, data in params.items():
-        declarations.append(array_decl(name, data, data.size))
+        return item[0] if item else None
     half = spec["head_dim"] // 2
     max_position = prefill + decode
     inv_freq = np.power(10000.0, -np.arange(half, dtype=np.float32) / half)
@@ -184,8 +267,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     declarations.append(array_decl("v_rope_sin", np.sin(angles), max_position * half))
     stage_src = []
     for i, stage in enumerate(graph.stages):
-        param = param_data(stage)
-        stage_src.append(emit_stage(i, stage, graph, param[0] if param else None))
+        stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage)))
     stage_files = []
     if stages_per_object:
         for first in range(0, len(graph.stages), stages_per_object):
@@ -193,22 +275,29 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             filename = f"stage_chunk_{first // stages_per_object:03d}.cpp"
             stage_files.append(filename)
             symbols = {}
+            external_params = {}
             for stage in graph.stages[first:last]:
                 for tensor_name in (*stage["reads"], stage["writes"]):
                     tensor = graph.tensors[tensor_name]
                     symbols[symbol(tensor_name)] = (
                         "int32_t" if tensor["dtype"] == "int32" else "float")
-                param = param_data(stage)
+                param = parameter_symbol(stage)
                 if param:
-                    symbols[param[0]] = "float"
+                    if external:
+                        external_params[param] = addresses[stage["attrs"]["parameter"]]
+                    else:
+                        symbols[param] = "float"
                 if stage["op"] == "rope":
                     symbols["v_rope_cos"] = "float"
                     symbols["v_rope_sin"] = "float"
             externs = "\n".join(f"extern __global {dtype} {name}[];"
                                 for name, dtype in sorted(symbols.items()))
+            pointers = "\n".join(
+                f"#define {name} ((const __global float*)0x{address:08x}u)"
+                for name, address in sorted(external_params.items()))
             source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
                       "#include <stdint.h>\n#include \"pipeline_math.hpp\"\n"
-                      + externs + "\n"
+                      + externs + "\n" + pointers + "\n"
                       + "\n".join(item.replace("static void stage_", "void stage_", 1)
                                   for item in stage_src[first:last]))
             write_if_changed(target / filename, source)
@@ -367,7 +456,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
               + native_check_source + "\n" + native_int_check_source +
               "\n  printf(\"errors=%u max_abs_error=%.9g\\n\", errors, maximum);\n"
               "  return errors ? 1 : 0;\n}\n")
-    write_if_changed(target / "native.cpp", native)
+    if not external:
+        write_if_changed(target / "native.cpp", native)
     write_if_changed(target / "host.cpp", (HERE / "host.cpp").read_text())
     write_if_changed(target / "Makefile",
         "PROJECT = model_chain\nMU_SRCS = kernel.cpp\nHOST_SRCS = host.cpp\n"
@@ -385,14 +475,24 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
            + f": {HERE / 'pipeline_math.hpp'}\n" if stage_files else ""))
     manifest = {
-        "model": model, "scope": "reduced_synthetic_decoder",
+        "model": model,
+        "scope": ("full_dimension_checkpoint_stage_probe" if stage_limit is not None
+                  else "full_dimension_checkpoint_decoder") if external
+                 else "reduced_synthetic_decoder",
         "device_optimization": device_opt,
         "stages_per_device_object": stages_per_object,
         "device_source_files": ["kernel.cpp", *device_source_files],
         "device_source_generated": True, "device_elf_built": False,
         "device_execution": False, "measured_cycles": None,
-        "checkpoint_weights": False,
-        "full_model_dimensions": False, "layers": layers,
+        "checkpoint_weights": external,
+        "full_model_dimensions": external, "layers": layers,
+        "stage_limit": stage_limit,
+        "weight_image_manifest": str(weight_image.resolve()) if external else None,
+        "weight_image_sha256": image_manifest["image_sha256"] if external else None,
+        "weight_image_base_address": image_manifest["gpu_base_address"] if external else None,
+        "checkpoint_sha256": image_manifest["checkpoint_weight_sha256"] if external else None,
+        "reference_output_sha256": hashlib.sha256(
+            values[graph.outputs[-1]].tobytes()).hexdigest() if external else None,
         "upstream_execution_equivalent": False,
         "buffers_cache_line_padded": True,
         "prefill_tokens": prefill, "decode_steps": decode,
@@ -483,6 +583,11 @@ def main() -> None:
     parser.add_argument("--device-check-all-stages", action="store_true")
     parser.add_argument("--device-opt", choices=("O1", "O2", "O3"), default="O3")
     parser.add_argument("--stages-per-object", type=int, default=0)
+    parser.add_argument("--checkpoint-dir", type=Path)
+    parser.add_argument("--weight-image", type=Path,
+                        help="weights-image.json from export_decoder_weights.py")
+    parser.add_argument("--stage-limit", type=int,
+                        help="compile only the first N stages as a checkpoint probe")
     parser.add_argument("--verify-native", action="store_true")
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
@@ -491,8 +596,11 @@ def main() -> None:
     target = generate(args.model, args.layers, args.prefill,
                       args.decode_steps, args.generation, args.out_root,
                       args.device_check_all_stages, args.device_opt,
-                      args.stages_per_object)
-    if args.verify_native or args.build:
+                      args.stages_per_object, args.checkpoint_dir,
+                      args.weight_image, args.stage_limit)
+    if args.verify_native and args.weight_image:
+        parser.error("native C++ checking is not supported for external weight images")
+    if args.verify_native or (args.build and args.weight_image is None):
         print(verify_native(target))
     if args.build:
         build_device(target)

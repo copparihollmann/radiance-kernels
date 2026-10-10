@@ -88,6 +88,13 @@ class SafeTensorWeights:
             raise ValueError(f"{key}: invalid row {row} or width {width}")
         return value[row]
 
+    def embedding_table(self, logical: str, vocab: int, width: int) -> np.ndarray:
+        key = self.key(logical)
+        value = self._tensor(key)
+        if value.shape != (vocab, width):
+            raise ValueError(f"{key}: got {value.shape}, expected {(vocab, width)}")
+        return value
+
     def check_bindings(self, graph) -> dict:
         bound = set()
         for stage in graph.stages:

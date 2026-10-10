@@ -1,0 +1,206 @@
+{
+  "model": "tinyllama",
+  "family": "llama",
+  "layers": 1,
+  "pinned_model_layers": 22,
+  "graph_stages": 40,
+  "parameter_uses": 24,
+  "distinct_parameters": 12,
+  "dtype": "fp32",
+  "linear_layout": "row_major_in_out",
+  "alignment_bytes": 64,
+  "gpu_base_address": 1073741824,
+  "image_size_bytes": 700473344,
+  "gpu_end_address_exclusive": 1774215168,
+  "fits_32_bit_address_space": true,
+  "parameters": [
+    {
+      "logical_name": "embed_tokens",
+      "operation": "embedding",
+      "shape": [
+        32000,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 0,
+      "gpu_address": 1073741824,
+      "size_bytes": 262144000,
+      "checkpoint_key": "model.embed_tokens.weight",
+      "packed_sha256": "4e66a081d1ef1eccc5bb068971888d442942ac2451ce238ab12bf17d40e113a1",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 262144000,
+      "gpu_address": 1335885824,
+      "size_bytes": 8192,
+      "checkpoint_key": "model.layers.0.input_layernorm.weight",
+      "packed_sha256": "5a1b3fea19a3c45363b83168115ecdfdfef2f8cad5bcf5b48b255c6a12bcf561",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 262152192,
+      "gpu_address": 1335894016,
+      "size_bytes": 16777216,
+      "checkpoint_key": "model.layers.0.self_attn.q_proj.weight",
+      "packed_sha256": "8ab873b3ac5715bf53e9f3915002b18e05aebe1a9092b1d2ac59e29ddf35e91e",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 278929408,
+      "gpu_address": 1352671232,
+      "size_bytes": 2097152,
+      "checkpoint_key": "model.layers.0.self_attn.k_proj.weight",
+      "packed_sha256": "173da60e50c654933625690fbbae1a3387da505bd5494cd77252422aeae75ed4",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 281026560,
+      "gpu_address": 1354768384,
+      "size_bytes": 2097152,
+      "checkpoint_key": "model.layers.0.self_attn.v_proj.weight",
+      "packed_sha256": "2c64b6e7eaa443c98f01c06c5955272dab75d518fb49f88a8ccc97084b4e4b13",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 283123712,
+      "gpu_address": 1356865536,
+      "size_bytes": 16777216,
+      "checkpoint_key": "model.layers.0.self_attn.o_proj.weight",
+      "packed_sha256": "4855c3ae60cabc965f833c12c66fe8091838e13d130cbc8ea3d022f61c32f4ae",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 299900928,
+      "gpu_address": 1373642752,
+      "size_bytes": 8192,
+      "checkpoint_key": "model.layers.0.post_attention_layernorm.weight",
+      "packed_sha256": "303d39ae5c51c55db5ef435b8d101814c730499b19e7dc69d1b5439d5cbd93e6",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 299909120,
+      "gpu_address": 1373650944,
+      "size_bytes": 46137344,
+      "checkpoint_key": "model.layers.0.mlp.gate_proj.weight",
+      "packed_sha256": "df2ea73af32bdca846b679b49fafd1b1f7cfc8cdeaf9853d2b09b4baeda3a20e",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 346046464,
+      "gpu_address": 1419788288,
+      "size_bytes": 46137344,
+      "checkpoint_key": "model.layers.0.mlp.up_proj.weight",
+      "packed_sha256": "5598017b7f0699f698a04862651f71aa9597bb269881755a5fa35f98e15f8469",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "layers.0.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 392183808,
+      "gpu_address": 1465925632,
+      "size_bytes": 46137344,
+      "checkpoint_key": "model.layers.0.mlp.down_proj.weight",
+      "packed_sha256": "34f6c3a43c40bd73b501697d660544cf823c85676a9e31a458ab84023c8dedb9",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "final_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 438321152,
+      "gpu_address": 1512062976,
+      "size_bytes": 8192,
+      "checkpoint_key": "model.norm.weight",
+      "packed_sha256": "fc55e713ccbd685cd6c0defdd045332210d5f3a8621ba77a715a2295967d2e0b",
+      "overlaps_warp_stacks": false
+    },
+    {
+      "logical_name": "lm_head",
+      "operation": "linear",
+      "shape": [
+        2048,
+        32000
+      ],
+      "gemma_weight_offset": false,
+      "offset_bytes": 438329344,
+      "gpu_address": 1512071168,
+      "size_bytes": 262144000,
+      "checkpoint_key": "lm_head.weight",
+      "packed_sha256": "f79e98e8c43514bc3ddff67ff3ded6641ec9fc63d335493a43968a1006c7ef69",
+      "overlaps_warp_stacks": false
+    }
+  ],
+  "checkpoint_weights": true,
+  "device_execution": false,
+  "checkpoint_config_sha256": "486bedda3a6988332e60d9638a09ca4b260d34ebcf1b19e22cf3b140b63d8fe9",
+  "checkpoint_weight_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933",
+  "image_sha256": "fb5c1c0fc15589741686bb663cf0790e08c77e27d8da04d0ee0e78e6937b85f0",
+  "image_file": "weights.bin",
+  "warp_stack_reserved_range": [
+    2128609280,
+    2130706432
+  ],
+  "stack_overlap_parameters": []
+}

@@ -10,7 +10,7 @@ steps in order. Its stage outputs remain in named GMEM buffers and the next
 stage reads those buffers. A failed final or attention/activation comparison
 sends a nonzero `tohost` result.
 
-The current decoder build uses the reduced control dimensions from
+The default decoder build uses the reduced control dimensions from
 `reference.py`: hidden width 32, FFN width 64, head width 8, and vocabulary
 64. The default is one layer, three prefill tokens, and one cached decode
 token, with deterministic generated FP32 weights. It tests the software
@@ -19,6 +19,96 @@ the original model dimensions, MX quantization, or a complete model workload.
 The reduction preserves stage order and the grouped-query head ratio, but it
 does not preserve every width ratio of the original network.
 Generated ELF files and logs remain local under `generated/`.
+
+## Checkpoint-weight device path
+
+`export_decoder_weights.py` packs pinned safetensors into the row-major FP32
+layout consumed by the generated Radiance kernels. The raw binary remains
+ignored under `generated/`; the tracked [TinyLlama image manifest](evaluation/tinyllama-one-layer-weight-image.json)
+records every logical parameter, checkpoint tensor, shape, GPU address, and
+hash. `compile_decoder.py --checkpoint-dir ... --weight-image ...` builds an
+ELF at the pinned model dimensions and places parameter pointers at those GPU
+addresses. `run_functional.py` verifies the binary hash, asks Cyclotron to
+preload it through `CYCLOTRON_WEIGHTS`, and checks device outputs against the
+NumPy reference. This path changes no RTL.
+
+The first [checkpoint device probe](evaluation/tinyllama-checkpoint-three-stage-functional-results.json)
+passed the embedding, attention RMSNorm, and Q projection stages of a
+one-layer TinyLlama prefill at the original 2048-wide hidden dimension.
+Each stage was checked on the device against the pinned checkpoint NumPy
+result at `rtol=5e-3, atol=5e-4`. Cyclotron reported 2,615,647 functional
+ISA cycles. This is a three-stage prefix, not a complete layer or model, and
+the cycle count is not a performance measurement.
+
+The [complete one-layer prefill result](evaluation/tinyllama-checkpoint-one-layer-functional-results.json)
+passes all 20 stages, including causal attention, the MLP, final norm, and
+the 32,000-logit output projection, using the same checkpoint image and
+original tensor widths. Cyclotron reported `tohost=0` after 64,348,772
+functional ISA cycles. This is one layer with one input token; TinyLlama has
+22 decoder layers, and a full-checkpoint Radiance executable has not passed.
+The [one-layer cached-decode run](evaluation/tinyllama-checkpoint-one-layer-decode-functional-results.json)
+passed all 40 prefill and decode stages, including the KV-cache handoff,
+at `tohost=0` and 128,796,327 functional ISA cycles. It used token ID 1 for
+both steps. These cycle counts are functional simulator instruction counts,
+not device latency or throughput.
+
+A [DeepSeek checkpoint prefix](evaluation/deepseek-checkpoint-three-stage-functional-results.json)
+also passed its first three device stages: embedding, RMSNorm, and Q
+projection at the pinned model dimensions. Its 2,054,187,008-byte
+[one-layer image](evaluation/deepseek-one-layer-weight-image.json) contains
+15 distinct parameters. This is a real-weight arithmetic check, not a
+complete DeepSeek layer or model.
+
+The DeepSeek placement check found a software address collision. At image
+base `0x40000000`, the up-projection weights occupy
+`[0x7c3c5000, 0x7f845000)`, overlapping Muon's reserved warp stacks
+`[0x7ee00000, 0x7f000000)` from `lib/src/mu_start.S`. The
+[18-stage run](evaluation/deepseek-checkpoint-eighteen-stage-overlap-failure.json)
+failed at up-projection element 220; a GMEM dump showed 488 changed weight
+words. The [complete one-layer attempt](evaluation/deepseek-checkpoint-one-layer-overlap-failure.json)
+failed at the same stage and element. Reusing the identical binary image at
+base `0x30000000` moved that
+projection below the stack, and the
+[18-stage control](evaluation/deepseek-checkpoint-eighteen-stage-shifted-functional-results.json)
+passed. Its [shifted manifest](evaluation/deepseek-one-layer-shifted-weight-image.json)
+still places `lm_head` across the stack, so it cannot run a complete layer.
+The compiler now rejects any stage whose weight interval intersects the
+reserved stack range before building an ELF. This is a software placement
+issue; no RTL was changed.
+
+The [capacity plan](evaluation/checkpoint-image-capacity.json) calculates the
+whole-model FP32 image sizes from the graph: 4,400,193,536 bytes for
+TinyLlama, 7,108,352,000 for DeepSeek, and 12,816,663,552 for Gemma. At the
+current `0x40000000` base, none fits in 32-bit device addresses. The
+one-layer TinyLlama image does fit (700,473,344 bytes). Full checkpoint
+execution therefore requires a staged placement policy or a supported
+lower-precision device path. A one-layer DeepSeek image fits at the same base
+(2,054,187,008 bytes); a one-layer Gemma FP32 image is 5,030,065,152 bytes
+and exceeds the address space even before placing other data. For DeepSeek,
+32-bit capacity alone is insufficient: the one-layer image must also avoid
+the warp stacks, which it does not at either tested base.
+
+To reproduce the one-layer checkpoint build with the pinned TinyLlama
+`config.json` and `model.safetensors` in `CHECKPOINT_DIR`:
+
+```sh
+python3 kernels/model_chain/export_decoder_weights.py \
+  --model tinyllama --layers 1 --checkpoint-dir "$CHECKPOINT_DIR"
+python3 kernels/model_chain/compile_decoder.py \
+  --model tinyllama --layers 1 --prefill 1 --decode-steps 0 \
+  --device-check-all-stages --stages-per-object 10 \
+  --checkpoint-dir "$CHECKPOINT_DIR" \
+  --weight-image kernels/model_chain/generated/checkpoint-weights/tinyllama/weights-image.json \
+  --out-root kernels/model_chain/generated/checkpoint-one-layer --build
+python3 kernels/model_chain/run_functional.py --models tinyllama \
+  --generated-root kernels/model_chain/generated/checkpoint-one-layer \
+  --sim-cycles 250000000 --timeout 240 \
+  --out kernels/model_chain/generated/checkpoint-one-layer/result.json
+```
+
+The compiler needs NumPy, PyTorch, and safetensors for checkpoint builds.
+The results above used the pinned checkpoint SHA-256 recorded in the image
+manifest; the exporter and compiler reject a different checkpoint.
 
 | Decoder family | Stages in one ELF | Native max error | Cyclotron functional cycles |
 | --- | ---: | ---: | ---: |
@@ -62,17 +152,18 @@ The larger simulator limit is required because the default 1,000,000 cycles
 ends before these programs finish. The functional cycles are not performance
 latency measurements.
 
-| Model | Full-dimension schedule | Reduced Radiance ELF | Full-checkpoint numerical check | VCS RTL |
-| --- | --- | --- | --- | --- |
-| TinyLlama | 22 layers | 22 reduced layers, prefill and decode | 22 layers against Transformers | 1-token prefill and 1 cached decode passed |
-| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | 28 layers against Transformers | Pending |
-| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | Checkpoint access pending | Pending |
-| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Pending | 499 used tensors bound; upstream action chunk and runtime layer order/shape checked; graph numerical comparison pending | Pending |
+| Model | Full-dimension schedule | Reduced Radiance ELF | Checkpoint device result | Full-checkpoint numerical check | VCS RTL |
+| --- | --- | --- | --- | --- | --- |
+| TinyLlama | 22 layers | 22 reduced layers, prefill and decode | One layer, one-token prefill and cached decode, 40 stages passed in Cyclotron | 22 layers against Transformers | Reduced one-token prefill and cached decode passed |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | First 18 stages of one layer passed with safe weight placement in Cyclotron | 28 layers against Transformers | Pending |
+| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | Pending | Checkpoint access pending | Pending |
+| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Pending | Pending | 499 used tensors bound; upstream action chunk and runtime layer order/shape checked; graph numerical comparison pending | Pending |
 
-The full-dimension schedules are dependency graphs, not compiled model runs.
-The checkpoint checks are Python reference checks described in
-[`kernels/evaluation/llm/README.md`](../evaluation/llm/README.md); the device
-ELFs in this directory use small synthetic weights.
+The full-dimension schedules are dependency graphs, not compiled full-model
+runs. The full-checkpoint Python controls are described in
+[`kernels/evaluation/llm/README.md`](../evaluation/llm/README.md). The three
+full-depth device ELFs in the table use small synthetic weights. The separate
+one-layer TinyLlama checkpoint ELF above uses real weights and full dimensions.
 The generated C++ stores tensors as contiguous arrays, but the schedule keeps
 query heads, KV heads, head width, token position, and cache lifetime as
 separate logical dimensions. The full-dimension graph tests check those shapes
@@ -168,10 +259,13 @@ tiling, plus RTL validation and performance measurement.
 
 The remaining work to compile the four **full** models is substantial:
 
-1. Bind real checkpoint tensors to device-accessible memory without embedding
-   billions of weights in C++ source. Establish a placement and loading policy
-   for each model and use the pinned checkpoint reference at intermediate
-   boundaries.
+1. Extend the checkpoint weight-image path to all layers. The current
+   one-layer TinyLlama image and all 40 prefill and decode device stages pass. Full FP32
+   images exceed the 32-bit address space, so the complete decoder needs
+   staged loading or a validated lower-precision format. DeepSeek's one-layer
+   FP32 image additionally intersects the warp stacks at the tested bases;
+   its full layer needs segmented placement or lower precision. Keep pinned
+   checkpoint checks at intermediate boundaries.
 2. Tile the full hidden, FFN, head, sequence, and vocabulary dimensions;
    connect the existing MX-Gemmini kernels through the shared-buffer path and
    specify FP8/BF16 conversions. The current executable uses scalar FP32 SIMT.

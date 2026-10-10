@@ -36,12 +36,24 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         raise ValueError(f"{model}: device stage check list is incomplete")
     if sha256(elf) != manifest["radiance_elf_sha256"]:
         raise ValueError(f"{model}: ELF hash differs from build manifest")
-    if "errors=0" not in (target / "native.log").read_text():
+    checkpoint_weights = manifest.get("checkpoint_weights", False)
+    if not checkpoint_weights and "errors=0" not in (target / "native.log").read_text():
         raise ValueError(f"{model}: native check did not pass")
     argv = [str(simulator), str(config), "--binary-path", str(elf),
             "--gen-trace", "false"]
     env = os.environ.copy()
     env["RADIANCE_DISABLE_CYCLOTRON_TRACE"] = "1"
+    image_manifest = None
+    if checkpoint_weights:
+        image_manifest = json.loads(Path(manifest["weight_image_manifest"]).read_text())
+        image_file = Path(manifest["weight_image_manifest"]).parent / image_manifest["image_file"]
+        if (image_file.stat().st_size != image_manifest["image_size_bytes"]
+                or sha256(image_file) != manifest["weight_image_sha256"]
+                or image_manifest["gpu_base_address"] !=
+                manifest["weight_image_base_address"]):
+            raise ValueError(f"{model}: checkpoint image differs from build manifest")
+        env["CYCLOTRON_WEIGHTS"] = (
+            f"0x{image_manifest['gpu_base_address']:x}:{image_file.resolve()}")
     try:
         process = subprocess.run(argv, cwd=simulator_root, env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -55,14 +67,20 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         return_code = 124
     (target / "functional.log").write_text(output)
     cycle_matches = re.findall(r"simulation finished after (\d+) cycles", output)
+    failed_tohost = re.search(r"isa-test failed with tohost=(\d+)", output)
+    tohost = int(failed_tohost.group(1)) if failed_tohost else None
     passed = (return_code == 0 and "isa-test passed with tohost=0" in output
               and len(cycle_matches) == 1)
+    if checkpoint_weights:
+        passed = passed and f"preloaded {image_manifest['image_size_bytes']} bytes" in output
     failure_reason = None
     if not passed:
         if return_code == 124:
             failure_reason = "wall_clock_timeout"
         elif return_code == 1 and output.rstrip().endswith("Error: 0"):
             failure_reason = "simulator_cycle_limit_reached"
+        elif failed_tohost and tohost & 1:
+            failure_reason = "device_stage_mismatch"
         else:
             failure_reason = "device_or_simulator_failure"
     result = {
@@ -78,7 +96,10 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "status": "passed" if passed else "failed",
         "failure_reason": failure_reason,
         "cycles_functional": int(cycle_matches[0]) if cycle_matches else None,
-        "tohost": 0 if passed else None,
+        "tohost": 0 if passed else tohost,
+        "failed_stage_index_one_based": (tohost >> 16) if tohost and tohost & 1 else None,
+        "failed_element_index": ((tohost & 0xffff) >> 1)
+                                if tohost and tohost & 1 else None,
         "process_exit_code": return_code,
         "device_elf_sha256": sha256(elf),
         "generated_source_sha256": sha256(target / "kernel.cpp"),
@@ -95,10 +116,15 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "simulator_cycle_limit": int(re.search(
             r"(?m)^timeout\s*=\s*(\d+)", config.read_text()).group(1)),
         "log_sha256": sha256(target / "functional.log"),
-        "checkpoint_weights": False,
-        "original_model_dimensions": False,
-        "upstream_execution_equivalent": False,
-        "native_check_tolerance": {"rtol": 1e-4, "atol": 1e-5},
+        "checkpoint_weights": checkpoint_weights,
+        "original_model_dimensions": manifest.get("full_model_dimensions", False),
+        "upstream_execution_equivalent": manifest.get("upstream_execution_equivalent", False),
+        "checkpoint_sha256": manifest.get("checkpoint_sha256"),
+        "weight_image_sha256": manifest.get("weight_image_sha256"),
+        "reference_output_sha256": manifest.get("reference_output_sha256"),
+        "stage_limit": manifest.get("stage_limit"),
+        "native_check_tolerance": (None if checkpoint_weights else
+                                   {"rtol": 1e-4, "atol": 1e-5}),
         "device_check_tolerance": {"rtol": 5e-3, "atol": 5e-4},
         "rtl_execution": False,
         "performance_measurement": False,

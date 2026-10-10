@@ -1,0 +1,49 @@
+[
+  {
+    "model": "tinyllama",
+    "scope": "full_dimension_checkpoint_stage_probe",
+    "layers": 1,
+    "prefill_tokens": 1,
+    "decode_steps": 0,
+    "stage_count": 3,
+    "checked_float_stages": 3,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "failure_reason": null,
+    "cycles_functional": 2615647,
+    "tohost": 0,
+    "process_exit_code": 0,
+    "device_elf_sha256": "3e9f12f4bed95a24cf6be332c8d806e2d29b01ae2ce05566d89074e62709dd72",
+    "generated_source_sha256": "e7b48df5e76c79f46c54a58363a49a936e0d35f5bb41ace44c2a0911d0a221bc",
+    "device_source_files_sha256": {
+      "kernel.cpp": "e7b48df5e76c79f46c54a58363a49a936e0d35f5bb41ace44c2a0911d0a221bc",
+      "stage_chunk_000.cpp": "ee8cdcf87e67384ad4d2939603fb904e6cb3737ede70e4bd33ee3653c61ccecf",
+      "model_data.cpp": "42b428246008a5f9b56dd0e3e28212ebc5b1fda7144aebb5115b759c066b5dc6",
+      "verify_chunk_000.cpp": "40615be036c21c8bcae136cfea5895d9dc4f5bdef9e5a29f9142cc298e611dc6"
+    },
+    "device_optimization": "O3",
+    "stages_per_device_object": 10,
+    "portable_ops_sha256": "2bd82fcb2040b668124af27f827a32af0f5ce490f13c41037dba19e8ceacac93",
+    "numpy_reference_sha256": "0cb0ed80092ab9925a00fb44099b834671210e26fc7b0f5af3a40979f6371725",
+    "model_specs_sha256": "1e0627ce805ec815d32f0a002a0c6b769422ee97a00c420d25711801b111a469",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+    "simulator_cycle_limit": 100000000,
+    "log_sha256": "71b403a760177fff2e005f0ec3019de5ad6717e5d4c3de4bac744cb32694e443",
+    "checkpoint_weights": true,
+    "original_model_dimensions": true,
+    "upstream_execution_equivalent": false,
+    "checkpoint_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933",
+    "weight_image_sha256": "fb5c1c0fc15589741686bb663cf0790e08c77e27d8da04d0ee0e78e6937b85f0",
+    "reference_output_sha256": "cefa538793fbb623d50aa70c0c279a4aa428a06f710652a79229f64c1a0c9b76",
+    "stage_limit": 3,
+    "native_check_tolerance": null,
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  }
+]

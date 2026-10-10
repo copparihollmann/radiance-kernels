@@ -1,0 +1,66 @@
+{
+  "purpose": "FP32 whole-checkpoint placement feasibility in the current 32-bit device address space",
+  "models": [
+    {
+      "model": "tinyllama",
+      "layers": 22,
+      "distinct_parameters": 201,
+      "image_size_bytes": 4400193536,
+      "gpu_base_address": 1073741824,
+      "gpu_end_address_exclusive": 5473935360,
+      "fits_32_bit_address_space": false,
+      "one_layer_image_size_bytes": 700473344,
+      "one_layer_fits_32_bit_address_space": true,
+      "full_image_stack_overlap_parameters": [
+        "layers.4.up_proj"
+      ],
+      "one_layer_stack_overlap_parameters": [],
+      "warp_stack_reserved_range": [
+        2128609280,
+        2130706432
+      ]
+    },
+    {
+      "model": "deepseek_r1_distill_qwen_1_5b",
+      "layers": 28,
+      "distinct_parameters": 339,
+      "image_size_bytes": 7108352000,
+      "gpu_base_address": 1073741824,
+      "gpu_end_address_exclusive": 8182093824,
+      "fits_32_bit_address_space": false,
+      "one_layer_image_size_bytes": 2054187008,
+      "one_layer_fits_32_bit_address_space": true,
+      "full_image_stack_overlap_parameters": [
+        "layers.0.up_proj"
+      ],
+      "one_layer_stack_overlap_parameters": [
+        "layers.0.up_proj"
+      ],
+      "warp_stack_reserved_range": [
+        2128609280,
+        2130706432
+      ]
+    },
+    {
+      "model": "gemma_2_2b_it",
+      "layers": 26,
+      "distinct_parameters": 289,
+      "image_size_bytes": 12816663552,
+      "gpu_base_address": 1073741824,
+      "gpu_end_address_exclusive": 13890405376,
+      "fits_32_bit_address_space": false,
+      "one_layer_image_size_bytes": 5030065152,
+      "one_layer_fits_32_bit_address_space": false,
+      "full_image_stack_overlap_parameters": [
+        "embed_tokens"
+      ],
+      "one_layer_stack_overlap_parameters": [
+        "embed_tokens"
+      ],
+      "warp_stack_reserved_range": [
+        2128609280,
+        2130706432
+      ]
+    }
+  ]
+}
