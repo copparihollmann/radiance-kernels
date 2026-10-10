@@ -71,7 +71,20 @@ base `0x30000000` moved that
 projection below the stack, and the
 [18-stage control](evaluation/deepseek-checkpoint-eighteen-stage-shifted-functional-results.json)
 passed. Its [shifted manifest](evaluation/deepseek-one-layer-shifted-weight-image.json)
-still places `lm_head` across the stack, so it cannot run a complete layer.
+still places `lm_head` across the stack. `split_decoder_weights.py` preserves
+the parameter bytes while placing the first 1,120,692,224 bytes at
+`0x30000000` and the 933,494,784-byte LM head at `0x80000000`; its
+[manifest](evaluation/deepseek-one-layer-segmented-weight-image.json) records
+both segment hashes and addresses. The
+[complete one-layer prefill result](evaluation/deepseek-checkpoint-one-layer-segmented-functional-results.json)
+passed all 23 stages against the pinned checkpoint NumPy reference in
+Cyclotron (`tohost=0`, 164,746,829 functional ISA cycles). The combined image
+SHA-256 is identical to the original contiguous image. The
+[cached-decode run](evaluation/deepseek-checkpoint-one-layer-decode-segmented-functional-results.json)
+passed all 46 prefill and decode stages with the same two segments
+(`tohost=0`, 329,641,171 functional ISA cycles). It used token ID 1 for both
+steps, as did the TinyLlama one-layer decode control. These are one-layer
+results, not a 28-layer model run.
 The compiler now rejects any stage whose weight interval intersects the
 reserved stack range before building an ELF. This is a software placement
 issue; no RTL was changed.
@@ -85,8 +98,8 @@ execution therefore requires a staged placement policy or a supported
 lower-precision device path. A one-layer DeepSeek image fits at the same base
 (2,054,187,008 bytes); a one-layer Gemma FP32 image is 5,030,065,152 bytes
 and exceeds the address space even before placing other data. For DeepSeek,
-32-bit capacity alone is insufficient: the one-layer image must also avoid
-the warp stacks, which it does not at either tested base.
+32-bit capacity alone is insufficient: a contiguous one-layer image intersects
+the warp stacks at either tested base, so the passing run uses two segments.
 
 To reproduce the one-layer checkpoint build with the pinned TinyLlama
 `config.json` and `model.safetensors` in `CHECKPOINT_DIR`:
@@ -109,6 +122,30 @@ python3 kernels/model_chain/run_functional.py --models tinyllama \
 The compiler needs NumPy, PyTorch, and safetensors for checkpoint builds.
 The results above used the pinned checkpoint SHA-256 recorded in the image
 manifest; the exporter and compiler reject a different checkpoint.
+For DeepSeek, export the pinned one-layer image and then split it with:
+
+```sh
+python3 kernels/model_chain/export_decoder_weights.py \
+  --model deepseek_r1_distill_qwen_1_5b --layers 1 \
+  --checkpoint-dir "$DEEPSEEK_CHECKPOINT_DIR"
+python3 kernels/model_chain/split_decoder_weights.py \
+  --source-image kernels/model_chain/generated/checkpoint-weights/deepseek_r1_distill_qwen_1_5b/weights-image.json \
+  --out-dir kernels/model_chain/generated/checkpoint-weights/deepseek-segmented
+python3 kernels/model_chain/compile_decoder.py \
+  --model deepseek_r1_distill_qwen_1_5b --layers 1 --prefill 1 --decode-steps 0 \
+  --device-check-all-stages --stages-per-object 10 \
+  --checkpoint-dir "$DEEPSEEK_CHECKPOINT_DIR" \
+  --weight-image kernels/model_chain/generated/checkpoint-weights/deepseek-segmented/weights-image.json \
+  --out-root kernels/model_chain/generated/checkpoint-deepseek-one-layer-segmented --build
+python3 kernels/model_chain/run_functional.py \
+  --models deepseek_r1_distill_qwen_1_5b \
+  --generated-root kernels/model_chain/generated/checkpoint-deepseek-one-layer-segmented \
+  --sim-cycles 500000000 --timeout 600 \
+  --out kernels/model_chain/generated/checkpoint-deepseek-one-layer-segmented/result.json
+```
+
+For the cached-decode control, use `--decode-steps 1`, a separate
+`--out-root`, and `--timeout 1200` in the corresponding build and run commands.
 
 | Decoder family | Stages in one ELF | Native max error | Cyclotron functional cycles |
 | --- | ---: | ---: | ---: |
@@ -155,7 +192,7 @@ latency measurements.
 | Model | Full-dimension schedule | Reduced Radiance ELF | Checkpoint device result | Full-checkpoint numerical check | VCS RTL |
 | --- | --- | --- | --- | --- | --- |
 | TinyLlama | 22 layers | 22 reduced layers, prefill and decode | One layer, one-token prefill and cached decode, 40 stages passed in Cyclotron | 22 layers against Transformers | Reduced one-token prefill and cached decode passed |
-| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | First 18 stages of one layer passed with safe weight placement in Cyclotron | 28 layers against Transformers | Pending |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | One layer, prefill and cached decode, 46 stages passed with segmented weights in Cyclotron | 28 layers against Transformers | Pending |
 | Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | Pending | Checkpoint access pending | Pending |
 | SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Pending | Pending | 499 used tensors bound; upstream action chunk and runtime layer order/shape checked; graph numerical comparison pending | Pending |
 
@@ -263,9 +300,9 @@ The remaining work to compile the four **full** models is substantial:
    one-layer TinyLlama image and all 40 prefill and decode device stages pass. Full FP32
    images exceed the 32-bit address space, so the complete decoder needs
    staged loading or a validated lower-precision format. DeepSeek's one-layer
-   FP32 image additionally intersects the warp stacks at the tested bases;
-   its full layer needs segmented placement or lower precision. Keep pinned
-   checkpoint checks at intermediate boundaries.
+   prefill and cached decode pass using two disjoint FP32 weight regions; its
+   28-layer image still exceeds device capacity. Keep pinned checkpoint checks at
+   intermediate boundaries.
 2. Tile the full hidden, FFN, head, sequence, and vocabulary dimensions;
    connect the existing MX-Gemmini kernels through the shared-buffer path and
    specify FP8/BF16 conversions. The current executable uses scalar FP32 SIMT.

@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import subprocess
 
+from split_decoder_weights import image_segments, verify_image
+
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -45,15 +47,20 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
     env["RADIANCE_DISABLE_CYCLOTRON_TRACE"] = "1"
     image_manifest = None
     if checkpoint_weights:
-        image_manifest = json.loads(Path(manifest["weight_image_manifest"]).read_text())
-        image_file = Path(manifest["weight_image_manifest"]).parent / image_manifest["image_file"]
-        if (image_file.stat().st_size != image_manifest["image_size_bytes"]
-                or sha256(image_file) != manifest["weight_image_sha256"]
+        image_manifest, image_paths = verify_image(Path(manifest["weight_image_manifest"]))
+        segments = image_segments(image_manifest)
+        layout = [{key: item[key] for key in
+                   ("gpu_base_address", "image_size_bytes", "image_sha256")}
+                  for item in segments]
+        if (image_manifest["image_sha256"] != manifest["weight_image_sha256"]
                 or image_manifest["gpu_base_address"] !=
-                manifest["weight_image_base_address"]):
+                manifest["weight_image_base_address"]
+                or (manifest.get("weight_segment_layout") is not None and
+                    layout != manifest["weight_segment_layout"])):
             raise ValueError(f"{model}: checkpoint image differs from build manifest")
-        env["CYCLOTRON_WEIGHTS"] = (
-            f"0x{image_manifest['gpu_base_address']:x}:{image_file.resolve()}")
+        env["CYCLOTRON_WEIGHTS"] = ",".join(
+            f"0x{item['gpu_base_address']:x}:{path.resolve()}"
+            for item, path in zip(segments, image_paths))
     try:
         process = subprocess.run(argv, cwd=simulator_root, env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -72,7 +79,10 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
     passed = (return_code == 0 and "isa-test passed with tohost=0" in output
               and len(cycle_matches) == 1)
     if checkpoint_weights:
-        passed = passed and f"preloaded {image_manifest['image_size_bytes']} bytes" in output
+        passed = passed and all(
+            f"preloaded {item['image_size_bytes']} bytes of weights "
+            f"@0x{item['gpu_base_address']:x}" in output
+            for item in segments)
     failure_reason = None
     if not passed:
         if return_code == 124:
@@ -121,6 +131,7 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "upstream_execution_equivalent": manifest.get("upstream_execution_equivalent", False),
         "checkpoint_sha256": manifest.get("checkpoint_sha256"),
         "weight_image_sha256": manifest.get("weight_image_sha256"),
+        "weight_segment_layout": manifest.get("weight_segment_layout"),
         "reference_output_sha256": manifest.get("reference_output_sha256"),
         "stage_limit": manifest.get("stage_limit"),
         "native_check_tolerance": (None if checkpoint_weights else

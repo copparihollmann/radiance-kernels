@@ -28,6 +28,7 @@ import reference  # noqa: E402
 import stitch  # noqa: E402
 from checkpoint import SafeTensorWeights  # noqa: E402
 from export_decoder_weights import WARP_STACK_BOTTOM, WARP_STACK_TOP  # noqa: E402
+from split_decoder_weights import image_segments, verify_image  # noqa: E402
 
 
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it")
@@ -209,10 +210,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                     f"{logical}: weight [{begin:#x}, {end:#x}) overlaps "
                     f"Muon warp stacks [{WARP_STACK_BOTTOM:#x}, "
                     f"{WARP_STACK_TOP:#x}); choose a different placement")
-        image_file = weight_image.parent / image_manifest["image_file"]
-        if (image_file.stat().st_size != image_manifest["image_size_bytes"]
-                or sha256_file(image_file) != image_manifest["image_sha256"]):
-            raise ValueError("weight-image bytes differ from manifest")
+        verify_image(weight_image)
         if sha256_file(checkpoint_dir / "config.json") != spec["source_sha256"]:
             raise ValueError("checkpoint config differs from pinned model")
         if sha256_file(checkpoint_dir / "model.safetensors") != image_manifest[
@@ -489,6 +487,11 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "stage_limit": stage_limit,
         "weight_image_manifest": str(weight_image.resolve()) if external else None,
         "weight_image_sha256": image_manifest["image_sha256"] if external else None,
+        "weight_image_segments": len(image_manifest.get("segments", [None])) if external else None,
+        "weight_segment_layout": [
+            {key: item[key] for key in ("gpu_base_address", "image_size_bytes", "image_sha256")}
+            for item in image_segments(image_manifest)
+        ] if external else None,
         "weight_image_base_address": image_manifest["gpu_base_address"] if external else None,
         "checkpoint_sha256": image_manifest["checkpoint_weight_sha256"] if external else None,
         "reference_output_sha256": hashlib.sha256(
