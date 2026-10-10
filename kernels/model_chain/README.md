@@ -518,6 +518,8 @@ runs do not measure performance.
 `audit_full_models.py` recomputes each pinned graph's stage count, verifies the
 ELF and checkpoint-image hashes and placement, checks the upstream and host
 records, and reports whether a matching full-depth Cyclotron result exists.
+It requires a matching tracked evaluation record before reporting a full-depth
+device pass; an ignored local simulator result alone is insufficient.
 For SmolVLA it also compares the compiled schedule hash, verifies that each
 Euler output feeds the next denoising step, that all 16 expert layers connect
 in order within each step, and that the prefix KV cache is read across the

@@ -30,6 +30,14 @@ BUILDS = {
     "smolvla_base": ("checkpoint-smolvla-exact-golden-elf",
                      "smolvla-full-fp32-native-results.json"),
 }
+FULL_DEVICE_RECORDS = {
+    "tinyllama": "tinyllama-full-depth-fp16-functional-results.json",
+    "deepseek_r1_distill_qwen_1_5b":
+        "deepseek-full-depth-fp16-functional-results.json",
+    "gemma_2_2b_it":
+        "gemma-full-depth-int8-fp16-tied-functional-results.json",
+    "smolvla_base": "smolvla-full-action-chunk-fp32-functional-results.json",
+}
 MULTITOKEN_RECORDS = {
     "tinyllama": ("tinyllama-full-depth-fp16-multitoken-build.json",
                   "tinyllama-full-depth-fp16-multitoken-native-results.json"),
@@ -328,6 +336,15 @@ def audit(model: str, generated_root: Path) -> dict:
     device = None
     if device_path.exists():
         candidate = json.loads(device_path.read_text())
+        tracked_device_path = HERE / "evaluation" / FULL_DEVICE_RECORDS[model]
+        if tracked_device_path.exists():
+            tracked_device = json.loads(tracked_device_path.read_text())
+            if isinstance(tracked_device, list):
+                require(len(tracked_device) == 1,
+                        f"{model}: expected one tracked device result")
+                tracked_device = tracked_device[0]
+            require(tracked_device == candidate,
+                    f"{model}: tracked device result differs from local run")
         require(candidate["device_elf_sha256"] == manifest["radiance_elf_sha256"] and
                 candidate["stage_count"] == manifest["stages"] and
                 candidate["weight_image_sha256"] == manifest["weight_image_sha256"],
@@ -335,6 +352,8 @@ def audit(model: str, generated_root: Path) -> dict:
         require(sha256(target / "functional.log") == candidate["log_sha256"],
                 f"{model}: device result log differs from its record")
         if candidate["status"] == "passed":
+            require(tracked_device_path.exists(),
+                    f"{model}: passing device result is not tracked")
             require(candidate["tohost"] == 0 and candidate["process_exit_code"] == 0,
                     f"{model}: device result claims pass without successful execution")
             if model == "smolvla_base":
@@ -350,7 +369,9 @@ def audit(model: str, generated_root: Path) -> dict:
                         candidate["reference_output_sha256"] ==
                         manifest["reference_output_sha256"],
                         f"{model}: device result omits all-stage validation")
-        device = {"status": candidate["status"], "path": str(device_path),
+        device = {"status": candidate["status"],
+                  "path": str(tracked_device_path if tracked_device_path.exists()
+                              else device_path),
                   "cycles_functional": candidate["cycles_functional"],
                   "failure_reason": candidate.get("failure_reason")}
     probe = None
