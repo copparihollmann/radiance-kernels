@@ -178,6 +178,28 @@ def audit(model: str, generated_root: Path) -> dict:
         device = {"status": candidate["status"], "path": str(device_path),
                   "cycles_functional": candidate["cycles_functional"],
                   "failure_reason": candidate.get("failure_reason")}
+    probe = None
+    if model == "smolvla_base":
+        probe_path = HERE / "evaluation/smolvla-final-euler-functional-results.json"
+        if probe_path.exists():
+            candidate = json.loads(probe_path.read_text())
+            probe_target = generated_root / "smolvla-final-euler-probe/smolvla_base"
+            require(candidate["status"] == "passed" and candidate["tohost"] == 0 and
+                    candidate["zero_output_rejected_elements"] > 0 and
+                    candidate["source_full_elf_sha256"] ==
+                    manifest["radiance_elf_sha256"] and
+                    candidate["source_stage_chunk_sha256"] ==
+                    sha256(target / "stage_chunk_091.cpp") and
+                    candidate["upstream_output_sha256"] ==
+                    manifest["golden_output_sha256"] and
+                    candidate["device_elf_sha256"] ==
+                    sha256(probe_target / "kernel.radiance.elf") and
+                    candidate["log_sha256"] ==
+                    sha256(probe_target / "functional.log"),
+                    "SmolVLA last-stage device probe is stale or incomplete")
+            probe = {"status": "passed", "stage_id": candidate["stage_id"],
+                     "cycles_functional": candidate["cycles_functional"],
+                     "path": str(probe_path)}
     return {
         "model": model, "graph_stages": len(graph.stages),
         "radiance_elf_sha256": manifest["radiance_elf_sha256"],
@@ -186,6 +208,7 @@ def audit(model: str, generated_root: Path) -> dict:
         "upstream_reference": reference,
         "full_depth_host_check": {"status": "passed", "path": str(native_path)},
         "full_depth_device_check": device or {"status": "pending"},
+        "targeted_device_probe": probe,
     }
 
 

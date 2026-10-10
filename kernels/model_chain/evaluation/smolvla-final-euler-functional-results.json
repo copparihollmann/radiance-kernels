@@ -1,0 +1,42 @@
+{
+  "model": "smolvla_base",
+  "scope": "final_euler_stage_real_graph_state",
+  "stage_id": "denoise9.euler",
+  "stage_index_zero_based": 3672,
+  "source_full_elf_sha256": "67c0a211cdb1c5bf81f88128ba03cb719e7990c1ea99bda445b49a1da0d38a6c",
+  "source_stage_chunk_sha256": "a7d3ee9b7e50bde610fcde021593dce8bdca444340d3602560dac33fbb72ad5f",
+  "probe_stage_chunk_sha256": "a7d3ee9b7e50bde610fcde021593dce8bdca444340d3602560dac33fbb72ad5f",
+  "checkpoint_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "upstream_output_sha256": "8f0c08d72ef7102e39bd377252dfd5501554ee157de973ef56aee28b7f522eb9",
+  "previous_action_sha256": "63320caa1149fcc91a785e43bb3fffd77fc29be0e11ce9313b51fcc44e0017b4",
+  "velocity_sha256": "29f7a9d1190ffd6603884218c00380d73612045f6338d6d1c2fc79dd01d9496d",
+  "previous_run_log_sha256": "e9ea2379219a2d3aec28d44e04fb0e6c549d744b7d7f70218cc614ec96bc54a5",
+  "full_trace_log_sha256": "f6ed1ef31725d8d7dc2af683cd73b6bdd05fef03b10a0fa62729aaa11d8e9e1c",
+  "source_native_binary_sha256": "df20d81f287b98b931d1af5d26215f9d694dde69bca668ea17b9ab6dbdad00a9",
+  "input_offsets_bytes": [
+    13068160,
+    13074560
+  ],
+  "output_offset_bytes": 9437888,
+  "output_elements": 1600,
+  "output_check_tolerance": {
+    "rtol": 0.001,
+    "atol": 0.001
+  },
+  "fixture_python_max_abs_error": 4.678964614868164e-06,
+  "zero_output_rejected_elements": 1482,
+  "device_elf_built": true,
+  "device_execution": true,
+  "upstream_execution_equivalent": false,
+  "device_elf_sha256": "3acbef02f45a54f34f51ba3a06bf1b615774b05842ebd49b2e3b5005dfc3bbca",
+  "status": "passed",
+  "cycles_functional": 63275,
+  "tohost": 0,
+  "process_exit_code": 0,
+  "failure_reason": null,
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+  "log_sha256": "b4db44b3111cfed09bec5f40c9ca0c32b52cd90e41c307a18c2a8870439eec2d",
+  "rtl_execution": false,
+  "performance_measurement": false
+}

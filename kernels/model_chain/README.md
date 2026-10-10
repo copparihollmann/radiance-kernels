@@ -196,6 +196,15 @@ resulting 1,600 actions with the FP32 upstream policy golden values. The
 3,673 stages and all action elements, with `4.68e-6` maximum absolute error.
 It remains a software arithmetic check; Cyclotron supplies the device
 instruction check.
+The [last-stage Cyclotron probe](evaluation/smolvla-final-euler-functional-results.json)
+uses the prior action and final velocity produced by that full native schedule
+with the exact checkpoint inputs. It links the unchanged generated
+`denoise9.euler` stage from the full ELF source and checks all 1,600 actions
+against the FP32 upstream policy at `rtol=1e-3, atol=1e-3`. It passed at
+63,275 functional ISA cycles. The result records the source, fixture, ELF,
+and simulator hashes. This checks the final action carry and Euler update on
+Radiance; a zero device output would fail 1,482 of the 1,600 comparisons. It
+does not establish that all 3,673 stages execute on the device.
 
 To reproduce the exact-input SmolVLA build, set
 `SMOLVLA_CHECKPOINT_DIR` to the pinned checkpoint directory containing
@@ -242,6 +251,26 @@ python3 kernels/model_chain/verify_smolvla_stage1.py \
 python3 kernels/model_chain/run_smolvla_native.py \
   --generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
   --threads 8
+```
+
+To reproduce the last-stage device probe, first run the generated native
+binary twice to capture its input tensors. The first run stops after the prior
+Euler action; the second traces the final velocity and confirms the complete
+action result. Both fixture files remain under ignored `generated/`:
+
+```sh
+mkdir -p kernels/model_chain/generated/smolvla-late-stage-probe
+OMP_NUM_THREADS=8 kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf/smolvla_base/native/smolvla_native 3397 kernels/model_chain/generated/smolvla-late-stage-probe/denoise8-euler.bin > kernels/model_chain/generated/smolvla-late-stage-probe/denoise8.log 2>&1
+OMP_NUM_THREADS=8 SMOLVLA_NATIVE_TRACE_DIR="$PWD/kernels/model_chain/generated/smolvla-late-stage-probe" kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf/smolvla_base/native/smolvla_native > kernels/model_chain/generated/smolvla-late-stage-probe/full-trace.log 2>&1
+python3 kernels/model_chain/probe_smolvla_euler.py \
+  --full-generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --previous-action kernels/model_chain/generated/smolvla-late-stage-probe/denoise8-euler.bin \
+  --velocity kernels/model_chain/generated/smolvla-late-stage-probe/3672.bin \
+  --previous-log kernels/model_chain/generated/smolvla-late-stage-probe/denoise8.log \
+  --trace-log kernels/model_chain/generated/smolvla-late-stage-probe/full-trace.log \
+  --golden-output kernels/evaluation/llm/smolvla-policy-fp32-results.json \
+  --out-root kernels/model_chain/generated/smolvla-final-euler-probe \
+  --out kernels/model_chain/evaluation/smolvla-final-euler-functional-results.json
 ```
 
 The full simulator run is compute intensive. The binary images, ELF, build

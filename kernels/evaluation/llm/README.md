@@ -223,8 +223,9 @@ The full-depth [host checks](../../model_chain/README.md) now execute the
 generated Radiance stage C++ with pinned checkpoint images for all three
 decoders, checking every stage against the mapped-precision NumPy reference.
 SmolVLA's full host run checks all 1,600 actions against the FP32 upstream
-policy. These results validate the stitched schedules on the host; the
-full-depth Cyclotron device runs are still in progress.
+policy. Its [final Euler stage](../../model_chain/evaluation/smolvla-final-euler-functional-results.json)
+also passed Cyclotron with real intermediate tensors from that host run.
+The full-depth Cyclotron device runs are still in progress.
 
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The
