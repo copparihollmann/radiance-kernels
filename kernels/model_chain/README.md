@@ -518,7 +518,7 @@ for this input:
 
 | Model | Checked stages in one ELF | Radiance build | One-layer upstream reference | Generated C++ | Cyclotron |
 | --- | ---: | --- | --- | --- | --- |
-| TinyLlama | 60 | [build](evaluation/tinyllama-one-layer-multitoken-build.json) | [passed, max logit error `6.68e-6`](evaluation/tinyllama-one-layer-multitoken-reference.json) | [60 stages passed](evaluation/tinyllama-one-layer-multitoken-native-results.json) | Running |
+| TinyLlama | 60 | [build](evaluation/tinyllama-one-layer-multitoken-build.json) | [passed, max logit error `6.68e-6`](evaluation/tinyllama-one-layer-multitoken-reference.json) | [60 stages passed](evaluation/tinyllama-one-layer-multitoken-native-results.json) | [passed, `tohost=0`, 322,406,150 functional cycles](evaluation/tinyllama-one-layer-multitoken-functional-results.json) |
 | DeepSeek-R1-Distill-Qwen-1.5B | 69 | [build](evaluation/deepseek-one-layer-multitoken-build.json) | [passed, max logit error `2.86e-5`](evaluation/deepseek-one-layer-multitoken-reference.json) | [69 stages passed](evaluation/deepseek-one-layer-multitoken-native-results.json) | Running |
 | Gemma-2-2B-it | 69 | [build](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-build.json) | [passed, max logit error `1.72e-5`](evaluation/gemma-checkpoint-one-layer-reference.json) | [69 stages passed](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-native-results.json) | Running |
 

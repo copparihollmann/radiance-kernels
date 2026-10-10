@@ -53,6 +53,12 @@ ONE_LAYER_MULTITOKEN_RECORDS = {
         "gemma-checkpoint-one-layer-reference.json",
         "gemma-one-layer-int8-fp16-tied-multitoken-native-results.json"),
 }
+ONE_LAYER_MULTITOKEN_DEVICE_RECORDS = {
+    "tinyllama": "tinyllama-one-layer-multitoken-functional-results.json",
+    "deepseek_r1_distill_qwen_1_5b":
+        "deepseek-one-layer-multitoken-functional-results.json",
+    "gemma_2_2b_it": "gemma-one-layer-multitoken-functional-results.json",
+}
 UPSTREAM_TOKEN_IDS = {"prefill.token_ids": [1, 2, 3],
                       "decode0.token_ids": [4], "decode1.token_ids": [5]}
 
@@ -524,6 +530,11 @@ def audit_one_layer_multitoken(model: str, generated_root: Path) -> dict:
     device = {"status": "pending"}
     if device_path.exists():
         candidate = json.loads(device_path.read_text())
+        tracked_device_path = (HERE / "evaluation" /
+                               ONE_LAYER_MULTITOKEN_DEVICE_RECORDS[model])
+        if tracked_device_path.exists():
+            require(json.loads(tracked_device_path.read_text()) == candidate,
+                    f"{model}: tracked one-layer device result differs from local run")
         require(candidate["device_elf_sha256"] ==
                 manifest["radiance_elf_sha256"] and
                 candidate["weight_image_sha256"] ==
