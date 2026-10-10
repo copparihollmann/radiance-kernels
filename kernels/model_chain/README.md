@@ -233,6 +233,17 @@ changes one expected value and is rejected at element 0 (`tohost=1`). This
 checks a representative expert attention operation; it does not establish
 device execution of every expert layer or the full action graph.
 
+The [expert projection probe](evaluation/smolvla-expert-linear-functional-results.json)
+checks `denoise0.expert00.q_proj` with its input traced from the full native
+schedule and the same packed FP32 weight image used by the full Radiance ELF.
+An independent NumPy matrix product agrees with the native stage within
+`5.48e-6` maximum absolute error. Cyclotron preloaded both weight-image
+segments and accepted all 48,000 outputs (`tohost=0`, 21,372,548 functional
+ISA cycles). The [negative control](evaluation/smolvla-expert-linear-negative-control.json)
+replaces one expected value and fails at element 0 (`tohost=1`). This is a
+targeted device check of one weighted expert stage, not a full action run or a
+performance latency measurement.
+
 To reproduce the exact-input SmolVLA build, set
 `SMOLVLA_CHECKPOINT_DIR` to the pinned checkpoint directory containing
 `config.json` and `model.safetensors`, then run from the repository root:
@@ -331,6 +342,27 @@ python3 kernels/model_chain/probe_smolvla_attention.py \
   --out-root kernels/model_chain/generated/smolvla-attention-probe \
   --out kernels/model_chain/evaluation/smolvla-expert-attention-functional-results.json \
   --negative-out kernels/model_chain/evaluation/smolvla-expert-attention-negative-control.json
+```
+
+To reproduce the weighted expert projection, trace the input and output of
+stage 931 from the same full generated sources:
+
+```sh
+mkdir -p kernels/model_chain/generated/smolvla-linear-fixture
+cp -a kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf/smolvla_base kernels/model_chain/generated/smolvla-linear-fixture/
+python3 kernels/model_chain/run_smolvla_native.py \
+  --generated-root kernels/model_chain/generated/smolvla-linear-fixture \
+  --stage-limit 931 --threads 8 \
+  --trace-dir kernels/model_chain/generated/smolvla-linear-fixture/traces \
+  --trace-stage denoise0.expert00.input_norm \
+  --trace-stage denoise0.expert00.q_proj \
+  --out kernels/model_chain/generated/smolvla-linear-fixture/fixture-result.json
+python3 kernels/model_chain/probe_smolvla_linear.py \
+  --full-generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --fixture-root kernels/model_chain/generated/smolvla-linear-fixture \
+  --out-root kernels/model_chain/generated/smolvla-linear-probe \
+  --out kernels/model_chain/evaluation/smolvla-expert-linear-functional-results.json \
+  --negative-out kernels/model_chain/evaluation/smolvla-expert-linear-negative-control.json
 ```
 
 The full simulator run is compute intensive. The binary images, ELF, build

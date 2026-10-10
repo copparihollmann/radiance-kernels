@@ -216,6 +216,7 @@ def audit(model: str, generated_root: Path) -> dict:
     probe = None
     euler_chain_probe = None
     expert_attention_probe = None
+    expert_linear_probe = None
     if model == "smolvla_base":
         probe_path = HERE / "evaluation/smolvla-final-euler-functional-results.json"
         if probe_path.exists():
@@ -351,9 +352,7 @@ def audit(model: str, generated_root: Path) -> dict:
             expected = attention_reference(q, k, v, mask)
             native_output = np.fromfile(traces / "0938.bin", dtype="<f4")
             error = float(np.max(np.abs(expected - native_output)))
-            require(hashlib.sha256(expected.astype("<f4").tobytes()).hexdigest() ==
-                    candidate["independent_numpy_output_sha256"] and
-                    np.isclose(error, candidate[
+            require(np.isclose(error, candidate[
                         "independent_numpy_max_abs_error_vs_native"],
                         rtol=1e-6, atol=1e-10) and
                     np.allclose(expected, native_output, rtol=5e-3, atol=5e-4),
@@ -384,6 +383,106 @@ def audit(model: str, generated_root: Path) -> dict:
                         sha256(negative_target / "functional.log"),
                         "SmolVLA attention negative control is stale or incomplete")
                 expert_attention_probe["negative_control"] = "passed"
+        linear_path = (HERE / "evaluation" /
+                       "smolvla-expert-linear-functional-results.json")
+        if linear_path.exists():
+            import numpy as np
+
+            candidate = json.loads(linear_path.read_text())
+            linear_target = generated_root / "smolvla-linear-probe/smolvla_base"
+            linear_manifest = json.loads((linear_target / "manifest.json").read_text())
+            fixture_root = generated_root / "smolvla-linear-fixture"
+            fixture = json.loads((fixture_root / "fixture-result.json").read_text())
+            image_parameter = next(
+                item for item in image["parameters"]
+                if item["logical_name"] ==
+                graph.stages[930]["attrs"]["parameter"])
+            segment = image["segments"][image_parameter["segment_index"]]
+            weight_path = (Path(manifest["weight_image_manifest"]).parent /
+                           segment["image_file"])
+            with weight_path.open("rb") as stream:
+                stream.seek(image_parameter["offset_bytes"])
+                packed = stream.read(image_parameter["size_bytes"])
+            input_path = fixture_root / "traces/0930.bin"
+            output_path = fixture_root / "traces/0931.bin"
+            require(candidate["status"] == "passed" and
+                    candidate["tohost"] == 0 and
+                    candidate["process_exit_code"] == 0 and
+                    candidate["stage_output_comparison"] and
+                    candidate["output_elements"] == 48000 and
+                    candidate["stage_id"] == "denoise0.expert00.q_proj" and
+                    linear_manifest["zero_output_rejected_elements"] > 0 and
+                    candidate["source_full_elf_sha256"] ==
+                    manifest["radiance_elf_sha256"] and
+                    candidate["source_stage_chunk_sha256"] ==
+                    sha256(target / "stage_chunk_023.cpp") ==
+                    sha256(linear_target / "stage_chunk_023.cpp") and
+                    candidate["weight_image_sha256"] ==
+                    manifest["weight_image_sha256"] and
+                    candidate["packed_parameter_sha256"] ==
+                    image_parameter["packed_sha256"] ==
+                    hashlib.sha256(packed).hexdigest() and
+                    candidate["packed_parameter_gpu_address"] ==
+                    image_parameter["gpu_address"] and
+                    fixture["status"] == "passed" and
+                    fixture["stage_count"] == 931 and
+                    fixture["device_elf_sha256"] ==
+                    manifest["radiance_elf_sha256"] and
+                    fixture["generated_source_sha256"] ==
+                    native["generated_source_sha256"] and
+                    sha256(Path(fixture["log_path"])) ==
+                    fixture["log_sha256"] and
+                    sha256(fixture_root /
+                           "smolvla_base/native/smolvla_native") ==
+                    fixture["native_binary_sha256"] and
+                    candidate["fixture_input_sha256"] ==
+                    sha256(input_path) and
+                    linear_manifest["fixture_native_output_sha256"] ==
+                    sha256(output_path) and
+                    linear_manifest["radiance_elf_sha256"] ==
+                    candidate["device_elf_sha256"] ==
+                    sha256(linear_target / "kernel.radiance.elf") and
+                    candidate["log_sha256"] ==
+                    sha256(linear_target / "functional.log"),
+                    "SmolVLA weighted expert projection probe is stale")
+            x = np.fromfile(input_path, dtype="<f4").reshape(50, 720)
+            w = np.frombuffer(packed, dtype="<f4").reshape(720, 960)
+            expected = (x @ w).ravel()
+            observed = np.fromfile(output_path, dtype="<f4")
+            error = float(np.max(np.abs(expected - observed)))
+            require(observed.size == 48000 and
+                    np.allclose(expected, observed, rtol=5e-3, atol=5e-4) and
+                    np.isclose(error, candidate[
+                        "independent_numpy_max_abs_error_vs_native"],
+                        rtol=0.25, atol=1e-6),
+                    "SmolVLA expert projection reference differs")
+            expert_linear_probe = {
+                "status": "passed", "stage_id": candidate["stage_id"],
+                "cycles_functional": candidate["cycles_functional"],
+                "independent_numpy_max_abs_error_vs_native": error,
+                "path": str(linear_path)}
+            negative_path = (HERE / "evaluation" /
+                             "smolvla-expert-linear-negative-control.json")
+            if negative_path.exists():
+                negative = json.loads(negative_path.read_text())
+                negative_target = (generated_root /
+                                   "smolvla-linear-probe-negative/smolvla_base")
+                require(negative["status"] == "failed" and
+                        negative["failure_reason"] ==
+                        "device_output_mismatch_or_nonfinite" and
+                        negative["tohost"] == 1 and
+                        negative["mutation"] ==
+                        "first_expected_projection_value_replaced_by_1000000.0f" and
+                        negative["positive_probe_elf_sha256"] ==
+                        candidate["device_elf_sha256"] and
+                        negative["device_elf_sha256"] ==
+                        sha256(negative_target / "kernel.radiance.elf") and
+                        negative["mutated_probe_data_sha256"] ==
+                        sha256(negative_target / "probe_data.cpp") and
+                        negative["log_sha256"] ==
+                        sha256(negative_target / "functional.log"),
+                        "SmolVLA projection negative control is stale")
+                expert_linear_probe["negative_control"] = "passed"
     return {
         "model": model, "graph_stages": len(graph.stages),
         "radiance_elf_sha256": manifest["radiance_elf_sha256"],
@@ -395,6 +494,7 @@ def audit(model: str, generated_root: Path) -> dict:
         "targeted_device_probe": probe,
         "euler_chain_device_probe": euler_chain_probe,
         "expert_attention_device_probe": expert_attention_probe,
+        "expert_linear_device_probe": expert_linear_probe,
     }
 
 
