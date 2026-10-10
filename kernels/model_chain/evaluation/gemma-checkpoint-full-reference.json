@@ -1,0 +1,41 @@
+{
+  "model": "gemma_2_2b_it",
+  "source": "https://huggingface.co/google/gemma-2-2b-it/tree/299a8560bedf22ed1c72a8a11e7dce4a7f9f51f8",
+  "config_sha256": "eacec6c5ca317a87ed2c46789d9705b9274db5027e7ba59da739bfae23addb55",
+  "checkpoint_sha256": null,
+  "checkpoint_files_sha256": {
+    "model-00001-of-00002.safetensors": "532d792c9178805064170a3ec485b7dedbfccc6fd297b92c31a6091b6c7e41bf",
+    "model-00002-of-00002.safetensors": "6d6d9ce84db398fb6e0191f91542e5da0a73da2cb695e172a24edc2146dc8d20",
+    "model.safetensors.index.json": "ada0043f3e3b2e5ab2f445cad9c0fbbf9d91ad444675e6a82b822591c63abf5a"
+  },
+  "layers_checked": 26,
+  "prefill_tokens": 3,
+  "cached_decode_tokens": 2,
+  "comparison": "last_logits_vs_transformers_full_causal_pass",
+  "upstream_attention_implementation": "eager",
+  "maximum_absolute_error": 3.6716461181640625e-05,
+  "mean_absolute_error": 5.033606612414587e-06,
+  "embedding_maximum_absolute_error": 0.0,
+  "prefill_layer_hidden_maximum_absolute_error": 9.72747802734375e-05,
+  "upstream_module_max_abs_error": {
+    "prefill.layer00.attn_norm": 1.52587890625e-05,
+    "prefill.layer00.q_proj": 5.7220458984375e-06,
+    "prefill.layer00.k_proj": 2.86102294921875e-06,
+    "prefill.layer00.v_proj": 2.384185791015625e-06,
+    "prefill.layer00.o_proj": 1.430511474609375e-06,
+    "prefill.layer00.post_attn_norm": 4.291534423828125e-06,
+    "prefill.layer00.ffn_norm": 1.239776611328125e-05,
+    "prefill.layer00.gate_proj": 2.2649765014648438e-06,
+    "prefill.layer00.up_proj": 2.86102294921875e-06,
+    "prefill.layer00.down_proj": 1.430511474609375e-06,
+    "prefill.layer00.post_ffn_norm": 2.288818359375e-05,
+    "prefill.final_norm": 9.72747802734375e-05
+  },
+  "rtol": 0.001,
+  "atol": 0.001,
+  "passed": true,
+  "device_execution": false,
+  "checkpoint_weights": true,
+  "bound_tensors": 288,
+  "missing_tensors": 0
+}

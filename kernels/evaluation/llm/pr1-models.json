@@ -35,7 +35,14 @@
     "name": "gemma-2-2b-it",
     "family": "gemma2",
     "source": "https://huggingface.co/google/gemma-2-2b-it/tree/299a8560bedf22ed1c72a8a11e7dce4a7f9f51f8",
-    "source_note": "Official checkpoint is access gated; shape and operation fields are cross-checked with PR #1 and its Gemma kernels.",
+    "source_note": "Official gated checkpoint at the pinned revision; shapes and tensor bindings are checked against its safetensors index.",
+    "checkpoint_revision": "299a8560bedf22ed1c72a8a11e7dce4a7f9f51f8",
+    "source_sha256": "eacec6c5ca317a87ed2c46789d9705b9274db5027e7ba59da739bfae23addb55",
+    "checkpoint_files_sha256": {
+      "model-00001-of-00002.safetensors": "532d792c9178805064170a3ec485b7dedbfccc6fd297b92c31a6091b6c7e41bf",
+      "model-00002-of-00002.safetensors": "6d6d9ce84db398fb6e0191f91542e5da0a73da2cb695e172a24edc2146dc8d20",
+      "model.safetensors.index.json": "ada0043f3e3b2e5ab2f445cad9c0fbbf9d91ad444675e6a82b822591c63abf5a"
+    },
     "hidden_size": 2304,
     "intermediate_size": 9216,
     "num_hidden_layers": 26,

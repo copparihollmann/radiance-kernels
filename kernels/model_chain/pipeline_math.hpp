@@ -69,6 +69,36 @@ inline void linear(const RK_GLOBAL float* normalized, const RK_GLOBAL float* wei
   }
 }
 
+inline float fp16_to_fp32(uint16_t half) {
+  const uint32_t sign = ((uint32_t)half & 0x8000u) << 16;
+  const uint32_t exponent = ((uint32_t)half >> 10) & 0x1fu;
+  const uint32_t fraction = (uint32_t)half & 0x3ffu;
+  if (!exponent && fraction) {
+    const float magnitude = (float)fraction * 5.9604644775390625e-8f;
+    return sign ? -magnitude : magnitude;
+  }
+  union { uint32_t bits; float value; } converted;
+  converted.bits = sign | ((exponent == 0x1fu ? 0xffu :
+                            exponent ? exponent + 112u : 0u) << 23)
+                   | (fraction << 13);
+  return converted.value;
+}
+
+inline void linear_f16(const RK_GLOBAL float* normalized,
+                       const RK_GLOBAL uint16_t* weight,
+                       RK_GLOBAL float* projected,
+                       uint32_t m, uint32_t k, uint32_t n,
+                       uint32_t tid, uint32_t threads) {
+  for (uint32_t out = tid; out < m * n; out += threads) {
+    const uint32_t row = out / n, col = out % n;
+    float sum = 0.0f;
+    for (uint32_t inner = 0; inner < k; ++inner)
+      sum += normalized[row * k + inner] *
+             fp16_to_fp32(weight[inner * n + col]);
+    projected[out] = sum;
+  }
+}
+
 inline void residual(const RK_GLOBAL float* projected, const RK_GLOBAL float* skip,
                      RK_GLOBAL float* output, uint32_t count,
                      uint32_t tid, uint32_t threads) {
@@ -81,6 +111,15 @@ inline void embedding(const RK_GLOBAL int32_t* ids, const RK_GLOBAL float* table
                       float scale, uint32_t tid, uint32_t threads) {
   for (uint32_t i = tid; i < count * width; i += threads)
     out[i] = table[(uint32_t)ids[i / width] * width + i % width] * scale;
+}
+
+inline void embedding_f16(const RK_GLOBAL int32_t* ids,
+                          const RK_GLOBAL uint16_t* table,
+                          RK_GLOBAL float* out, uint32_t count, uint32_t width,
+                          float scale, uint32_t tid, uint32_t threads) {
+  for (uint32_t i = tid; i < count * width; i += threads)
+    out[i] = fp16_to_fp32(table[(uint32_t)ids[i / width] * width + i % width])
+           * scale;
 }
 
 inline void bias_add(const RK_GLOBAL float* in, const RK_GLOBAL float* bias,

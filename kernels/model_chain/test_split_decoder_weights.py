@@ -3,13 +3,32 @@
 import hashlib
 import json
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
-from split_decoder_weights import verify_image, write_split
+from split_decoder_weights import (verify_image, verify_image_placement,
+                                   write_split)
 
 
 class SplitDecoderWeightsTest(unittest.TestCase):
+    def test_preload_cannot_overwrite_device_code(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            elf = Path(temporary) / "device.elf"
+            header = bytearray(52 + 32)
+            header[:7] = b"\x7fELF\x01\x01\x01"
+            struct.pack_into("<I", header, 28, 52)
+            struct.pack_into("<HH", header, 42, 32, 1)
+            struct.pack_into("<8I", header, 52, 1, 0, 0x10000000,
+                             0x10000000, 0, 0x1000, 5, 0x1000)
+            elf.write_bytes(header)
+            colliding = {"image_file": "inputs.bin", "gpu_base_address": 0x10000000,
+                         "image_size_bytes": 64, "image_sha256": ""}
+            with self.assertRaisesRegex(ValueError, "overlaps ELF LOAD segment"):
+                verify_image_placement(elf, [colliding])
+            safe = dict(colliding, gpu_base_address=0x20000000)
+            verify_image_placement(elf, [safe])
+
     def test_split_preserves_parameters_and_detects_changed_bytes(self):
         with tempfile.TemporaryDirectory() as temporary:
             source = Path(temporary) / "source"

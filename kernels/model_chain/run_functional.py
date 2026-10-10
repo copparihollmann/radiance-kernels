@@ -9,7 +9,8 @@ from pathlib import Path
 import re
 import subprocess
 
-from split_decoder_weights import image_segments, verify_image
+from split_decoder_weights import (image_segments, verify_image,
+                                   verify_image_placement)
 
 
 HERE = Path(__file__).resolve().parent
@@ -58,6 +59,7 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
                 or (manifest.get("weight_segment_layout") is not None and
                     layout != manifest["weight_segment_layout"])):
             raise ValueError(f"{model}: checkpoint image differs from build manifest")
+        verify_image_placement(elf, [image_manifest])
         env["CYCLOTRON_WEIGHTS"] = ",".join(
             f"0x{item['gpu_base_address']:x}:{path.resolve()}"
             for item, path in zip(segments, image_paths))
@@ -119,6 +121,12 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "device_optimization": manifest.get("device_optimization", "O3"),
         "stages_per_device_object": manifest.get("stages_per_device_object", 0),
         "portable_ops_sha256": sha256(HERE / "pipeline_math.hpp"),
+        "quantized_ops_sha256": (sha256(HERE / "pipeline_int8.hpp")
+                                 if manifest.get("checkpoint_weight_format") in
+                                 ("int8_scaled", "int8_fp16_tied") else None),
+        "tied_embedding_ops_sha256": (sha256(HERE / "pipeline_tied.hpp")
+                                      if manifest.get("checkpoint_weight_format") ==
+                                      "int8_fp16_tied" else None),
         "numpy_reference_sha256": sha256(ROOT / "kernels/evaluation/llm/reference.py"),
         "model_specs_sha256": manifest["source_spec_sha256"],
         "simulator_sha256": sha256(simulator),
@@ -132,6 +140,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "checkpoint_sha256": manifest.get("checkpoint_sha256"),
         "weight_image_sha256": manifest.get("weight_image_sha256"),
         "weight_segment_layout": manifest.get("weight_segment_layout"),
+        "checkpoint_weight_format": manifest.get("checkpoint_weight_format"),
+        "quantization_comparison": manifest.get("quantization_comparison"),
         "reference_output_sha256": manifest.get("reference_output_sha256"),
         "stage_limit": manifest.get("stage_limit"),
         "native_check_tolerance": (None if checkpoint_weights else

@@ -2,8 +2,8 @@
 """Compile a connected decoder graph into a Radiance SoC ELF.
 
 The default uses reduced dimensions and deterministic weights to check stage
-handoffs. A checkpoint build uses the pinned full dimensions and an external
-FP32 weight image; it requires a separate Cyclotron run for device validation.
+handoffs. A checkpoint build uses pinned full dimensions and an external
+weight image; it requires a separate Cyclotron run for device validation.
 Neither mode measures hardware performance.
 """
 
@@ -26,7 +26,8 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "kernels/evaluation/llm"))
 import reference  # noqa: E402
 import stitch  # noqa: E402
-from checkpoint import SafeTensorWeights  # noqa: E402
+from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
+                        SafeTensorWeights, TiedFP16INT8GemmaWeights)
 from export_decoder_weights import WARP_STACK_BOTTOM, WARP_STACK_TOP  # noqa: E402
 from split_decoder_weights import image_segments, verify_image  # noqa: E402
 
@@ -92,19 +93,31 @@ def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
 
 
 def emit_stage(index: int, stage: dict, graph: stitch.Graph,
-               parameter: str | None) -> str:
+               parameter: str | None, parameter_dtype: str = "fp32",
+               scale_parameter: str | None = None) -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
     ins = [symbol(name) for name in stage["reads"]]
     out = symbol(stage["writes"])
     batch = shape[0]
     count = int(np.prod(shape))
     if op == "embedding":
-        body = f"embedding({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['scale'])}, tid, tpb)"
+        if parameter_dtype == "int8_scaled":
+            body = f"embedding_i8({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['scale'])}, tid, tpb)"
+        else:
+            method = "embedding_f16" if parameter_dtype == "fp16" else "embedding"
+            body = f"{method}({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['scale'])}, tid, tpb)"
     elif op == "rmsnorm":
         body = f"rmsnorm({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['epsilon'])}, tid, tpb)"
     elif op == "linear":
         k, n = attrs["weight_shape"]
-        body = f"linear({ins[0]}, {parameter}, nullptr, {out}, {count // n}, {k}, {n}, tid, tpb)"
+        if parameter_dtype == "int8_scaled":
+            body = f"linear_i8({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
+        elif parameter_dtype == "fp16_tied":
+            body = f"linear_f16_tied({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
+        elif parameter_dtype == "fp16":
+            body = f"linear_f16({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
+        else:
+            body = f"linear({ins[0]}, {parameter}, nullptr, {out}, {count // n}, {k}, {n}, tid, tpb)"
     elif op == "bias_add":
         width = int(np.prod(shape[2:]))
         body = f"bias_add({ins[0]}, {parameter}, {out}, {count}, {width}, tid, tpb)"
@@ -167,7 +180,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("checkpoint directory and weight image are both required")
     if stage_limit is not None and not external:
         raise ValueError("stage limit is only for checkpoint device probes")
-    if external and (model not in ("tinyllama", "deepseek_r1_distill_qwen_1_5b")
+    if external and (model not in MODELS
                      or stages_per_object <= 0 or not device_check_all_stages
                      or generation != "teacher_forced"):
         raise ValueError("checkpoint builds require a pinned model, sharded objects, "
@@ -190,7 +203,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     if external:
         image_manifest = json.loads(weight_image.read_text())
         if (image_manifest["model"] != model or image_manifest["layers"] != layers
-                or image_manifest["dtype"] != "fp32"
+                or image_manifest["dtype"] not in ("fp32", "mixed_fp16", "int8_scaled",
+                                                   "int8_fp16_tied")
                 or not image_manifest["checkpoint_weights"]
                 or image_manifest["gpu_end_address_exclusive"] > (1 << 32)):
             raise ValueError("weight image does not match the full-dimension graph")
@@ -213,18 +227,50 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         verify_image(weight_image)
         if sha256_file(checkpoint_dir / "config.json") != spec["source_sha256"]:
             raise ValueError("checkpoint config differs from pinned model")
-        if sha256_file(checkpoint_dir / "model.safetensors") != image_manifest[
+        if "checkpoint_files_sha256" in image_manifest:
+            actual_files = {name: sha256_file(checkpoint_dir / name)
+                            for name in image_manifest["checkpoint_files_sha256"]}
+            if actual_files != image_manifest["checkpoint_files_sha256"] or actual_files != spec[
+                    "checkpoint_files_sha256"]:
+                raise ValueError("checkpoint shards differ from pinned image source")
+        elif sha256_file(checkpoint_dir / "model.safetensors") != image_manifest[
                 "checkpoint_weight_sha256"]:
             raise ValueError("checkpoint weights differ from image source")
         addresses = {item["logical_name"]: item["gpu_address"]
                      for item in image_manifest["parameters"]}
-        provider = SafeTensorWeights(checkpoint_dir / "model.safetensors",
-                                     spec["family"])
+        source_provider = SafeTensorWeights(
+            checkpoint_dir if "checkpoint_files_sha256" in image_manifest
+            else checkpoint_dir / "model.safetensors",
+                                            spec["family"])
+        provider = (MixedFP16Weights(source_provider)
+                    if image_manifest["dtype"] == "mixed_fp16" else
+                    TiedFP16INT8GemmaWeights(source_provider)
+                    if image_manifest["dtype"] == "int8_fp16_tied" else
+                    QuantizedINT8Weights(source_provider)
+                    if image_manifest["dtype"] == "int8_scaled" else source_provider)
     inputs = {name: np.arange(1, shape["shape"][1] + 1, dtype=np.int32)[None]
               for name, shape in graph.tensors.items()
               if name.endswith(".token_ids") and name.startswith(("prefill", "decode"))
               and name not in {stage["writes"] for stage in graph.stages}}
     values = reference.execute(graph, inputs, weights=provider)
+    quantization_comparison = None
+    if external and image_manifest["dtype"] in ("mixed_fp16", "int8_scaled",
+                                                 "int8_fp16_tied"):
+        unquantized = reference.execute(graph, inputs, weights=source_provider)
+        quantization_comparison = {}
+        for name in graph.outputs:
+            actual = values[name].astype(np.float64)
+            original = unquantized[name].astype(np.float64)
+            delta = actual - original
+            quantization_comparison[name] = {
+                "max_abs_error": float(np.max(np.abs(delta))),
+                "rms_error": float(np.sqrt(np.mean(delta * delta))),
+                "reference_sha256": hashlib.sha256(
+                    unquantized[name].tobytes()).hexdigest(),
+                "quantized_sha256": hashlib.sha256(
+                    values[name].tobytes()).hexdigest(),
+                "top1_equal": bool(np.argmax(actual) == np.argmax(original)),
+            }
     target = (out_root / model).resolve()
     target.mkdir(parents=True, exist_ok=True)
     declarations = []
@@ -257,6 +303,20 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             return symbol("parameter." + logical)
         item = param_data(stage)
         return item[0] if item else None
+
+    def scale_symbol(stage: dict) -> str | None:
+        if not external:
+            return None
+        logical = stage["attrs"].get("parameter")
+        if logical is None or image_parameters[logical].get("scale_gpu_address") is None:
+            return None
+        return symbol("scale." + logical)
+
+    def parameter_dtype(stage: dict) -> str:
+        if not external:
+            return "fp32"
+        logical = stage["attrs"].get("parameter")
+        return image_parameters[logical].get("storage_dtype", "fp32") if logical else "fp32"
     half = spec["head_dim"] // 2
     max_position = prefill + decode
     inv_freq = np.power(10000.0, -np.arange(half, dtype=np.float32) / half)
@@ -264,8 +324,11 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     declarations.append(array_decl("v_rope_cos", np.cos(angles), max_position * half))
     declarations.append(array_decl("v_rope_sin", np.sin(angles), max_position * half))
     stage_src = []
+    uses_int8 = external and image_manifest["dtype"] in ("int8_scaled", "int8_fp16_tied")
+    uses_tied = external and image_manifest["dtype"] == "int8_fp16_tied"
     for i, stage in enumerate(graph.stages):
-        stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage)))
+        stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
+                                    parameter_dtype(stage), scale_symbol(stage)))
     stage_files = []
     if stages_per_object:
         for first in range(0, len(graph.stages), stages_per_object):
@@ -282,7 +345,14 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                 param = parameter_symbol(stage)
                 if param:
                     if external:
-                        external_params[param] = addresses[stage["attrs"]["parameter"]]
+                        external_params[param] = (
+                            addresses[stage["attrs"]["parameter"]],
+                            parameter_dtype(stage))
+                        scale = scale_symbol(stage)
+                        if scale:
+                            external_params[scale] = (
+                                image_parameters[stage["attrs"]["parameter"]]
+                                ["scale_gpu_address"], "fp32")
                     else:
                         symbols[param] = "float"
                 if stage["op"] == "rope":
@@ -291,10 +361,13 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             externs = "\n".join(f"extern __global {dtype} {name}[];"
                                 for name, dtype in sorted(symbols.items()))
             pointers = "\n".join(
-                f"#define {name} ((const __global float*)0x{address:08x}u)"
-                for name, address in sorted(external_params.items()))
+                f"#define {name} ((const __global "
+                f"{'uint16_t' if dtype in ('fp16', 'fp16_tied') else 'int8_t' if dtype == 'int8_scaled' else 'float'}*)0x{address:08x}u)"
+                for name, (address, dtype) in sorted(external_params.items()))
             source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
                       "#include <stdint.h>\n#include \"pipeline_math.hpp\"\n"
+                      + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
+                      + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
                       + externs + "\n" + pointers + "\n"
                       + "\n".join(item.replace("static void stage_", "void stage_", 1)
                                   for item in stage_src[first:last]))
@@ -425,7 +498,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     cpp = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
            "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
            "#include \"pipeline_math.hpp\"\n"
-           "extern \"C\" uint32_t __mu_num_warps = 1;\n"
+           + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
+           + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
+           + "extern \"C\" uint32_t __mu_num_warps = 1;\n"
            + device_declarations + "\n" + device_stages + "\n" + verify_prototypes +
            "\nint main() {\n" + schedule +
            "\n  if (mu_hart_id() != 0) { for (;;) {} }\n"
@@ -445,6 +520,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         for out, gold, count in integer_checks)
     native = ("#include <stdint.h>\n#include <stdio.h>\n"
               "#include \"pipeline_math.hpp\"\n"
+              + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
+              + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
               + "\n".join(part.replace("__global ", "")
                           for part in declarations + ([] if device_check_all_stages else native_extra))
               + "\n" + "\n".join(stage_src) + "\nint main() {\n"
@@ -469,9 +546,15 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         f"LLVM_MUON ?= {ROOT / 'llvm/llvm-muon'}\n"
         f"EXTRA_MU_CFLAGS += -I{HERE}\n"
         f"include {ROOT / 'kernels/common.mk'}\n"
-        f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}\n"
+        f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}"
+        + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
+        + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
+        + "\n"
         + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
-           + f": {HERE / 'pipeline_math.hpp'}\n" if stage_files else ""))
+           + f": {HERE / 'pipeline_math.hpp'}"
+           + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
+           + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
+           + "\n" if stage_files else ""))
     manifest = {
         "model": model,
         "scope": ("full_dimension_checkpoint_stage_probe" if stage_limit is not None
@@ -496,6 +579,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "checkpoint_sha256": image_manifest["checkpoint_weight_sha256"] if external else None,
         "reference_output_sha256": hashlib.sha256(
             values[graph.outputs[-1]].tobytes()).hexdigest() if external else None,
+        "checkpoint_weight_format": image_manifest["dtype"] if external else None,
+        "quantization_comparison": quantization_comparison,
         "upstream_execution_equivalent": False,
         "buffers_cache_line_padded": True,
         "prefill_tokens": prefill, "decode_steps": decode,

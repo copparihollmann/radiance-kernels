@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import struct
 
 
 ALIGNMENT = 64
@@ -27,6 +28,38 @@ def image_segments(manifest: dict) -> list[dict]:
              "gpu_base_address": manifest["gpu_base_address"],
              "image_size_bytes": manifest["image_size_bytes"],
              "image_sha256": manifest["image_sha256"]}]
+
+
+def verify_image_placement(elf: Path, images: list[dict]) -> None:
+    """Reject preloads that overwrite ELF segments, stacks, or one another."""
+    with elf.open("rb") as stream:
+        header = stream.read(52)
+        if (len(header) != 52 or header[:7] != b"\x7fELF\x01\x01\x01"):
+            raise ValueError("expected a little-endian ELF32 device executable")
+        phoff = struct.unpack_from("<I", header, 28)[0]
+        phentsize, phnum = struct.unpack_from("<HH", header, 42)
+        if phentsize < 32 or phnum == 0:
+            raise ValueError("device ELF has no valid program headers")
+        occupied = [(STACK_BOTTOM, STACK_TOP, "warp stacks"),
+                    (CONSOLE_MMIO, 1 << 32, "console MMIO")]
+        for index in range(phnum):
+            stream.seek(phoff + index * phentsize)
+            program = stream.read(32)
+            if len(program) != 32:
+                raise ValueError("truncated device ELF program header")
+            kind, _, vaddr, _, _, memsz, _, _ = struct.unpack("<8I", program)
+            if kind == 1 and memsz:
+                occupied.append((vaddr, vaddr + memsz, "ELF LOAD segment"))
+    for image in images:
+        for segment in image_segments(image):
+            start = segment["gpu_base_address"]
+            end = start + segment["image_size_bytes"]
+            for low, high, label in occupied:
+                if start < high and end > low:
+                    raise ValueError(
+                        f"preload [{start:#x},{end:#x}) overlaps {label} "
+                        f"[{low:#x},{high:#x})")
+            occupied.append((start, end, "another preload"))
 
 
 def verify_image(manifest_path: Path) -> tuple[dict, list[Path]]:
@@ -70,6 +103,14 @@ def verify_image(manifest_path: Path) -> tuple[dict, list[Path]]:
                 segment["image_size_bytes"] or item["gpu_address"] !=
                 segment["gpu_base_address"] + offset):
             raise ValueError(f"{item['logical_name']}: address or size differs from segment")
+        if item.get("storage_dtype") == "int8_scaled":
+            scale_offset = item["scale_offset_bytes"]
+            if (scale_offset % ALIGNMENT or
+                    scale_offset < offset + item["weight_size_bytes"] or
+                    scale_offset + 4 * item["scale_count"] != offset + size or
+                    item["scale_gpu_address"] != segment["gpu_base_address"] +
+                    scale_offset):
+                raise ValueError(f"{item['logical_name']}: INT8 scale address differs from segment")
     return manifest, paths
 
 
