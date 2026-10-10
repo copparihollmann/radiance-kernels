@@ -385,6 +385,12 @@ These host results validate full graph execution and mapped arithmetic, while
 the separate Cyclotron runs are needed to establish full-depth device
 instruction execution. The generated C++ uses scalar SIMT operations; these
 runs do not measure performance.
+`audit_full_models.py` recomputes each pinned graph's stage count, verifies the
+ELF and checkpoint-image hashes and placement, checks the upstream and host
+records, and reports whether a matching full-depth Cyclotron result exists.
+Run `python3 kernels/model_chain/audit_full_models.py`; add `--out
+kernels/model_chain/generated/four-model-readiness.json` for a local snapshot.
+The audit reports device validation as pending while those runs are active.
 
 Reproduce the decoder host checks with the compiled directories:
 
