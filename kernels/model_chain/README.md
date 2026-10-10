@@ -206,6 +206,21 @@ and simulator hashes. This checks the final action carry and Euler update on
 Radiance; a zero device output would fail 1,482 of the 1,600 comparisons. It
 does not establish that all 3,673 stages execute on the device.
 
+The [ten-step Euler chain probe](evaluation/smolvla-euler-chain-functional-results.json)
+passed in Cyclotron at `tohost=0` after 620,941 functional ISA cycles. It
+executes the unchanged `denoise0.euler` through `denoise9.euler` functions
+in order, using the full native run's ten `action_out` tensors as velocities.
+It checks all 1,600 action values after every update and the alternating
+action buffers. Its fixture control recovers the FP32 upstream final action
+within `4.68e-6` maximum absolute error. This validates the action carry
+across ten iterations. The expert networks that produce the velocities are
+checked by the full generated-C++ host run; the full ELF device run remains
+pending.
+The [negative control](evaluation/smolvla-euler-chain-negative-control.json)
+changes the first expected action to `1000000.0f` in a separate probe ELF.
+Cyclotron rejects it at iteration 1, element 0 (`tohost=65537`), which checks
+that the intermediate device comparisons are active.
+
 To reproduce the exact-input SmolVLA build, set
 `SMOLVLA_CHECKPOINT_DIR` to the pinned checkpoint directory containing
 `config.json` and `model.safetensors`, then run from the repository root:
@@ -271,6 +286,14 @@ python3 kernels/model_chain/probe_smolvla_euler.py \
   --golden-output kernels/evaluation/llm/smolvla-policy-fp32-results.json \
   --out-root kernels/model_chain/generated/smolvla-final-euler-probe \
   --out kernels/model_chain/evaluation/smolvla-final-euler-functional-results.json
+python3 kernels/model_chain/probe_smolvla_euler_chain.py \
+  --full-generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --trace-dir kernels/model_chain/generated/smolvla-late-stage-probe \
+  --input-image kernels/model_chain/generated/smolvla-exact-inputs/inputs-image.json \
+  --golden-output kernels/evaluation/llm/smolvla-policy-fp32-results.json \
+  --out-root kernels/model_chain/generated/smolvla-euler-chain-probe \
+  --out kernels/model_chain/evaluation/smolvla-euler-chain-functional-results.json \
+  --negative-out kernels/model_chain/evaluation/smolvla-euler-chain-negative-control.json
 ```
 
 The full simulator run is compute intensive. The binary images, ELF, build

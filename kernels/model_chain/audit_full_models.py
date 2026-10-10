@@ -179,6 +179,7 @@ def audit(model: str, generated_root: Path) -> dict:
                   "cycles_functional": candidate["cycles_functional"],
                   "failure_reason": candidate.get("failure_reason")}
     probe = None
+    euler_chain_probe = None
     if model == "smolvla_base":
         probe_path = HERE / "evaluation/smolvla-final-euler-functional-results.json"
         if probe_path.exists():
@@ -200,6 +201,59 @@ def audit(model: str, generated_root: Path) -> dict:
             probe = {"status": "passed", "stage_id": candidate["stage_id"],
                      "cycles_functional": candidate["cycles_functional"],
                      "path": str(probe_path)}
+        chain_path = HERE / "evaluation/smolvla-euler-chain-functional-results.json"
+        if chain_path.exists():
+            candidate = json.loads(chain_path.read_text())
+            chain_target = generated_root / "smolvla-euler-chain-probe/smolvla_base"
+            expected_ids = [f"denoise{iteration}.euler" for iteration in range(10)]
+            expected_indices = [index + 1 for index, stage in enumerate(graph.stages)
+                                if stage["id"] in expected_ids]
+            require(candidate["status"] == "passed" and
+                    candidate["tohost"] == 0 and
+                    candidate["process_exit_code"] == 0 and
+                    candidate["stage_ids"] == expected_ids and
+                    candidate["stage_indices_one_based"] == expected_indices and
+                    len(candidate["zero_output_rejected_elements_per_iteration"]) == 10 and
+                    all(count > 0 for count in candidate[
+                        "zero_output_rejected_elements_per_iteration"]) and
+                    candidate["source_full_elf_sha256"] ==
+                    manifest["radiance_elf_sha256"] and
+                    candidate["input_image_sha256"] ==
+                    manifest["input_image_sha256"] and
+                    candidate["upstream_output_sha256"] ==
+                    manifest["golden_output_sha256"] and
+                    all(sha256(target / name) == digest and
+                        sha256(chain_target / name) == digest for name, digest in
+                        candidate["source_stage_chunks_sha256"].items()) and
+                    candidate["device_elf_sha256"] ==
+                    sha256(chain_target / "kernel.radiance.elf") and
+                    candidate["log_sha256"] ==
+                    sha256(chain_target / "functional.log"),
+                    "SmolVLA ten-step Euler device probe is stale or incomplete")
+            euler_chain_probe = {"status": "passed", "stages": 10,
+                                 "cycles_functional": candidate["cycles_functional"],
+                                 "path": str(chain_path)}
+            negative_path = (HERE / "evaluation" /
+                             "smolvla-euler-chain-negative-control.json")
+            if negative_path.exists():
+                negative = json.loads(negative_path.read_text())
+                negative_target = (generated_root /
+                                   "smolvla-euler-chain-probe-negative/smolvla_base")
+                require(negative["status"] == "failed" and
+                        negative["failure_reason"] == "device_output_mismatch" and
+                        negative["tohost"] == 65537 and
+                        negative["mutation"] ==
+                        "first_expected_action_replaced_by_1000000.0f" and
+                        negative["positive_probe_elf_sha256"] ==
+                        candidate["device_elf_sha256"] and
+                        negative["device_elf_sha256"] ==
+                        sha256(negative_target / "kernel.radiance.elf") and
+                        negative["mutated_probe_data_sha256"] ==
+                        sha256(negative_target / "probe_data.cpp") and
+                        negative["log_sha256"] ==
+                        sha256(negative_target / "functional.log"),
+                        "SmolVLA Euler negative control is stale or incomplete")
+                euler_chain_probe["negative_control"] = "passed"
     return {
         "model": model, "graph_stages": len(graph.stages),
         "radiance_elf_sha256": manifest["radiance_elf_sha256"],
@@ -209,6 +263,7 @@ def audit(model: str, generated_root: Path) -> dict:
         "full_depth_host_check": {"status": "passed", "path": str(native_path)},
         "full_depth_device_check": device or {"status": "pending"},
         "targeted_device_probe": probe,
+        "euler_chain_device_probe": euler_chain_probe,
     }
 
 
