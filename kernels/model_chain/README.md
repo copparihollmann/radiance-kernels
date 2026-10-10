@@ -206,6 +206,15 @@ and simulator hashes. This checks the final action carry and Euler update on
 Radiance; a zero device output would fail 1,482 of the 1,600 comparisons. It
 does not establish that all 3,673 stages execute on the device.
 
+An [RTL VCS attempt](evaluation/smolvla-final-euler-vcs-attempt.json) used the
+SoC ELF for this same final-stage probe and the locally built
+`RadianceSingleClusterFastConfig` simulator. The process reached its 600-second
+wall limit after UART startup without an observed device check or failure
+marker. Its status is **incomplete**; the attempt provides no RTL correctness
+result for SmolVLA. The record pins the ELF, simulator, and log hashes. The
+local VCS binary predates this probe ELF, so a fresh simulator build and a
+longer run would be needed before drawing an RTL conclusion.
+
 The [ten-step Euler chain probe](evaluation/smolvla-euler-chain-functional-results.json)
 passed in Cyclotron at `tohost=0` after 620,941 functional ISA cycles. It
 executes the unchanged `denoise0.euler` through `denoise9.euler` functions
