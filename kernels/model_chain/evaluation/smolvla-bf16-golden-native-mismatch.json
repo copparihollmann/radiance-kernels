@@ -1,0 +1,16 @@
+{
+  "model": "smolvla_base",
+  "scope": "generated_stage_cpp_on_cpu",
+  "stage_count": 3673,
+  "host_threads": 8,
+  "status": "failed",
+  "process_exit_code": 1,
+  "upstream_golden_compared": true,
+  "native_binary_sha256": "4d9abeb2f0951da02b3f33c66f46572ce6f975bce225a5a46ea2624d05d6dbaa",
+  "device_elf_sha256": "07fc4c21e85e0ef4e663320ee102393f8444b2e294aa8b1d3e6778f8ab9c8860",
+  "log_sha256": "325dec92f8204c8ce9fd50a327c096f3923b9bd64074aa30c74ab567774c56f8",
+  "log_tail": "ted 1500/3673: denoise2.expert01.q_proj\ncompleted 1600/3673: denoise2.expert07.cross_attention_mask\ncompleted 1700/3673: denoise2.expert13.ffn_norm\ncompleted 1800/3673: denoise3.expert02.attn_residual\ncompleted 1900/3673: denoise3.expert08.activation\ncompleted 2000/3673: denoise3.expert15.q_proj\ncompleted 2100/3673: denoise4.expert04.q_rope\ncompleted 2200/3673: denoise4.expert10.k_append\ncompleted 2300/3673: denoise5.action_time_mlp_in_linear\ncompleted 2400/3673: denoise5.expert05.ffn_norm\ncompleted 2500/3673: denoise5.expert11.down_proj\ncompleted 2600/3673: denoise6.expert00.activation\ncompleted 2700/3673: denoise6.expert07.q_proj\ncompleted 2800/3673: denoise6.expert13.cross_attention_mask\ncompleted 2900/3673: denoise7.expert02.k_append\ncompleted 3000/3673: denoise7.expert08.attn_residual\ncompleted 3100/3673: denoise7.expert14.activation\ncompleted 3200/3673: denoise8.expert03.down_proj\ncompleted 3300/3673: denoise8.expert10.q_rope\ncompleted 3400/3673: denoise9.action_in\ncompleted 3500/3673: denoise9.expert05.cross_attention_mask\ncompleted 3600/3673: denoise9.expert11.ffn_norm\ncompleted 3673/3673: denoise9.euler\nactions=1600 failures=59 first_failure=609 max_abs_error=0.0263159275\n",
+  "rtl_execution": false,
+  "device_execution": false,
+  "performance_measurement": false
+}

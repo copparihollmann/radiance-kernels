@@ -163,11 +163,19 @@ and action carry in one executable. That first ELF only checks for finite
 outputs. A second [full ELF](evaluation/smolvla-full-action-chunk-exact-golden-build.json)
 uses the exact [upstream input image](evaluation/smolvla-exact-input-image.json)
 and checks all 1,600 actions against the
-[golden CPU policy output](../evaluation/llm/smolvla-policy-results.json)
-at `rtol=1e-2, atol=1e-2`; it has compiled and passed the Radiance buffer
+[upstream CPU policy explicitly cast to FP32](../evaluation/llm/smolvla-policy-fp32-results.json)
+at `rtol=1e-3, atol=1e-3`; it has compiled and passed the Radiance buffer
 layout check. Its complete Cyclotron run is in progress, so the output check
-has not yet passed on the device. The device math promotes BF16 checkpoint
-weights to FP32; any completed comparison must report that precision choice.
+has not yet passed on the device. The checkpoint's original language embedding
+weights are BF16. Casting the policy to FP32 with the same pinned weights and
+inputs changes its final actions by up to `0.0263`; 405 of 1,600 values exceed
+the device check tolerance. The [precision comparison](evaluation/smolvla-precision-comparison.json)
+links both [original checkpoint](../evaluation/llm/smolvla-policy-results.json)
+and FP32 policy output hashes. The graph schedule is unchanged by this cast;
+the numerical distinction must accompany any SmolVLA result. An earlier
+[native comparison against the original BF16 output](evaluation/smolvla-bf16-golden-native-mismatch.json)
+failed at 59 action elements under the looser `1e-2` tolerance, which led to
+the explicit FP32 policy control.
 The [first-stage Cyclotron probe](evaluation/smolvla-stage1-functional-results.json)
 passed the vision patch embedding with real weights after 142,591,422
 functional ISA cycles, checking only that its output is finite. It does not
@@ -176,6 +184,18 @@ attempt [failed before the first stage](evaluation/smolvla-exact-input-overlap-f
 because the input blob at `0x10000000` overwrote the ELF entry point. The
 exporter now places it at `0x20000000`; the runner checks all preloads against
 ELF segments, reserved stacks, and each other before starting Cyclotron.
+The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
+uses the generated C++ stage with real checkpoint weights and byte-exact
+camera input. Its 1024 by 768 patch tokens match a PyTorch convolution plus
+position embedding using the pinned tensors to `1.34e-5` maximum absolute
+error. This checks the first vision operation more strongly than the finite
+Cyclotron probe. `run_smolvla_native.py` can execute the same generated
+stage functions through the entire action schedule on a CPU and compare the
+resulting 1,600 actions with the FP32 upstream policy golden values. The
+[full native run](evaluation/smolvla-full-fp32-native-results.json) passed all
+3,673 stages and all action elements, with `4.68e-6` maximum absolute error.
+It remains a software arithmetic check; Cyclotron supplies the device
+instruction check.
 
 To reproduce the exact-input SmolVLA build, set
 `SMOLVLA_CHECKPOINT_DIR` to the pinned checkpoint directory containing
@@ -185,6 +205,13 @@ To reproduce the exact-input SmolVLA build, set
 python3 kernels/evaluation/llm/verify_smolvla_policy.py \
   --checkpoint-dir "$SMOLVLA_CHECKPOINT_DIR" \
   --out kernels/evaluation/llm/smolvla-policy-results.json
+python3 kernels/evaluation/llm/verify_smolvla_policy.py \
+  --checkpoint-dir "$SMOLVLA_CHECKPOINT_DIR" --promote-fp32 \
+  --out kernels/evaluation/llm/smolvla-policy-fp32-results.json
+python3 kernels/evaluation/llm/compare_smolvla_precision.py \
+  --checkpoint-reference kernels/evaluation/llm/smolvla-policy-results.json \
+  --fp32-reference kernels/evaluation/llm/smolvla-policy-fp32-results.json \
+  --out kernels/model_chain/evaluation/smolvla-precision-comparison.json
 python3 kernels/model_chain/export_smolvla_weights.py \
   --checkpoint-dir "$SMOLVLA_CHECKPOINT_DIR"
 python3 kernels/model_chain/export_smolvla_inputs.py \
@@ -193,12 +220,28 @@ python3 kernels/model_chain/export_smolvla_inputs.py \
 python3 kernels/model_chain/compile_smolvla.py \
   --weight-image kernels/model_chain/generated/checkpoint-smolvla/smolvla_base/weights-image.json \
   --input-image kernels/model_chain/generated/smolvla-exact-inputs/inputs-image.json \
-  --golden-output kernels/evaluation/llm/smolvla-policy-results.json \
+  --golden-output kernels/evaluation/llm/smolvla-policy-fp32-results.json \
   --out-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
   --stages-per-object 40 --build
 python3 kernels/model_chain/run_smolvla_functional.py \
   --generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
   --sim-cycles 100000000000 --timeout 86400
+```
+
+For the faster native math check after that build:
+
+```sh
+python3 kernels/model_chain/run_smolvla_native.py \
+  --generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --stage-limit 1 \
+  --dump kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf/smolvla_base/native/stage1.bin
+python3 kernels/model_chain/verify_smolvla_stage1.py \
+  --checkpoint-dir "$SMOLVLA_CHECKPOINT_DIR" \
+  --input-image kernels/model_chain/generated/smolvla-exact-inputs/inputs-image.json \
+  --stage-dump kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf/smolvla_base/native/stage1.bin
+python3 kernels/model_chain/run_smolvla_native.py \
+  --generated-root kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf \
+  --threads 8
 ```
 
 The full simulator run is compute intensive. The binary images, ELF, build
@@ -309,8 +352,8 @@ latency measurements.
 | --- | --- | --- | --- | --- | --- |
 | TinyLlama | 22 layers | 22 reduced layers, prefill and decode | One checkpoint layer passed; 754-stage full-checkpoint FP16 ELF built, functional run pending | 22 layers against Transformers; FP16 error measured | Reduced one-token prefill and cached decode passed |
 | DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | One checkpoint layer passed; 1,126-stage full-checkpoint FP16 ELF built, functional run pending | 28 layers against Transformers; FP16 error measured | Pending |
-| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | Three-stage INT8 checkpoint probe passed; 996-stage all-INT8 and tied-FP16 ELFs built, functional runs pending | All 26 layers match Transformers eager attention; quantized variants have measured error | Pending |
-| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Full 3,673-stage checkpoint ELF built | Exact-input device output comparison pending; 47 MB activation arena | 499 used tensors bound; full upstream action chunk and runtime layer order/shape checked | Pending |
+| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | 46-stage one-layer INT8 run passed; 996-stage all-INT8 and tied-FP16 ELFs built, functional runs pending | All 26 layers match Transformers eager attention; quantized variants have measured error | Pending |
+| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Full 3,673-stage checkpoint ELF built | Exact-input device output comparison pending; 47 MB activation arena | 499 used tensors bound; full generated C++ schedule passes against FP32 upstream action chunk | Pending |
 
 The full-checkpoint Python controls are described in
 [`kernels/evaluation/llm/README.md`](../evaluation/llm/README.md). The reduced
@@ -318,6 +361,12 @@ ELFs use small synthetic weights; the full-checkpoint ELFs in this table use
 the pinned checkpoints and original dimensions. A successful build and layout
 check establish compilation, while a pending functional run does not yet
 establish device correctness.
+The [Gemma one-layer INT8 result](evaluation/gemma-checkpoint-one-layer-int8-functional-results.json)
+checked all 46 prefill and decode stages against the quantized NumPy reference
+and passed at 960,681,976 functional cycles. Its final logits differ from the
+original unquantized checkpoint by up to `0.996` for this input; the result
+therefore establishes execution of the documented INT8 mapping, not numerical
+equivalence to the original checkpoint.
 The generated C++ stores tensors as contiguous arrays, but the schedule keeps
 query heads, KV heads, head width, token position, and cache lifetime as
 separate logical dimensions. The full-dimension graph tests check those shapes
@@ -411,30 +460,23 @@ The one-warp mapping establishes correctness for a small program. A scalable
 two-core mapping needs an explicit handoff protocol or ownership-preserving
 tiling, plus RTL validation and performance measurement.
 
-The remaining work to compile the four **full** models is substantial:
+The four full-depth checkpoint programs now compile to Radiance ELFs. These
+builds use FP16 checkpoint images with FP32 arithmetic for TinyLlama and
+DeepSeek, INT8 weight formats for Gemma, and FP32 weights and arithmetic for
+SmolVLA. The numerical effects of those choices are recorded with the
+reference checks above. The next correctness gate is a completed functional
+ISA run with output validation for each **full-checkpoint** ELF; those runs
+are distinct from the completed reduced-dimension and short checkpoint
+controls. A successful native execution of generated C++ checks the schedule
+and math on the host, but does not substitute for the ISA run.
 
-1. Extend the checkpoint weight-image path to all layers. The current
-   one-layer TinyLlama image and all 40 prefill and decode device stages pass. Full FP32
-   images exceed the 32-bit address space, so the complete decoder needs
-   staged loading or a validated lower-precision format. DeepSeek's one-layer
-   prefill and cached decode pass using two disjoint FP32 weight regions; its
-   28-layer image still exceeds device capacity. Keep pinned checkpoint checks at
-   intermediate boundaries.
-2. Tile the full hidden, FFN, head, sequence, and vocabulary dimensions;
-   connect the existing MX-Gemmini kernels through the shared-buffer path and
-   specify FP8/BF16 conversions. The current executable uses scalar FP32 SIMT.
-3. Validate multi-token prefill and cached decode together on RTL, then run
-   complete workloads with input and output checks. The three full-depth
-   reduced decoder ELFs have passed Cyclotron functional execution; one-token TinyLlama prefill and
-   cached decode passed RTL. The three-token prefill attempt reached its first
-   wall-clock limit without a result.
-4. Implement SmolVLA's vision encoder, connector, masks, expert attention,
-   and action denoising on the device with a checkpoint numerical control.
-   All vision, VLM, and expert layers are decomposed in `stitch.py`; 499 used
-   checkpoint parameters bind by name and shape. The pinned upstream policy
-   produces a complete 10-step action chunk, but the graph is not yet a
-   numerical backend or executable.
-
-Until those steps pass, the full four-model compilation and end-to-end
-performance evaluation remain open. `kernels/evaluation/llm/README.md`
-describes the model graphs and existing TinyLlama/DeepSeek checkpoint checks.
+The remaining evaluation work is to run representative multi-token prefill
+and cached decode cases, connect the existing MX-Gemmini kernels where the
+data types and layouts agree, and validate those longer programs on RTL.
+SmolVLA also needs a device check of its exact-input 10-step action chunk;
+the current FP32 mapping must be reported separately from the original BF16
+checkpoint policy. Performance comparisons need a fixed hardware baseline,
+timing-capable RTL or FPGA runs, and measured memory and compute counters.
+Cyclotron functional cycle counts and host run times cannot serve as those
+performance numbers. `kernels/evaluation/llm/README.md` describes the pinned
+upstream model and checkpoint controls.

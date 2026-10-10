@@ -1,0 +1,26 @@
+{
+  "model": "smolvla_base",
+  "scope": "same_checkpoint_bf16_vs_fp32_policy",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "input_sha256": {
+    "camera0": "99944f971a4dee3faffc8c1af0f52cc593516725bef0609edc3750940786d440",
+    "camera1": "1115cd6508d8e54e8fffa06ede7fa4d821303796c41a39bdb276914cfb7ab347",
+    "camera2": "c577807b8f3c3c5e5de6947ce2371314586a46b7b9b50d63cc06c923f5ff6249",
+    "language": "7fe787bb4624f1055bb825af35776ec814951fcf6fcc0ef913fe9259a307add2",
+    "state": "80b6c6104fa7ff74dc3b2facea5496ded97a9c54bad49d827596e0f23d44ba54",
+    "noise": "59d291261bc50174a35f67ab8064c4c91608789176e4d310fc4700786bde9a91"
+  },
+  "checkpoint_precision_output_sha256": "72510abe5e55c793c52138f159133af892bc117efe4413b914f319b8a9ea6c65",
+  "promoted_fp32_output_sha256": "8f0c08d72ef7102e39bd377252dfd5501554ee157de973ef56aee28b7f522eb9",
+  "output_elements": 1600,
+  "max_abs_error": 0.02632039785385132,
+  "rms_error": 0.004491804912968667,
+  "elements_outside_device_tolerance": 405,
+  "comparison_tolerance": {
+    "rtol": 0.001,
+    "atol": 0.001
+  },
+  "elements_outside_1e_2_tolerance": 59,
+  "policy_execution": true,
+  "device_execution": false
+}

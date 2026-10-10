@@ -1,0 +1,20 @@
+{
+  "model": "smolvla_base",
+  "stage": "v.camera0.patch_embed",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "input_image_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea",
+  "native_output_sha256": "6ea25b8dfd7139142ca6d8b6734df3d35eff759b46eb3f86d9bffeb43548c45a",
+  "reference_output_sha256": "d36104b6c61a4d080c5c047a77da7d852405aacb9da674f8926a9e17e7cdf767",
+  "output_shape": [
+    1,
+    1024,
+    768
+  ],
+  "max_abs_error": 1.33514404296875e-05,
+  "rms_error": 1.4056560446718738e-07,
+  "rtol": 0.001,
+  "atol": 0.001,
+  "passed": true,
+  "device_execution": false,
+  "rtl_execution": false
+}

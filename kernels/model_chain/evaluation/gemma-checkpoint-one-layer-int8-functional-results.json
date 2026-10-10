@@ -1,0 +1,82 @@
+{
+  "model": "gemma_2_2b_it",
+  "scope": "full_dimension_checkpoint_decoder",
+  "layers": 1,
+  "prefill_tokens": 1,
+  "decode_steps": 1,
+  "stage_count": 46,
+  "checked_float_stages": 46,
+  "checked_integer_stages": 0,
+  "simulation": "Cyclotron functional ISA model",
+  "status": "passed",
+  "failure_reason": null,
+  "cycles_functional": 960681976,
+  "tohost": 0,
+  "failed_stage_index_one_based": null,
+  "failed_element_index": null,
+  "process_exit_code": 0,
+  "device_elf_sha256": "80040cacce677266b26a8e5240132d1613986f4e21afbb8c0ddfadb6aa9d5877",
+  "generated_source_sha256": "7e00603e3de0c3e5678d0daaf479e5e21a6fdcce73f287959230a9a42ed2e00b",
+  "device_source_files_sha256": {
+    "kernel.cpp": "7e00603e3de0c3e5678d0daaf479e5e21a6fdcce73f287959230a9a42ed2e00b",
+    "stage_chunk_000.cpp": "fad229633947c392bcf413f3902452c207e725bd2d3a1e74a51a70f850faa0e2",
+    "stage_chunk_001.cpp": "d333ad93bea633ac5bdc3c24bd165f0d3964d74163a04161fbe4250d17da0a9b",
+    "stage_chunk_002.cpp": "d756c75f55871e77cc3c56edfb33c9f738559246b7391fd26089fb7fe285d1ea",
+    "stage_chunk_003.cpp": "ce13e872820d298fc867b8f9ac831565220c63d2a1f1937c3d5d2b4a69c658f6",
+    "stage_chunk_004.cpp": "397fa2fcd5cf0ba26c52171196842e22211f30b36fba2471f8a82ea64922227c",
+    "model_data.cpp": "4e536a7f1991f4e74fb9a756f2a3cd9e8183caa2c005a850e2c5bd3d7b40acbc",
+    "verify_chunk_000.cpp": "605927f5103eddfccd7e953897cb81c14a61e8a5f4c23b68286e2c1def5a0b1a",
+    "verify_chunk_001.cpp": "50be760cfacce8d2c39830799f923dd702eea1ef1127dae46052e29623234e99",
+    "verify_chunk_002.cpp": "bb5095d0e1af633212a36528551b29f801a3ad575a75e8e46c48bc731bec96b4",
+    "verify_chunk_003.cpp": "41efc497646bcc231cd26751bcf6bf74d51c9bf061ebf4fb52fd22e33b970963",
+    "verify_chunk_004.cpp": "4a3894a9e0d253742a164f0702bf77fbab5e5e613ec7aaf42a507413e6cedccc"
+  },
+  "device_optimization": "O3",
+  "stages_per_device_object": 10,
+  "portable_ops_sha256": "ad17f2ca9952d48c8b786617f860a9e33135686c3c0ac97786b83cc18e311e6e",
+  "quantized_ops_sha256": "310c26beae4e8d2213f8900896c4a8da989160bceb0154e7c7bbcbd03f81f7cf",
+  "numpy_reference_sha256": "0cb0ed80092ab9925a00fb44099b834671210e26fc7b0f5af3a40979f6371725",
+  "model_specs_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "a5081dc18bf2c72c6ede238e54986826061e9d4cd1c424b98ffb4adea7cebd79",
+  "simulator_cycle_limit": 2500000000,
+  "log_sha256": "12fd610826e01ab01048d9eba116b5ed3ed1f778d3e39095a37bc1558b74fd6e",
+  "checkpoint_weights": true,
+  "original_model_dimensions": true,
+  "upstream_execution_equivalent": false,
+  "checkpoint_sha256": "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a",
+  "weight_image_sha256": "31fd0c97654aa4eb0dafe6a11433b6685882eb7f83e837a0f32eb7ab31cdb29e",
+  "weight_segment_layout": [
+    {
+      "gpu_base_address": 536870912,
+      "image_size_bytes": 1259707392,
+      "image_sha256": "31fd0c97654aa4eb0dafe6a11433b6685882eb7f83e837a0f32eb7ab31cdb29e"
+    }
+  ],
+  "checkpoint_weight_format": "int8_scaled",
+  "quantization_comparison": {
+    "prefill.logit_softcap": {
+      "max_abs_error": 0.9956903457641602,
+      "rms_error": 0.11983270198632726,
+      "reference_sha256": "9518d7a0b9117467d02582ec3302b68cce40574fde8eec293dfe5667e5316878",
+      "quantized_sha256": "1032659b334c014dff8a0ecfc99a4ae3280768b07a42f6723e472dd47a27ef14",
+      "top1_equal": true
+    },
+    "decode0.logit_softcap": {
+      "max_abs_error": 0.9956903457641602,
+      "rms_error": 0.11983270198632726,
+      "reference_sha256": "9518d7a0b9117467d02582ec3302b68cce40574fde8eec293dfe5667e5316878",
+      "quantized_sha256": "1032659b334c014dff8a0ecfc99a4ae3280768b07a42f6723e472dd47a27ef14",
+      "top1_equal": true
+    }
+  },
+  "reference_output_sha256": "1032659b334c014dff8a0ecfc99a4ae3280768b07a42f6723e472dd47a27ef14",
+  "stage_limit": null,
+  "native_check_tolerance": null,
+  "device_check_tolerance": {
+    "rtol": 0.005,
+    "atol": 0.0005
+  },
+  "rtl_execution": false,
+  "performance_measurement": false
+}

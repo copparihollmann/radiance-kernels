@@ -127,6 +127,15 @@ python3 kernels/evaluation/llm/verify_smolvla_policy.py \
   --out kernels/evaluation/llm/smolvla-policy-results.json
 ```
 
+The checkpoint's language embedding is BF16. A second
+[policy run](smolvla-policy-fp32-results.json) casts the same pinned policy to
+FP32 before sampling, matching the connected Radiance kernel's weight and
+arithmetic path. Both runs use byte-identical inputs and the same checkpoint.
+The [precision comparison](../../model_chain/evaluation/smolvla-precision-comparison.json)
+finds a `0.0263` maximum action difference; 405 of 1,600 actions differ by
+more than `atol=1e-3, rtol=1e-3`. This quantifies the precision change rather
+than treating the two policy outputs as interchangeable.
+
 The action-only PyTorch check uses an optional local environment with `torch`,
 `safetensors`, and `numpy`:
 
@@ -157,9 +166,9 @@ dimensions and deterministic generated weights. It checks that a three-token
 prefill followed by two cached decode steps gives the same final logits as a
 single five-token causal pass. The test also changes a decode token to ensure
 the output responds. This checks the software handoff and masks; it does not
-check checkpoint fidelity, MX quantization, or device execution. SmolVLA has
-only a topology graph because the PR #1 kernels do not implement its complete
-vision and action path.
+check checkpoint fidelity, MX quantization, or device execution. SmolVLA is
+outside this small decoder reference; its full vision and action path is
+compiled under [`kernels/model_chain`](../../model_chain/README.md).
 
 [`checkpoint.py`](checkpoint.py) binds graph parameters to their checkpoint
 tensor names. With optional PyTorch, Transformers, and safetensors packages,
@@ -179,9 +188,11 @@ logit error `1.86e-5`; all 28 DeepSeek layers passed with error `3.67e-5`
 against Transformers 5.9.0 in FP32. The file records the exact config and
 weight hashes, tensor binding counts, tolerances, and software versions.
 These checks establish the decoder dataflow for those two checkpoints; they
-do not validate MX quantization or produce device timing. Gemma's checkpoint
-is access gated here. SmolVLA has an upstream golden policy run but still needs
-a stitched graph numerical backend and device comparison.
+do not validate MX quantization or produce device timing. The pinned Gemma
+checkpoint is now available locally: its [26-layer reference check](../../model_chain/evaluation/gemma-checkpoint-full-reference.json)
+matches a Transformers eager-attention pass to `3.67e-5` maximum logit error.
+SmolVLA has full generated C++ stages and a Radiance ELF; complete device
+output validation is still pending.
 
 | Model | Graph scope | Existing PR #1 primitives | Main device gaps |
 | --- | --- | --- | --- |
@@ -200,12 +211,13 @@ with shared activation/KV buffers, prefill, and cached decode. The
 execute 22, 28, and 26 synthetic decoder layers, respectively. Native checks
 compare every floating-point stage with this directory's NumPy executor;
 all three full-depth reduced builds pass Cyclotron's functional device execution.
-One-token TinyLlama prefill followed by one cached
-decode step has passed VCS RTL; multi-token prefill plus decode still needs an
-RTL result, full-dimension tiling,
-real checkpoint weights, and MX-Gemmini integration. SmolVLA lacks a connected
-graph numerical/device path despite the upstream checkpoint golden run. Only timed device runs can
-produce end-to-end latency, utilization, cache, or memory measurements.
+One-token TinyLlama prefill followed by one cached decode step has passed VCS
+RTL. Full-dimension checkpoint ELFs have since compiled for TinyLlama,
+DeepSeek, and quantized Gemma, and one checkpoint layer of each decoder
+passed Cyclotron against its mapped-precision reference. The full 3,673-stage SmolVLA checkpoint ELF also
+compiled; its device action comparison remains pending. MX-Gemmini integration
+and timed full-model runs remain open. Only timed device runs can produce
+end-to-end latency, utilization, cache, or memory measurements.
 
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The

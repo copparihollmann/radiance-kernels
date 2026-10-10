@@ -5,10 +5,12 @@
   "device_execution": false,
   "output_validation": "all_elements_vs_upstream_policy",
   "output_check_tolerance": {
-    "rtol": 0.01,
-    "atol": 0.01
+    "rtol": 0.001,
+    "atol": 0.001
   },
-  "golden_output_sha256": "72510abe5e55c793c52138f159133af892bc117efe4413b914f319b8a9ea6c65",
+  "golden_output_sha256": "8f0c08d72ef7102e39bd377252dfd5501554ee157de973ef56aee28b7f522eb9",
+  "golden_policy_precision": "checkpoint_weights_promoted_fp32",
+  "original_checkpoint_output_sha256": "72510abe5e55c793c52138f159133af892bc117efe4413b914f319b8a9ea6c65",
   "input_image_manifest": "/scratch/agustin/projects/chipyard/radiance-kernels-firesim/kernels/model_chain/generated/smolvla-exact-inputs/inputs-image.json",
   "input_image_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea",
   "upstream_execution_equivalent": false,
@@ -120,6 +122,6 @@
   ],
   "device_source_generated": true,
   "precision": "fp32_from_checkpoint_bf16",
-  "radiance_elf_sha256": "07fc4c21e85e0ef4e663320ee102393f8444b2e294aa8b1d3e6778f8ab9c8860",
-  "soc_elf_sha256": "848d32363a5b7bfe62be64132a1764b62aab0d3584b56d56ac5b618825643190"
+  "radiance_elf_sha256": "67c0a211cdb1c5bf81f88128ba03cb719e7990c1ea99bda445b49a1da0d38a6c",
+  "soc_elf_sha256": "09985b578cbd34639ebdfa9a24c8efd340cc955726b6835c7dd877ffb9a8788b"
 }

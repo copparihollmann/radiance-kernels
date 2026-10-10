@@ -269,13 +269,13 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         golden = json.loads(golden_output.read_text())
         golden_values = np.asarray(golden["output_values"], dtype=np.float32)
         if (not golden["passed"] or golden["model"] != "smolvla_base" or
+                golden.get("weights_promoted_to_fp32") is not True or
+                golden.get("execution_embedding_dtype") != "torch.float32" or
                 golden["checkpoint_weight_sha256"] != image[
                     "checkpoint_weight_sha256"] or
                 input_manifest["source_input_sha256"] !=
                 golden["input_sha256"] or
                 hashlib.sha256(golden_values.tobytes()).hexdigest() !=
-                golden["output_sha256"] or
-                input_manifest["source_golden_output_sha256"] !=
                 golden["output_sha256"] or
                 tuple(golden_values.shape) != tuple(graph.tensors[graph.outputs[-1]]["shape"])):
             raise ValueError("upstream golden output differs from input or graph")
@@ -287,6 +287,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     allocation = storage["allocation"]
     half = spec["vlm_head_dim"] // 2
     positions = 1 + graph.tensors["denoise0.attention_mask"]["shape"][-1]
+    # LeRobot's SmolVLA apply_rope uses max_wavelength=10000 by default,
+    # independent of the separate SmolVLM backbone config's rope_theta.
     inv = np.power(10000.0, -np.arange(half, dtype=np.float32) / half)
     angles = np.arange(positions, dtype=np.float32)[:, None] * inv
     steps = spec["num_denoise_steps"]
@@ -392,7 +394,7 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
               "    if (!(output[j] == output[j]) || "
               "output[j] > 1.0e20f || output[j] < -1.0e20f) { "
               "mu_tohost((j << 1) | 1u); return 0; }\n"
-              + ("    if (!mu_close(output[j], v_golden_output[j], 1e-2f, 1e-2f)) "
+              + ("    if (!mu_close(output[j], v_golden_output[j], 1e-3f, 1e-3f)) "
                  "{ mu_tohost((j << 1) | 1u); return 0; }\n"
                  if golden_values is not None else "")
               + "  }\n"
@@ -418,9 +420,13 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         "device_elf_built": False, "device_execution": False,
         "output_validation": ("all_elements_vs_upstream_policy"
                               if golden_values is not None else "finite_range_only"),
-        "output_check_tolerance": ({"rtol": 1e-2, "atol": 1e-2}
+        "output_check_tolerance": ({"rtol": 1e-3, "atol": 1e-3}
                                    if golden_values is not None else None),
         "golden_output_sha256": golden["output_sha256"] if golden else None,
+        "golden_policy_precision": ("checkpoint_weights_promoted_fp32"
+                                    if golden else None),
+        "original_checkpoint_output_sha256": (
+            input_manifest["source_golden_output_sha256"] if input_manifest else None),
         "input_image_manifest": str(input_image.resolve()) if input_image else None,
         "input_image_sha256": input_manifest["image_sha256"] if input_manifest else None,
         "upstream_execution_equivalent": False,

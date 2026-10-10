@@ -19,7 +19,7 @@ from smolvla_action_reference import Checkpoint, action_embedding
 from verify_smolvla_checkpoint import sha256
 
 
-def run(checkpoint_dir: Path) -> dict:
+def run(checkpoint_dir: Path, promote_fp32: bool = False) -> dict:
     spec = model_specs()["smolvla_base"]
     if sha256(checkpoint_dir / "config.json") != spec["source_sha256"]:
         raise ValueError("SmolVLA config hash differs from pinned source")
@@ -43,6 +43,10 @@ def run(checkpoint_dir: Path) -> dict:
     # separate backbone first; strict=True still requires every policy weight.
     config.load_vlm_weights = False
     policy = SmolVLAPolicy.from_pretrained(checkpoint_dir, config=config, strict=True)
+    original_embedding_dtype = str(policy.model.vlm_with_expert.get_vlm_model()
+                                   .text_model.get_input_embeddings().weight.dtype)
+    if promote_fp32:
+        policy.float()
     graph = build("smolvla_base")
     counts = Counter()
     handles = []
@@ -142,7 +146,9 @@ def run(checkpoint_dir: Path) -> dict:
     inputs.update({"language": lang_tokens.numpy(), "state": state.numpy(),
                    "noise": noise.numpy()})
     return {
-        "model": "smolvla_base", "scope": "one_full_checkpoint_action_chunk",
+        "model": "smolvla_base",
+        "scope": ("one_full_checkpoint_action_chunk_fp32_weights"
+                  if promote_fp32 else "one_full_checkpoint_action_chunk"),
         "passed": True, "checkpoint_revision": spec["checkpoint_revision"],
         "checkpoint_weight_sha256": spec["checkpoint_weight_sha256"],
         "lerobot_version": lerobot.__version__,
@@ -151,6 +157,10 @@ def run(checkpoint_dir: Path) -> dict:
         "device": "cpu", "strict_checkpoint_load": True,
         "load_vlm_weights_before_checkpoint_load": False,
         "policy_method": "model.sample_actions",
+        "checkpoint_embedding_dtype": original_embedding_dtype,
+        "weights_promoted_to_fp32": promote_fp32,
+        "execution_embedding_dtype": str(model.vlm_with_expert.get_vlm_model()
+                                         .text_model.get_input_embeddings().weight.dtype),
         "preprocessed_inputs": True,
         "input_sha256": {name: hashlib.sha256(value.tobytes()).hexdigest()
                          for name, value in inputs.items()},
@@ -175,9 +185,11 @@ def run(checkpoint_dir: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint-dir", type=Path, required=True)
+    parser.add_argument("--promote-fp32", action="store_true",
+                        help="cast the pinned policy weights to FP32 before sampling")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    result = run(args.checkpoint_dir)
+    result = run(args.checkpoint_dir, args.promote_fp32)
     output = json.dumps(result, indent=2) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
