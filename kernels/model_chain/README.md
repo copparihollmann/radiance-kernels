@@ -518,6 +518,11 @@ runs do not measure performance.
 `audit_full_models.py` recomputes each pinned graph's stage count, verifies the
 ELF and checkpoint-image hashes and placement, checks the upstream and host
 records, and reports whether a matching full-depth Cyclotron result exists.
+For SmolVLA it also compares the compiled schedule hash, verifies that each
+Euler output feeds the next denoising step, that all 16 expert layers connect
+in order within each step, and that the prefix KV cache is read across the
+ten iterations. The lineage regression tests reject a reset action or skipped
+expert layer.
 Run `python3 kernels/model_chain/audit_full_models.py`; add `--out
 kernels/model_chain/generated/four-model-readiness.json` for a local snapshot.
 The audit reports device validation as pending while those runs are active.

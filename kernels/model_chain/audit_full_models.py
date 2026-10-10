@@ -76,6 +76,78 @@ def require(condition: bool, detail: str) -> None:
         raise ValueError(detail)
 
 
+def check_smolvla_lineage(graph, expected_schedule_sha256: str) -> dict:
+    """Verify the action loop is a connected schedule, not a flat call list."""
+    spec = model_specs()["smolvla_base"]
+    schedule = graph.execution_schedule
+    digest = hashlib.sha256(json.dumps(schedule, sort_keys=True).encode()).hexdigest()
+    require(digest == expected_schedule_sha256,
+            "SmolVLA execution schedule differs from the compiled ELF")
+    prefix = schedule["prefix_once_per_refill"]
+    iterations = schedule["denoise_loop"]["iterations"]
+    stages = graph.stages
+    by_id = {stage["id"]: stage for stage in stages}
+    ids = [stage["id"] for stage in stages]
+    require(len(by_id) == len(ids) and
+            len(iterations) == spec["num_denoise_steps"] and
+            len(prefix["read_only_cache"]) == 2 * spec["num_expert_layers"] and
+            ids == prefix["stages"] + [name for iteration in iterations
+                                       for name in iteration["stages"]] and
+            graph.outputs == [f"denoise{len(iterations) - 1}.euler"],
+            "SmolVLA prefix or denoise schedule is incomplete")
+    cache_names = set(prefix["read_only_cache"])
+    require(cache_names <= set(prefix["stages"]) and
+            all(any(name in by_id[stage_id]["reads"]
+                    for iteration in iterations
+                    for stage_id in iteration["stages"])
+                for name in cache_names),
+            "SmolVLA prefix KV cache is not read by the denoise loop")
+    step_size = -1.0 / spec["num_denoise_steps"]
+    require(schedule["denoise_loop"]["step_size"] == step_size and
+            schedule["denoise_loop"]["prefix_cache_lifetime"] ==
+            "read_only_across_iterations", "SmolVLA denoise rule differs")
+    for step, iteration in enumerate(iterations):
+        previous_action = "action.noise" if step == 0 else f"denoise{step - 1}.euler"
+        current_action = f"denoise{step}.euler"
+        stage_ids = iteration["stages"]
+        require(iteration["step"] == step and
+                iteration["action_input"] == previous_action and
+                iteration["action_output"] == current_action and
+                abs(iteration["time"] - (1 + step * step_size)) < 1e-12 and
+                stage_ids[0] == f"denoise{step}.timestep" and
+                stage_ids[-1] == current_action and
+                all(name.startswith(f"denoise{step}.") for name in stage_ids) and
+                len(iteration["expert_layers"]) == spec["num_expert_layers"] and
+                by_id[f"denoise{step}.action_in_linear"]["reads"] ==
+                [previous_action] and
+                by_id[current_action]["reads"] ==
+                [previous_action, f"denoise{step}.action_out"] and
+                by_id[current_action]["attrs"]["step_size"] == step_size and
+                by_id[f"denoise{step}.timestep"]["attrs"]["value"] ==
+                1 + step * step_size,
+                f"SmolVLA denoise step {step} does not carry the action")
+        for layer in range(spec["num_expert_layers"]):
+            base = f"denoise{step}.expert{layer:02d}"
+            prior = (f"denoise{step}.action_embed" if layer == 0 else
+                     f"denoise{step}.expert{layer - 1:02d}.ffn_residual")
+            mode = ("self" if layer % spec["self_attn_every_n_layers"] == 0
+                    else "cross")
+            require(by_id[f"{base}.input_norm"]["reads"] == [prior] and
+                    by_id[f"{base}.attention"]["attrs"]["mode"] == mode and
+                    iteration["expert_layers"][layer] ==
+                    f"{base}.ffn_residual",
+                    f"SmolVLA denoise step {step} expert layer {layer} is disconnected")
+        require(by_id[f"denoise{step}.expert_final_norm"]["reads"] ==
+                [f"denoise{step}.expert{spec['num_expert_layers'] - 1:02d}.ffn_residual"] and
+                by_id[f"denoise{step}.action_out_linear"]["reads"] ==
+                [f"denoise{step}.expert_final_norm"],
+                f"SmolVLA denoise step {step} omits the final expert output")
+    return {"status": "passed", "prefix_stages": len(prefix["stages"]),
+            "denoise_steps": len(iterations),
+            "expert_layers_per_step": spec["num_expert_layers"],
+            "schedule_sha256": digest}
+
+
 def upstream_reference(model: str, manifest: dict) -> dict:
     spec = model_specs()[model]
     if model == "smolvla_base":
@@ -131,6 +203,8 @@ def audit(model: str, generated_root: Path) -> dict:
                 sum(stage["op"] == "euler_step" for stage in graph.stages) == 10 and
                 manifest["output_validation"] == "all_elements_vs_upstream_policy",
                 "SmolVLA action loop or output check is incomplete")
+        lineage = check_smolvla_lineage(
+            graph, manifest["execution_schedule_sha256"])
     else:
         require(manifest["checkpoint_weights"] and
                 manifest["layers"] == model_specs()[model]["num_hidden_layers"] and
@@ -495,6 +569,7 @@ def audit(model: str, generated_root: Path) -> dict:
         "euler_chain_device_probe": euler_chain_probe,
         "expert_attention_device_probe": expert_attention_probe,
         "expert_linear_device_probe": expert_linear_probe,
+        "graph_lineage_check": lineage if model == "smolvla_base" else None,
     }
 
 
