@@ -548,7 +548,11 @@ Transformers checkpoints for this same three-plus-two token shape:
 [TinyLlama and DeepSeek](../evaluation/llm/checkpoint-results.json) and
 [Gemma](evaluation/gemma-checkpoint-full-reference.json). The host checks
 above compare every generated C++ stage against the mapped-precision NumPy
-graph. These controls establish the graph schedule and stage arithmetic on
+graph. The audit also checks each layer's hidden-state handoff, verifies that
+each cached decode appends to the preceding phase's K/V cache, and checks
+causal positions and Gemma's alternating attention windows. Regression tests
+reject a skipped cache phase, reset hidden state, or reset decode position.
+These controls establish the graph schedule and stage arithmetic on
 the host; the longer ELFs have **not** completed a full Cyclotron run. FP16
 has a small measured effect on the TinyLlama and DeepSeek final logits for
 this input. Gemma's INT8 body changes final logits substantially even though

@@ -148,6 +148,71 @@ def check_smolvla_lineage(graph, expected_schedule_sha256: str) -> dict:
             "schedule_sha256": digest}
 
 
+def check_decoder_lineage(graph, prefill: int, decode_steps: int) -> dict:
+    """Verify causal cache and hidden-state handoffs across decoder phases."""
+    spec = graph.spec
+    phases = ["prefill"] + [f"decode{step}" for step in range(decode_steps)]
+    stages = graph.stages
+    by_id = {stage["id"]: stage for stage in stages}
+    ids = [stage["id"] for stage in stages]
+    phase_ids = [[name for name in ids if name.startswith(f"{phase}.")]
+                 for phase in phases]
+    require(len(by_id) == len(ids) and ids == [name for group in phase_ids
+                                              for name in group],
+            f"{graph.model}: decoder phases are interleaved or incomplete")
+    expected_outputs = []
+    previous_phase = None
+    for phase in phases:
+        past = 0 if phase == "prefill" else prefill + int(phase.removeprefix("decode"))
+        tokens = prefill if phase == "prefill" else 1
+        embedding = f"{phase}.embedding"
+        require(by_id[embedding]["reads"] == [f"{phase}.token_ids"] and
+                graph.tensors[embedding]["shape"] ==
+                [1, tokens, spec["hidden_size"]],
+                f"{graph.model}: {phase} embedding input is disconnected")
+        hidden = embedding
+        for layer in range(spec["num_hidden_layers"]):
+            base = f"{phase}.layer{layer:02d}"
+            k_cache = f"{base}.k_cache"
+            v_cache = f"{base}.v_cache"
+            previous_base = (f"{previous_phase}.layer{layer:02d}"
+                             if previous_phase is not None else None)
+            expected_k = [f"{base}.k_rope"] if previous_base is None else [
+                f"{previous_base}.k_cache", f"{base}.k_rope"]
+            expected_v = [f"{base}.v_proj"] if previous_base is None else [
+                f"{previous_base}.v_cache", f"{base}.v_proj"]
+            if spec.get("qkv_bias"):
+                expected_v[-1] = f"{base}.v_bias"
+            attention = by_id[f"{base}.attention"]
+            expected_window = (spec.get("sliding_window")
+                               if spec["family"] == "gemma2" and layer % 2 == 0
+                               else None)
+            require(by_id[f"{base}.attn_norm"]["reads"] == [hidden] and
+                    by_id[k_cache]["reads"] == expected_k and
+                    by_id[v_cache]["reads"] == expected_v and
+                    graph.tensors[k_cache]["shape"] ==
+                    [1, past + tokens, spec["num_key_value_heads"], spec["head_dim"]] and
+                    graph.tensors[v_cache]["shape"] ==
+                    graph.tensors[k_cache]["shape"] and
+                    attention["reads"] == [f"{base}.q_rope", k_cache, v_cache] and
+                    attention["attrs"]["query_start"] == past and
+                    attention["attrs"]["window"] == expected_window,
+                    f"{graph.model}: {phase} layer {layer} breaks causal cache lineage")
+            hidden = f"{base}.ffn_residual"
+        require(by_id[f"{phase}.final_norm"]["reads"] == [hidden],
+                f"{graph.model}: {phase} final norm skips a decoder layer")
+        output = (f"{phase}.logit_softcap" if spec["family"] == "gemma2"
+                  else f"{phase}.lm_head")
+        expected_outputs.append(output)
+        previous_phase = phase
+    require(graph.outputs == expected_outputs,
+            f"{graph.model}: decoder outputs are not in phase order")
+    return {"status": "passed", "prefill_tokens": prefill,
+            "cached_decode_tokens": decode_steps,
+            "layers_per_phase": spec["num_hidden_layers"],
+            "cache_handoffs_checked": spec["num_hidden_layers"] * decode_steps}
+
+
 def upstream_reference(model: str, manifest: dict) -> dict:
     spec = model_specs()[model]
     if model == "smolvla_base":
@@ -206,6 +271,7 @@ def audit(model: str, generated_root: Path) -> dict:
         lineage = check_smolvla_lineage(
             graph, manifest["execution_schedule_sha256"])
     else:
+        lineage = check_decoder_lineage(graph, 1, 1)
         require(manifest["checkpoint_weights"] and
                 manifest["layers"] == model_specs()[model]["num_hidden_layers"] and
                 manifest["prefill_tokens"] == 1 and
@@ -569,7 +635,7 @@ def audit(model: str, generated_root: Path) -> dict:
         "euler_chain_device_probe": euler_chain_probe,
         "expert_attention_device_probe": expert_attention_probe,
         "expert_linear_device_probe": expert_linear_probe,
-        "graph_lineage_check": lineage if model == "smolvla_base" else None,
+        "graph_lineage_check": lineage,
     }
 
 
@@ -583,6 +649,7 @@ def audit_multitoken(model: str, generated_root: Path) -> dict:
     manifest = json.loads((target / "manifest.json").read_text())
     tracked_build = json.loads(build_path.read_text())
     graph = build(model, prefill=3, decode_steps=2)
+    lineage = check_decoder_lineage(graph, 3, 2)
     require(manifest == tracked_build and manifest["model"] == model and
             manifest["full_model_dimensions"] and
             manifest["checkpoint_weights"] and
@@ -629,6 +696,7 @@ def audit_multitoken(model: str, generated_root: Path) -> dict:
             f"{model}: upstream-token host check is stale or incomplete")
     return {"status": "passed", "layers": manifest["layers"],
             "stage_count": manifest["stages"],
+            "graph_lineage_check": lineage,
             "input_token_ids": manifest["input_token_ids"],
             "radiance_elf_sha256": manifest["radiance_elf_sha256"],
             "checkpoint_weight_format": manifest["checkpoint_weight_format"],
@@ -652,6 +720,7 @@ def audit_one_layer_multitoken(model: str, generated_root: Path) -> dict:
     spec = dict(model_specs()[model])
     spec["num_hidden_layers"] = 1
     graph = build(model, prefill=3, decode_steps=2, specs={model: spec})
+    lineage = check_decoder_lineage(graph, 3, 2)
     require(manifest == tracked and manifest["model"] == model and
             manifest["layers"] == 1 and manifest["prefill_tokens"] == 3 and
             manifest["decode_steps"] == 2 and
@@ -730,6 +799,7 @@ def audit_one_layer_multitoken(model: str, generated_root: Path) -> dict:
                   "failure_reason": candidate["failure_reason"],
                   "path": str(device_path)}
     return {"status": "passed", "stage_count": manifest["stages"],
+            "graph_lineage_check": lineage,
             "input_token_ids": manifest["input_token_ids"],
             "checkpoint_weight_format": manifest["checkpoint_weight_format"],
             "radiance_elf_sha256": manifest["radiance_elf_sha256"],

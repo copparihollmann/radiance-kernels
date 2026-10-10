@@ -7,7 +7,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from audit_full_models import check_smolvla_lineage
+from audit_full_models import check_decoder_lineage, check_smolvla_lineage
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +48,43 @@ class SmolVlaLineageTest(unittest.TestCase):
             "denoise0.action_embed"]
         with self.assertRaisesRegex(ValueError, "expert layer 1 is disconnected"):
             check_smolvla_lineage(graph, self.digest)
+
+
+class DecoderLineageTest(unittest.TestCase):
+    def setUp(self):
+        self.graph = build("tinyllama", prefill=3, decode_steps=2)
+
+    def stage(self, graph, name):
+        return next(stage for stage in graph.stages if stage["id"] == name)
+
+    def test_all_decoder_families_keep_causal_cache(self):
+        for model in ("tinyllama", "deepseek_r1_distill_qwen_1_5b",
+                      "gemma_2_2b_it"):
+            with self.subTest(model=model):
+                graph = build(model, prefill=3, decode_steps=2)
+                result = check_decoder_lineage(graph, 3, 2)
+                self.assertEqual(result["cache_handoffs_checked"],
+                                 2 * graph.spec["num_hidden_layers"])
+
+    def test_skipping_decode_cache_is_rejected(self):
+        graph = copy.deepcopy(self.graph)
+        cache = self.stage(graph, "decode1.layer00.k_cache")
+        cache["reads"][0] = "prefill.layer00.k_cache"
+        with self.assertRaisesRegex(ValueError, "causal cache lineage"):
+            check_decoder_lineage(graph, 3, 2)
+
+    def test_resetting_hidden_state_between_layers_is_rejected(self):
+        graph = copy.deepcopy(self.graph)
+        self.stage(graph, "decode1.layer01.attn_norm")["reads"] = [
+            "decode1.embedding"]
+        with self.assertRaisesRegex(ValueError, "causal cache lineage"):
+            check_decoder_lineage(graph, 3, 2)
+
+    def test_resetting_decode_position_is_rejected(self):
+        graph = copy.deepcopy(self.graph)
+        self.stage(graph, "decode1.layer00.attention")["attrs"]["query_start"] = 0
+        with self.assertRaisesRegex(ValueError, "causal cache lineage"):
+            check_decoder_lineage(graph, 3, 2)
 
 
 if __name__ == "__main__":
