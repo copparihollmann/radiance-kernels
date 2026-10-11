@@ -102,8 +102,9 @@ hash. Both full-depth Radiance ELFs built and passed the cache-line layout
 check: [TinyLlama](evaluation/tinyllama-full-depth-fp16-build.json) has 754
 checked stages; [DeepSeek](evaluation/deepseek-full-depth-fp16-build.json) has
 1,126. Each ELF schedules one-token prefill and one cached decode token. Their
-full-depth Cyclotron runs have been started; these build records do **not**
-claim a completed device execution. Compared with the original FP32 NumPy
+full-depth [Cyclotron results](evaluation/tinyllama-full-depth-fp16-functional-results.json)
+([DeepSeek](evaluation/deepseek-full-depth-fp16-functional-results.json))
+passed every stage check at `tohost=0`. Compared with the original FP32 NumPy
 checkpoint, FP16 changes the final logits by at most `2.48e-5` for TinyLlama
 and `9.18e-6` for DeepSeek on the recorded token input; the top logit index
 is unchanged. These numbers are software reference comparisons, not RTL
@@ -126,8 +127,7 @@ Gemma's full FP16 image does not fit the safe 32-bit GMEM regions. The
 per-output-channel scales for linear weights and per-row scales for embeddings;
 norms remain FP32. It contains 289 logical parameters in 3,209,761,792 bytes
 across two safe segments. The [996-stage ELF](evaluation/gemma-full-depth-int8-build.json)
-built and passed the layout check, but its full-depth functional run has not
-completed. The [three-stage checkpoint probe](evaluation/gemma-checkpoint-three-stage-int8-functional-results.json)
+built and passed the layout check. The [three-stage checkpoint probe](evaluation/gemma-checkpoint-three-stage-int8-functional-results.json)
 passed in Cyclotron at `tohost=0`. INT8 is a lossy model variant: its full-depth
 NumPy logits differ from the original checkpoint by up to `2.67` after the
 final softcap (RMS `0.367`) for the recorded one-token input, although the top
@@ -145,7 +145,9 @@ and passed layout validation. Its one-layer NumPy final-logit error falls from
 also built with all 996 stages. Its full-depth NumPy final-logit error is
 `0.874` maximum and `0.184` RMS, compared with `2.67` and `0.367` for the
 all-INT8 image. The top logit index is unchanged on this input. This is still
-a lossy Gemma variant, and its device run has not completed.
+a lossy Gemma variant. Its [full-depth Cyclotron run](evaluation/gemma-full-depth-int8-fp16-tied-functional-results.json)
+passed all 996 mapped-precision stage checks at `tohost=0`; this does not make
+the mapped logits equivalent to the original unquantized checkpoint.
 
 The [SmolVLA buffer plan](evaluation/smolvla-buffer-plan.json) computes
 lifetimes for all 3,683 graph tensors while retaining the three vision
@@ -165,8 +167,10 @@ uses the exact [upstream input image](evaluation/smolvla-exact-input-image.json)
 and checks all 1,600 actions against the
 [upstream CPU policy explicitly cast to FP32](../evaluation/llm/smolvla-policy-fp32-results.json)
 at `rtol=1e-3, atol=1e-3`; it has compiled and passed the Radiance buffer
-layout check. Its complete Cyclotron run is in progress, so the output check
-has not yet passed on the device. The checkpoint's original language embedding
+layout check. Its [24-hour Cyclotron attempt](evaluation/smolvla-full-action-chunk-fp32-functional-results.json)
+reached its wall-clock limit without a terminal device result. The output check
+has not yet passed on the device; the timeout is not a demonstrated output
+mismatch. The checkpoint's original language embedding
 weights are BF16. Casting the policy to FP32 with the same pinned weights and
 inputs changes its final actions by up to `0.0263`; 405 of 1,600 values exceed
 the device check tolerance. The [precision comparison](evaluation/smolvla-precision-comparison.json)
@@ -480,17 +484,21 @@ latency measurements.
 
 | Model | Full-dimension schedule | Reduced Radiance ELF | Checkpoint device result | Full-checkpoint numerical check | VCS RTL |
 | --- | --- | --- | --- | --- | --- |
-| TinyLlama | 22 layers | 22 reduced layers, prefill and decode | One checkpoint layer passed; 754-stage full-checkpoint FP16 ELF built, functional run pending | 22 layers against Transformers; FP16 error measured | Reduced one-token prefill and cached decode passed |
-| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | One checkpoint layer passed; 1,126-stage full-checkpoint FP16 ELF built, functional run pending | 28 layers against Transformers; FP16 error measured | Pending |
-| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | 46-stage one-layer INT8 run passed; 996-stage all-INT8 and tied-FP16 ELFs built, functional runs pending | All 26 layers match Transformers eager attention; quantized variants have measured error | Pending |
-| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Full 3,673-stage checkpoint ELF built | Exact-input device output comparison pending; 47 MB activation arena | 499 used tensors bound; full generated C++ schedule passes against FP32 upstream action chunk | Pending |
+| TinyLlama | 22 layers | 22 reduced layers, prefill and decode | [754/754 full-checkpoint FP16 stages passed](evaluation/tinyllama-full-depth-fp16-functional-results.json), `tohost=0` | 22 layers against Transformers; FP16 error measured | Reduced one-token prefill and cached decode passed |
+| DeepSeek-R1-Distill-Qwen-1.5B | 28 layers | 28 reduced layers, prefill and decode | [1,126/1,126 full-checkpoint FP16 stages passed](evaluation/deepseek-full-depth-fp16-functional-results.json), `tohost=0` | 28 layers against Transformers; FP16 error measured | Pending |
+| Gemma-2-2B | 26 layers | 26 reduced layers, prefill and decode | [996/996 tied-FP16/INT8 stages passed](evaluation/gemma-full-depth-int8-fp16-tied-functional-results.json), `tohost=0` | All 26 layers match Transformers eager attention; quantized variant has measured error | Pending |
+| SmolVLA-base | 36 vision layers, 16 VLM layers, and 160 expert layer calls decomposed | Full 3,673-stage checkpoint ELF built | [Full run timed out at 24 hours](evaluation/smolvla-full-action-chunk-fp32-functional-results.json); targeted stages passed | 499 used tensors bound; full generated C++ schedule passes against FP32 upstream action chunk | Pending |
 
 The full-checkpoint Python controls are described in
 [`kernels/evaluation/llm/README.md`](../evaluation/llm/README.md). The reduced
 ELFs use small synthetic weights; the full-checkpoint ELFs in this table use
-the pinned checkpoints and original dimensions. A successful build and layout
-check establish compilation, while a pending functional run does not yet
-establish device correctness.
+the pinned checkpoints and original dimensions. The three passing decoder
+runs each checked one-token prefill and one cached decode token. The SmolVLA
+timeout does not establish full action-chunk device correctness.
+Cyclotron reported 5,053,982,746 functional cycles for TinyLlama,
+7,500,712,529 for DeepSeek, and 5,808,146,549 for tied-FP16/INT8 Gemma.
+These counts are functional ISA simulation steps, not device latency,
+throughput, or hardware utilization.
 The [Gemma one-layer INT8 result](evaluation/gemma-checkpoint-one-layer-int8-functional-results.json)
 checked all 46 prefill and decode stages against the quantized NumPy reference
 and passed at 960,681,976 functional cycles. Its final logits differ from the
@@ -527,7 +535,8 @@ ten iterations. The lineage regression tests reject a reset action or skipped
 expert layer.
 Run `python3 kernels/model_chain/audit_full_models.py`; add `--out
 kernels/model_chain/generated/four-model-readiness.json` for a local snapshot.
-The audit reports device validation as pending while those runs are active.
+The audit reports three passing full-depth decoder device runs and one
+incomplete SmolVLA action-chunk run.
 
 ### Full-depth upstream token sequence
 
@@ -572,13 +581,15 @@ for this input:
 | --- | ---: | --- | --- | --- | --- |
 | TinyLlama | 60 | [build](evaluation/tinyllama-one-layer-multitoken-build.json) | [passed, max logit error `6.68e-6`](evaluation/tinyllama-one-layer-multitoken-reference.json) | [60 stages passed](evaluation/tinyllama-one-layer-multitoken-native-results.json) | [passed, `tohost=0`, 322,406,150 functional cycles](evaluation/tinyllama-one-layer-multitoken-functional-results.json) |
 | DeepSeek-R1-Distill-Qwen-1.5B | 69 | [build](evaluation/deepseek-one-layer-multitoken-build.json) | [passed, max logit error `2.86e-5`](evaluation/deepseek-one-layer-multitoken-reference.json) | [69 stages passed](evaluation/deepseek-one-layer-multitoken-native-results.json) | [passed, `tohost=0`, 825,405,246 functional cycles](evaluation/deepseek-one-layer-multitoken-functional-results.json) |
-| Gemma-2-2B-it | 69 | [build](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-build.json) | [passed, max logit error `1.72e-5`](evaluation/gemma-checkpoint-one-layer-reference.json) | [69 stages passed](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-native-results.json) | Running |
+| Gemma-2-2B-it | 69 | [build](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-build.json) | [passed, max logit error `1.72e-5`](evaluation/gemma-checkpoint-one-layer-reference.json) | [69 stages passed](evaluation/gemma-one-layer-int8-fp16-tied-multitoken-native-results.json) | [passed, `tohost=0`, 7,440,428,542 functional cycles](evaluation/gemma-one-layer-multitoken-functional-results.json) |
 
 These device controls exercise nontrivial causal masks and KV handoffs with
 real checkpoint data. The one-layer upstream errors refer to the original
 unquantized checkpoint. Gemma's one-layer mapped INT8/FP16 final logits also
 differ from that checkpoint by up to `0.206` for this input. A passing
-one-layer device result will not by itself prove full-depth device execution.
+one-layer device result alone does not prove multi-token full-depth device
+execution. The separate full-depth Gemma one-token prefill/decode result above
+passes all 996 stages.
 `run_checkpoint_native.py --allow-partial` reproduces the generated-C++
 one-layer checks; without that flag it requires the full pinned layer count.
 
@@ -702,15 +713,17 @@ The one-warp mapping establishes correctness for a small program. A scalable
 two-core mapping needs an explicit handoff protocol or ownership-preserving
 tiling, plus RTL validation and performance measurement.
 
-The four full-depth checkpoint programs now compile to Radiance ELFs. These
+The four full-depth checkpoint programs compile to Radiance ELFs. These
 builds use FP16 checkpoint images with FP32 arithmetic for TinyLlama and
 DeepSeek, INT8 weight formats for Gemma, and FP32 weights and arithmetic for
 SmolVLA. The numerical effects of those choices are recorded with the
-reference checks above. The next correctness gate is a completed functional
-ISA run with output validation for each **full-checkpoint** ELF; those runs
-are distinct from the completed reduced-dimension and short checkpoint
-controls. A successful native execution of generated C++ checks the schedule
-and math on the host, but does not substitute for the ISA run.
+reference checks above. TinyLlama, DeepSeek, and Gemma passed full-depth
+Cyclotron checks for one-token prefill and cached decode. The full SmolVLA
+action-chunk attempt reached a 24-hour wall limit without a result; its
+targeted Cyclotron controls and full generated-C++ host check pass. The
+five-token full-depth decoder ELFs pass host checks, but only their one-layer
+five-token controls have completed device checks. Native execution checks the
+schedule and math on the host; it does not substitute for a full device run.
 
 The remaining evaluation work is to run representative multi-token prefill
 and cached decode cases, connect the existing MX-Gemmini kernels where the

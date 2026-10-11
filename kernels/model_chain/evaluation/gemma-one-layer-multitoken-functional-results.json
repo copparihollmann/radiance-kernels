@@ -1,0 +1,94 @@
+{
+  "model": "gemma_2_2b_it",
+  "scope": "full_dimension_checkpoint_decoder",
+  "layers": 1,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "stage_count": 69,
+  "checked_float_stages": 69,
+  "checked_integer_stages": 0,
+  "simulation": "Cyclotron functional ISA model",
+  "status": "passed",
+  "failure_reason": null,
+  "cycles_functional": 7440428542,
+  "tohost": 0,
+  "failed_stage_index_one_based": null,
+  "failed_element_index": null,
+  "process_exit_code": 0,
+  "device_elf_sha256": "cdd3c387fa6f4a7cc64a158600fbd0152f4e22ad62db7fb371b5d6fb92903683",
+  "generated_source_sha256": "2aa406548d8be06085dca6c16c8ab6e454b68597264ca4c34bf691db2dffdef9",
+  "device_source_files_sha256": {
+    "kernel.cpp": "2aa406548d8be06085dca6c16c8ab6e454b68597264ca4c34bf691db2dffdef9",
+    "stage_chunk_000.cpp": "44829a6bc3e23ac25a2f90fbaafeb2cf33ab22fc436d363d69b723b7cdcf32bf",
+    "stage_chunk_001.cpp": "640415e6d81ee6ec6d5c57c88134f039e1e8d16deb18ccb66b070392c3331728",
+    "stage_chunk_002.cpp": "c4d88cc8484e2431f7c0a2eee645a523cedb9f8066e791a7bcaeb18259787418",
+    "stage_chunk_003.cpp": "289572d06321c26aa2442fb878f2b12466d643e402daecda95daa3471ae6e82e",
+    "stage_chunk_004.cpp": "39ba681a1525db9d81849c16ac600784a7868da978dff59bf12ad5bcc6595a09",
+    "stage_chunk_005.cpp": "03f8a5509976e5790e6c9c944c1c4a8ebfd8c9ca5da13e04efdddcc94c0a8d7a",
+    "stage_chunk_006.cpp": "6e7670051b59772cfe44bfa50a16bfaf4117171c1b810e6d31f99ae7cace8acd",
+    "model_data.cpp": "37391e82e41fc88223f0fdfa6074482605ced94904a0febca7fb7e304723ab55",
+    "verify_chunk_000.cpp": "7ee92f84016284b5d5b6b8440f09bffc71b3bf3ce76655ab2edde48640f997ee",
+    "verify_chunk_001.cpp": "5c5791d8d53b5469ca9b6097b2d2a201ffe893e2f365964e74247f4e868a60ec",
+    "verify_chunk_002.cpp": "7d84e97defe377c69b8d44baa04c255b774fd77b0a21236836a40136a8df039b",
+    "verify_chunk_003.cpp": "c7d022d47d54e18f56ef2571989f7ddd35aee3f46ae8f6c036a20ac330bd2342",
+    "verify_chunk_004.cpp": "dfc62e792e13d23b56f3a78b3f6fd3b3a494ec6f62c256301a10ea0c2b57e663",
+    "verify_chunk_005.cpp": "67d73a42f59f023d4aac8eeba1d46903cc3f9512f8abd39e080c0a24c22474a8",
+    "verify_chunk_006.cpp": "7d2dae61bcffd36ff9cdd32f369bd3a9738e9dc48dcb88522b66b06437f5a4d9"
+  },
+  "device_optimization": "O3",
+  "stages_per_device_object": 10,
+  "portable_ops_sha256": "ad17f2ca9952d48c8b786617f860a9e33135686c3c0ac97786b83cc18e311e6e",
+  "quantized_ops_sha256": "310c26beae4e8d2213f8900896c4a8da989160bceb0154e7c7bbcbd03f81f7cf",
+  "tied_embedding_ops_sha256": "fa13e6c64adfd0a4aea42659713bf3f9d68556cdb783afd52bd3d70002b781a6",
+  "numpy_reference_sha256": "0cb0ed80092ab9925a00fb44099b834671210e26fc7b0f5af3a40979f6371725",
+  "model_specs_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "14c425c441bfceb6b8602b5862787f955bc06ec1298712456c9074d628fe1339",
+  "simulator_cycle_limit": 10000000000,
+  "log_sha256": "6d32541da5279f48b1ed4a4973cd09dc09a4d842e51dbf9271facf4bc67b822c",
+  "checkpoint_weights": true,
+  "original_model_dimensions": true,
+  "upstream_execution_equivalent": false,
+  "checkpoint_sha256": "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a",
+  "weight_image_sha256": "75ed32abd6a5a4a530f96aad80f30a95929ef9942c4e20bce9e65580682aa1aa",
+  "weight_segment_layout": [
+    {
+      "gpu_base_address": 536870912,
+      "image_size_bytes": 1257659392,
+      "image_sha256": "75ed32abd6a5a4a530f96aad80f30a95929ef9942c4e20bce9e65580682aa1aa"
+    }
+  ],
+  "checkpoint_weight_format": "int8_fp16_tied",
+  "quantization_comparison": {
+    "prefill.logit_softcap": {
+      "max_abs_error": 0.4263315200805664,
+      "rms_error": 0.03047893480105222,
+      "reference_sha256": "03643a25606ac655aefa8eac886e0afe1719dddc82e951a49ea22d1f9e688942",
+      "quantized_sha256": "3299becf08bdd3ef3be4bc30d83b74d021f0dc5d0f2c2871832bb9e6c4348485",
+      "top1_equal": true
+    },
+    "decode0.logit_softcap": {
+      "max_abs_error": 0.2604217529296875,
+      "rms_error": 0.04208316973540285,
+      "reference_sha256": "765d5f965493c2b6c7c84c5acda8d4487ed957c3b578e7666eab55839efa64a7",
+      "quantized_sha256": "f0d6f866f84c9b3318890936b7f19e9f8dace03e4d9ba9ca5267a13aa364b93a",
+      "top1_equal": true
+    },
+    "decode1.logit_softcap": {
+      "max_abs_error": 0.20560169219970703,
+      "rms_error": 0.017937032302810272,
+      "reference_sha256": "919937fd285eee2bf44574f00060a9673badffc86dea42aaf1aba28c8c081506",
+      "quantized_sha256": "ddda4aa7c0202d0da3f7089d451435b05cd404aec88224101f9b1fe578eac2e7",
+      "top1_equal": true
+    }
+  },
+  "reference_output_sha256": "ddda4aa7c0202d0da3f7089d451435b05cd404aec88224101f9b1fe578eac2e7",
+  "stage_limit": null,
+  "native_check_tolerance": null,
+  "device_check_tolerance": {
+    "rtol": 0.005,
+    "atol": 0.0005
+  },
+  "rtl_execution": false,
+  "performance_measurement": false
+}

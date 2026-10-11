@@ -6,8 +6,9 @@
 [radiance-kernels PR #1](https://github.com/ucb-bar/radiance-kernels/pull/1):
 TinyLlama-1.1B, DeepSeek-R1-Distill-Qwen-1.5B, Gemma-2-2B, and SmolVLA-base.
 The decoder dimensions and SmolVLA policy settings come from the linked,
-revision-pinned model configs. Gemma's official config is access gated here;
-its fields are cross-checked against PR #1 and the existing Gemma kernels.
+revision-pinned model configs. Gemma's gated checkpoint is available locally;
+its config, tensor shapes, and shard hashes are checked against the pinned
+revision in the [checkpoint binding record](../../model_chain/evaluation/gemma-checkpoint-binding.json).
 
 [`stitch.py`](stitch.py) emits a tensor dependency graph at model dimensions.
 For TinyLlama, DeepSeek, and Gemma it orders embedding, every decoder layer,
@@ -27,8 +28,8 @@ The full-dimension tests keep query head, KV head, head width, sequence, and
 cache axes distinct. Gemma-2 is a useful check: its attention output width is
 `8 × 256 = 2048`, while the residual stream is 2304 wide; the output
 projection bridges those widths. A flat element count alone would miss this
-contract. The graph still needs checkpoint execution to establish numerical
-equivalence, especially for Gemma.
+contract. The [checkpoint execution controls](../../model_chain/README.md)
+subsequently checked all three decoder graphs against upstream models.
 
 SmolVLA's graph starts after the policy's image resize/pad to `512×512`,
 state pad to 32 features, and language tokenization up to 48 tokens. It covers
@@ -50,8 +51,9 @@ iteration. The timestep is a generated constant `1 - step/10`, and the Euler
 update uses `-1/10`. The prefix K/V tensors remain read-only throughout those
 iterations. Each camera's 12 SigLIP vision layers are also decomposed into
 LayerNorm, bidirectional attention, MLP, and residual stages. The connector
-has distinct pixel shuffle and projection stages. These stages still need a
-connected device implementation and a graph-to-checkpoint numerical comparison.
+has distinct pixel shuffle and projection stages. The subsequent
+[connected checkpoint build](../../model_chain/README.md) and full FP32
+host comparison cover this graph.
 At the policy boundary, `select_action` refills its queue with one 50-action
 chunk when empty, then returns one action per call, unpadded from 32 to 6
 features. These queue operations are schedule metadata, outside the graph's
@@ -65,17 +67,18 @@ reads that prefix cache directly. The last Euler update reaches time 0.
 It marks the bidirectional vision attention, pixel shuffle, multimodal masks,
 expert attention, and action operations as missing device stages. Its fixed
 512-pixel and maximum-token shapes are
-planning assumptions from the pinned configs; the graph's image preprocessing,
-padding, mask values, and action-expert behavior still need comparison to the
-upstream checkpoint run. Image and language embedding scale stages are explicit. The mask
-tensors in the graph encode required rank and dependencies;
-they do not claim a mask implementation or numerical equivalence to LeRobot.
+planning assumptions from the pinned configs; the exact-input FP32 checkpoint
+comparison and its BF16 precision difference are recorded in the
+[connected build](../../model_chain/README.md). Image and language embedding
+scale stages are explicit. The mask
+tensors in this initial graph inventory encode required rank and dependencies;
+the later checkpoint run tests their implementation and numerical behavior.
 The branch and cache-lifetime interpretation is checked against the pinned
 policy and backbone configs plus [LeRobot v0.5.1 sources](smolvla-implementation.json).
 That implementation concatenates suffix K/V for a self-attention call without
 replacing the stored prefix cache. The graph therefore keeps the prefix cache
-as the input to every denoising step. This source-level check does not replace
-a graph-to-checkpoint numerical comparison.
+as the input to every denoising step. The later full FP32 host comparison
+provides the graph-to-checkpoint numerical check.
 
 The [SmolVLA checkpoint binding check](smolvla-checkpoint-bindings.json) reads
 the real pinned `model.safetensors` header. Of 500 tensors, 499 bind to
@@ -85,10 +88,11 @@ loops.
 Names and shapes match the checkpoint; this is a static binding check, not
 numerical execution.
 
-The graph currently has 3,673 stages. Existing standalone primitives are
-identified for 2,719 stages; 954 stages still have no device implementation.
-The JSON breaks those gaps down by operator. A primitive annotation does not
-imply that the stage is wired into a shared-buffer executable.
+The graph has 3,673 stages. In the initial PR #1 primitive inventory, existing
+standalone kernels covered 2,719 stages and 954 had no matching primitive.
+The JSON preserves that inventory by operator. The subsequent connected ELF
+implements all 3,673 stages with scalar SIMT device code; its full Cyclotron
+run remains incomplete after a 24-hour wall limit.
 
 Regenerate the binding and gap record with:
 
@@ -213,9 +217,11 @@ compare every floating-point stage with this directory's NumPy executor;
 all three full-depth reduced builds pass Cyclotron's functional device execution.
 One-token TinyLlama prefill followed by one cached decode step has passed VCS
 RTL. Full-dimension checkpoint ELFs have since compiled for TinyLlama,
-DeepSeek, and quantized Gemma, and one checkpoint layer of each decoder
-passed Cyclotron against its mapped-precision reference. The full 3,673-stage SmolVLA checkpoint ELF also
-compiled; its device action comparison remains pending. MX-Gemmini integration
+DeepSeek, and quantized Gemma; their full-depth one-token prefill/decode
+Cyclotron runs [passed every stage](../../model_chain/README.md) against the
+mapped-precision references. The full 3,673-stage SmolVLA checkpoint ELF also
+compiled; its device action comparison remains incomplete after a 24-hour
+wall limit. MX-Gemmini integration
 and timed full-model runs remain open. Only timed device runs can produce
 end-to-end latency, utilization, cache, or memory measurements.
 
@@ -225,7 +231,9 @@ decoders, checking every stage against the mapped-precision NumPy reference.
 SmolVLA's full host run checks all 1,600 actions against the FP32 upstream
 policy. Its [final Euler stage](../../model_chain/evaluation/smolvla-final-euler-functional-results.json)
 also passed Cyclotron with real intermediate tensors from that host run.
-The full-depth Cyclotron device runs are still in progress.
+The full-depth decoder Cyclotron runs have completed. SmolVLA has passing
+targeted Cyclotron controls, while its complete action-chunk device check is
+still open.
 
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The
