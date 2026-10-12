@@ -1,0 +1,266 @@
+/dts-v1/;
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	compatible = "ucb-bar,chipyard-dev";
+	model = "ucb-bar,chipyard";
+	L3: aliases {
+		serial0 = &L43;
+	};
+	L34: chosen {
+		stdout-path = &L43;
+	};
+	L2: cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <1000000>;
+		L15: cpu@0 {
+			clock-frequency = <0>;
+			compatible = "sifive,rocket0", "riscv";
+			d-cache-block-size = <32>;
+			d-cache-sets = <64>;
+			d-cache-size = <2048>;
+			device_type = "cpu";
+			hardware-exec-breakpoint-count = <1>;
+			i-cache-block-size = <32>;
+			i-cache-sets = <64>;
+			i-cache-size = <2048>;
+			next-level-cache = <&L10>;
+			reg = <0x0>;
+			riscv,isa = "rv64imaczicsr_zifencei_zihpm_xrocket";
+			riscv,pmpgranularity = <4>;
+			riscv,pmpregions = <8>;
+			status = "okay";
+			timebase-frequency = <1000000>;
+			L11: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+		L27: gemmini3 {
+			clock-frequency = <0>;
+			d-cache-block-size = <32>;
+			d-cache-sets = <1>;
+			d-cache-size = <32>;
+			device_type = "cpu";
+			hardware-exec-breakpoint-count = <1>;
+			next-level-cache = <&L10>;
+			riscv,isa = "rv64izicsr_zifencei_zihpm";
+			riscv,pmpgranularity = <4>;
+			riscv,pmpregions = <8>;
+			status = "okay";
+			timebase-frequency = <1000000>;
+			L26: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+		L21: gpu@1 {
+			clock-frequency = <0>;
+			compatible = "sifive,muon1", "riscv";
+			d-cache-block-size = <32>;
+			d-cache-sets = <64>;
+			d-cache-size = <2048>;
+			device_type = "cpu";
+			hardware-exec-breakpoint-count = <1>;
+			reg = <0x1>;
+			riscv,isa = "rv32izicsr_zifencei_zihpm";
+			riscv,pmpgranularity = <4>;
+			riscv,pmpregions = <8>;
+			status = "okay";
+			timebase-frequency = <1000000>;
+			L18: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+		L25: gpu@2 {
+			clock-frequency = <0>;
+			compatible = "sifive,muon2", "riscv";
+			d-cache-block-size = <32>;
+			d-cache-sets = <64>;
+			d-cache-size = <2048>;
+			device_type = "cpu";
+			hardware-exec-breakpoint-count = <1>;
+			reg = <0x2>;
+			riscv,isa = "rv32izicsr_zifencei_zihpm";
+			riscv,pmpgranularity = <4>;
+			riscv,pmpregions = <8>;
+			status = "okay";
+			timebase-frequency = <1000000>;
+			L22: interrupt-controller {
+				#interrupt-cells = <1>;
+				compatible = "riscv,cpu-intc";
+				interrupt-controller;
+			};
+		};
+	};
+	L45: htif {
+		compatible = "ucb,htif0";
+	};
+	L30: memory@40080000 {
+		device_type = "memory";
+		reg = <0x0 0x40080000 0x0 0x200>;
+	};
+	L37: memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x1 0x0>;
+	};
+	L1: soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "ucb-bar,chipyard-soc", "simple-bus";
+		ranges;
+		L31: address-or-ctrl@40081000 {
+			compatible = "address-or-ctrl";
+			reg = <0x0 0x40081000 0x0 0x100>;
+			reg-names = "control";
+		};
+		L42: blkdev-controller@10015000 {
+			compatible = "ucb-bar,blkdev";
+			interrupt-parent = <&L33>;
+			interrupts = <1>;
+			reg = <0x0 0x10015000 0x0 0x1000>;
+			reg-names = "control";
+		};
+		L40: boot-address-reg@1000 {
+			reg = <0x0 0x1000 0x0 0x1000>;
+			reg-names = "control";
+		};
+		L10: cache-controller@2010000 {
+			cache-block-size = <32>;
+			cache-level = <2>;
+			cache-sets = <2048>;
+			cache-size = <524288>;
+			cache-unified;
+			compatible = "sifive,inclusivecache0", "cache";
+			next-level-cache = <&L37>;
+			reg = <0x0 0x2010000 0x0 0x1000>;
+			reg-names = "control";
+			sifive,mshr-count = <42>;
+		};
+		L7: cbus_clock {
+			#clock-cells = <0>;
+			clock-frequency = <1000000000>;
+			clock-output-names = "cbus_clock";
+			compatible = "fixed-clock";
+		};
+		L32: clint@2000000 {
+			compatible = "riscv,clint0";
+			interrupts-extended = <&L11 3 &L11 7 &L18 3 &L18 7 &L22 3 &L22 7 &L26 3 &L26 7>;
+			reg = <0x0 0x2000000 0x0 0x10000>;
+			reg-names = "control";
+		};
+		L17: clsbus0_clock {
+			#clock-cells = <0>;
+			clock-frequency = <1000000000>;
+			clock-output-names = "clsbus0_clock";
+			compatible = "fixed-clock";
+		};
+		L16: csbus0_clock {
+			#clock-cells = <0>;
+			clock-frequency = <1000000000>;
+			clock-output-names = "csbus0_clock";
+			compatible = "fixed-clock";
+		};
+		L8: error-device@3000 {
+			compatible = "sifive,error0";
+			reg = <0x0 0x3000 0x0 0x1000>;
+		};
+		L6: fbus_clock {
+			#clock-cells = <0>;
+			clock-frequency = <1000000000>;
+			clock-output-names = "fbus_clock";
+			compatible = "fixed-clock";
+		};
+		L28: gemmini-cmd-reg-3@40084000 {
+			compatible = "gemmini-cmd-reg-3";
+			reg = <0x0 0x40084000 0x0 0x1000>;
+			reg-names = "control";
+		};
+		L33: interrupt-controller@c000000 {
+			#interrupt-cells = <1>;
+			compatible = "riscv,plic0";
+			interrupt-controller;
+			interrupts-extended = <&L11 11 &L18 11 &L22 11 &L26 11>;
+			reg = <0x0 0xc000000 0x0 0x4000000>;
+			reg-names = "control";
+			riscv,max-priority = <3>;
+			riscv,ndev = <2>;
+		};
+		L9: mbus_clock {
+			#clock-cells = <0>;
+			clock-frequency = <1000000000>;
+			clock-output-names = "mbus_clock";
+			compatible = "fixed-clock";
+		};
+		L19: muon-cache-flush@40080200 {
+			compatible = "muon-cache-flush";
+			reg = <0x0 0x40080200 0x0 0x100>;
+			reg-names = "control";
+		};
+		L20: muon-cache-flush@40080300 {
+			compatible = "muon-cache-flush";
+			reg = <0x0 0x40080300 0x0 0x100>;
+			reg-names = "control";
+		};
+		L23: muon-cache-flush@40080400 {
+			compatible = "muon-cache-flush";
+			reg = <0x0 0x40080400 0x0 0x100>;
+			reg-names = "control";
+		};
+		L24: muon-cache-flush@40080500 {
+			compatible = "muon-cache-flush";
+			reg = <0x0 0x40080500 0x0 0x100>;
+			reg-names = "control";
+		};
+		L5: pbus_clock {
+			#clock-cells = <0>;
+			clock-frequency = <1000000000>;
+			clock-output-names = "pbus_clock";
+			compatible = "fixed-clock";
+		};
+		L41: radiance-reset-aggregator@41000000 {
+			compatible = "radiance-reset-aggregator";
+			reg = <0x0 0x41000000 0x0 0x100>;
+			reg-names = "control";
+		};
+		L39: rom@10000 {
+			compatible = "sifive,rom0";
+			reg = <0x0 0x10000 0x0 0x10000>;
+			reg-names = "mem";
+		};
+		L4: sbus_clock {
+			#clock-cells = <0>;
+			clock-frequency = <1000000000>;
+			clock-output-names = "sbus_clock";
+			compatible = "fixed-clock";
+		};
+		L43: serial@10020000 {
+			clocks = <&L5>;
+			compatible = "sifive,uart0";
+			interrupt-parent = <&L33>;
+			interrupts = <2>;
+			reg = <0x0 0x10020000 0x0 0x1000>;
+			reg-names = "control";
+		};
+		L44: tile-reset-setter@110000 {
+			reg = <0x0 0x110000 0x0 0x1000>;
+			reg-names = "control";
+		};
+		L13: trace-encoder-controller0@3000000 {
+			compatible = "ucbbar,trace";
+			reg = <0x0 0x3000000 0x0 0x100>;
+			reg-names = "control";
+		};
+		L14: trace-sink-dma0@3010000 {
+			compatible = "ucbbar,tracesinkdma";
+			reg = <0x0 0x3010000 0x0 0x100>;
+			reg-names = "control";
+		};
+	};
+};

@@ -1,0 +1,3 @@
+job_id,case,role,host_check,expected_uart,elf_path,elf_sha256,original_device_elf,expected_digest,original_count,count
+1697,full,chunk-smoke,full-digest,pass,chunk-smoke/full/kernel.soc.elf,df0202ced0528d81798f822c04964495488d5ce6cc71d80536c166e73cc9fcaa,,ccf6545c128b8c14,5,5
+1698,last,chunk-smoke,full-digest,pass,chunk-smoke/last/kernel.soc.elf,a694315eac24809cdefce4d9c2103b0b8a69bb67cf430cfa6b1d7885292d072d,,ccf6545c128b8c14,5,2

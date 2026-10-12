@@ -1,0 +1,563 @@
+/scratch2/agustin/radiance-kernels/llvm/llvm-muon/bin/clang++ --sysroot=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/riscv32-unknown-elf --gcc-toolchain=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools -nodefaultlibs -Xclang -target-feature -Xclang +vortex -march=rv32im_zfinx_zhinx -mabi=ilp32 -O3 -std=c++20 -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -mllvm -inline-threshold=262144 -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/mxgemmini -I/scratch/agustin/projects/radiance-kernels/lib/mxgemm -DRADIANCE -DRADIANCE_DEVICE -DNDEBUG -DLLVM_VORTEX -include /scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include/gemmini_abs_shim.h  -idirafter /scratch/agustin/projects/chipyard/.conda-env/riscv-tools/riscv64-unknown-elf/include -isystem /scratch2/agustin/radiance-kernels/llvm/llvm-muon/include/c++/v1 -c kernel.cpp -o kernel.mu.o
+*** DivergenceTracker::initialize(): main
+*** divergent return variable: 
+*** divergent return variable: 
+*** Vortex Divergent Branch Handling Pass0 ***
+*** before Pass0 changes!
+; Function Attrs: mustprogress norecurse nounwind uwtable
+define dso_local noundef i32 @main() local_unnamed_addr #0 {
+entry:
+  tail call void @mu_schedule(ptr noundef nonnull @_ZL11kernel_bodyPvjjj, ptr noundef null, i32 noundef 4) #3
+  tail call void asm sideeffect "fence", "~{memory}"() #3, !srcloc !8
+  ret i32 0
+}
+
+*** DivergenceTracker::initialize(): main
+*** divergent return variable: 
+*** divergent return variable: 
+*** DivergenceTracker::initialize(): main
+*** divergent return variable: 
+*** divergent return variable: 
+
+BLOCK entry
+DEFINITIONS
+  DIVERGENT:   tail call void @mu_schedule(ptr noundef nonnull @_ZL11kernel_bodyPvjjj, ptr noundef null, i32 noundef 4) #5
+  DIVERGENT:   tail call void asm sideeffect "fence", "~{memory}"() #5, !srcloc !8
+TERMINATORS
+               ret i32 0
+END BLOCK
+*** Region info:
+[0] entry => <Function Return>
+
+*** DivergenceTracker::initialize(): _ZL11kernel_bodyPvjjj
+*** divergent function argument: 
+*** divergent function argument: tid
+*** divergent function argument: threads_per_block
+*** divergent function argument: block_id
+*** Vortex Divergent Branch Handling Pass0 ***
+*** before Pass0 changes!
+; Function Attrs: mustprogress nofree norecurse nounwind memory(readwrite, argmem: none) uwtable
+define internal void @_ZL11kernel_bodyPvjjj(ptr nocapture readnone %0, i32 noundef %tid, i32 noundef %threads_per_block, i32 noundef %block_id) #2 {
+entry:
+  %mul = mul i32 %block_id, %threads_per_block
+  %add = add i32 %mul, %tid
+  %1 = shl i32 %add, 3
+  %2 = add nuw nsw i32 %1, 4
+  %scevgep = getelementptr i8, ptr @spatter_dense, i32 %2
+  %3 = shl i32 %threads_per_block, 3
+  %4 = shl i32 %add, 2
+  %scevgep31 = getelementptr i8, ptr @spatter_pattern, i32 %4
+  %5 = shl i32 %threads_per_block, 2
+  br label %for.cond
+
+for.cond:                                         ; preds = %for.cond3.preheader, %entry
+  %lsr.iv32 = phi ptr [ %scevgep33, %for.cond3.preheader ], [ %scevgep31, %entry ]
+  %lsr.iv = phi ptr [ %scevgep29, %for.cond3.preheader ], [ %scevgep, %entry ]
+  %owner.0 = phi i32 [ %add, %entry ], [ %add11, %for.cond3.preheader ]
+  %cmp = icmp ult i32 %owner.0, 3
+  br i1 %cmp, label %for.cond3.preheader, label %cleanup13
+
+for.cond3.preheader:                              ; preds = %for.cond
+  %6 = load i32, ptr %lsr.iv32, align 4, !tbaa !9
+  %scevgep30 = getelementptr i8, ptr %lsr.iv, i32 -4
+  %mul.i25 = shl i32 %6, 1
+  %arrayidx.i26 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25
+  %7 = load volatile i32, ptr %arrayidx.i26, align 4, !tbaa !9
+  %add.i27 = or disjoint i32 %mul.i25, 1
+  %arrayidx2.i = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27
+  %8 = load volatile i32, ptr %arrayidx2.i, align 4, !tbaa !9
+  store volatile i32 %7, ptr %scevgep30, align 4, !tbaa !9
+  store volatile i32 %8, ptr %lsr.iv, align 4, !tbaa !9
+  %add.i.1 = shl i32 %6, 1
+  %mul.i25.1 = add i32 %add.i.1, 6
+  %arrayidx.i26.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25.1
+  %9 = load volatile i32, ptr %arrayidx.i26.1, align 4, !tbaa !9
+  %add.i27.1 = or disjoint i32 %mul.i25.1, 1
+  %arrayidx2.i.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27.1
+  %10 = load volatile i32, ptr %arrayidx2.i.1, align 4, !tbaa !9
+  store volatile i32 %9, ptr %scevgep30, align 4, !tbaa !9
+  store volatile i32 %10, ptr %lsr.iv, align 4, !tbaa !9
+  %sub9 = xor i32 %owner.0, 3
+  %cmp10.not = icmp ugt i32 %sub9, %threads_per_block
+  %add11 = add nuw nsw i32 %owner.0, %threads_per_block
+  %scevgep29 = getelementptr i8, ptr %lsr.iv, i32 %3
+  %scevgep33 = getelementptr i8, ptr %lsr.iv32, i32 %5
+  br i1 %cmp10.not, label %for.cond, label %cleanup13, !llvm.loop !13
+
+cleanup13:                                        ; preds = %for.cond, %for.cond3.preheader
+  ret void
+}
+
+*** DivergenceTracker::initialize(): _ZL11kernel_bodyPvjjj
+*** divergent function argument: 
+*** divergent function argument: tid
+*** divergent function argument: threads_per_block
+*** divergent function argument: block_id
+Visiting: for.cond
+Visiting: for.cond3.preheader
+*** DivergenceTracker::initialize(): _ZL11kernel_bodyPvjjj
+*** divergent function argument: 
+*** divergent function argument: tid
+*** divergent function argument: threads_per_block
+*** divergent function argument: block_id
+DIVERGENT ARGUMENTS:
+  DIVERGENT: ptr %0
+  DIVERGENT: i32 %tid
+  DIVERGENT: i32 %threads_per_block
+  DIVERGENT: i32 %block_id
+CYCLES WITH DIVERGENT EXIT:
+  depth=1: entries(for.cond) Flow for.cond3.preheader
+
+BLOCK entry
+DEFINITIONS
+  DIVERGENT:   %mul = mul i32 %block_id, %threads_per_block
+  DIVERGENT:   %add = add i32 %mul, %tid
+  DIVERGENT:   %1 = shl i32 %add, 3
+  DIVERGENT:   %2 = add nuw nsw i32 %1, 4
+  DIVERGENT:   %scevgep = getelementptr i8, ptr @spatter_dense, i32 %2
+  DIVERGENT:   %3 = shl i32 %threads_per_block, 3
+  DIVERGENT:   %4 = shl i32 %add, 2
+  DIVERGENT:   %scevgep31 = getelementptr i8, ptr @spatter_pattern, i32 %4
+  DIVERGENT:   %5 = shl i32 %threads_per_block, 2
+TERMINATORS
+               br label %for.cond
+END BLOCK
+
+BLOCK for.cond
+DEFINITIONS
+  DIVERGENT:   %lsr.iv32 = phi ptr [ %scevgep31, %entry ], [ %13, %Flow ]
+  DIVERGENT:   %lsr.iv = phi ptr [ %scevgep, %entry ], [ %12, %Flow ]
+  DIVERGENT:   %owner.0 = phi i32 [ %add, %entry ], [ %11, %Flow ]
+  DIVERGENT:   %cmp = icmp ult i32 %owner.0, 3
+TERMINATORS
+  DIVERGENT:   br i1 %cmp, label %for.cond3.preheader, label %Flow
+END BLOCK
+
+BLOCK for.cond3.preheader
+DEFINITIONS
+  DIVERGENT:   %6 = load i32, ptr %lsr.iv32, align 4, !tbaa !8
+  DIVERGENT:   %scevgep30 = getelementptr i8, ptr %lsr.iv, i32 -4
+  DIVERGENT:   %mul.i25 = shl i32 %6, 1
+  DIVERGENT:   %arrayidx.i26 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25
+  DIVERGENT:   %7 = load volatile i32, ptr %arrayidx.i26, align 4, !tbaa !8
+  DIVERGENT:   %add.i27 = or disjoint i32 %mul.i25, 1
+  DIVERGENT:   %arrayidx2.i = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27
+  DIVERGENT:   %8 = load volatile i32, ptr %arrayidx2.i, align 4, !tbaa !8
+  DIVERGENT:   store volatile i32 %7, ptr %scevgep30, align 4, !tbaa !8
+  DIVERGENT:   store volatile i32 %8, ptr %lsr.iv, align 4, !tbaa !8
+  DIVERGENT:   %add.i.1 = shl i32 %6, 1
+  DIVERGENT:   %mul.i25.1 = add i32 %add.i.1, 6
+  DIVERGENT:   %arrayidx.i26.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25.1
+  DIVERGENT:   %9 = load volatile i32, ptr %arrayidx.i26.1, align 4, !tbaa !8
+  DIVERGENT:   %add.i27.1 = or disjoint i32 %mul.i25.1, 1
+  DIVERGENT:   %arrayidx2.i.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27.1
+  DIVERGENT:   %10 = load volatile i32, ptr %arrayidx2.i.1, align 4, !tbaa !8
+  DIVERGENT:   store volatile i32 %9, ptr %scevgep30, align 4, !tbaa !8
+  DIVERGENT:   store volatile i32 %10, ptr %lsr.iv, align 4, !tbaa !8
+  DIVERGENT:   %sub9 = xor i32 %owner.0, 3
+  DIVERGENT:   %cmp10.not = icmp ule i32 %sub9, %threads_per_block
+  DIVERGENT:   %add11 = add nuw nsw i32 %owner.0, %threads_per_block
+  DIVERGENT:   %scevgep29 = getelementptr i8, ptr %lsr.iv, i32 %3
+  DIVERGENT:   %scevgep33 = getelementptr i8, ptr %lsr.iv32, i32 %5
+TERMINATORS
+               br label %Flow
+END BLOCK
+
+BLOCK Flow
+DEFINITIONS
+  DIVERGENT:   %11 = phi i32 [ %add11, %for.cond3.preheader ], [ undef, %for.cond ]
+  DIVERGENT:   %12 = phi ptr [ %scevgep29, %for.cond3.preheader ], [ undef, %for.cond ]
+  DIVERGENT:   %13 = phi ptr [ %scevgep33, %for.cond3.preheader ], [ undef, %for.cond ]
+  DIVERGENT:   %14 = phi i1 [ %cmp10.not, %for.cond3.preheader ], [ true, %for.cond ]
+TERMINATORS
+  DIVERGENT:   br i1 %14, label %cleanup13, label %for.cond
+END BLOCK
+
+BLOCK cleanup13
+DEFINITIONS
+TERMINATORS
+               ret void
+END BLOCK
+*** Region info:
+[0] entry => <Function Return>
+  [1] for.cond => cleanup13
+    [2] for.cond => Flow
+
+*** skip non-conditional branch: BB.entry
+*** divergent branch: BB.for.cond
+*** skip non-conditional branch: BB.for.cond3.preheader
+*** divergent loop: BB.for.cond
+*** before changes!
+; Function Attrs: mustprogress nofree norecurse nounwind memory(readwrite, argmem: none) uwtable
+define internal void @_ZL11kernel_bodyPvjjj(ptr nocapture readnone %0, i32 noundef %tid, i32 noundef %threads_per_block, i32 noundef %block_id) #2 {
+entry:
+  %mul = mul i32 %block_id, %threads_per_block
+  %add = add i32 %mul, %tid
+  %1 = shl i32 %add, 3
+  %2 = add nuw nsw i32 %1, 4
+  %scevgep = getelementptr i8, ptr @spatter_dense, i32 %2
+  %3 = shl i32 %threads_per_block, 3
+  %4 = shl i32 %add, 2
+  %scevgep31 = getelementptr i8, ptr @spatter_pattern, i32 %4
+  %5 = shl i32 %threads_per_block, 2
+  br label %for.cond
+
+for.cond:                                         ; preds = %Flow, %entry
+  %lsr.iv32 = phi ptr [ %scevgep31, %entry ], [ %13, %Flow ]
+  %lsr.iv = phi ptr [ %scevgep, %entry ], [ %12, %Flow ]
+  %owner.0 = phi i32 [ %add, %entry ], [ %11, %Flow ]
+  %cmp = icmp ult i32 %owner.0, 3
+  br i1 %cmp, label %for.cond3.preheader, label %Flow
+
+for.cond3.preheader:                              ; preds = %for.cond
+  %6 = load i32, ptr %lsr.iv32, align 4, !tbaa !9
+  %scevgep30 = getelementptr i8, ptr %lsr.iv, i32 -4
+  %mul.i25 = shl i32 %6, 1
+  %arrayidx.i26 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25
+  %7 = load volatile i32, ptr %arrayidx.i26, align 4, !tbaa !9
+  %add.i27 = or disjoint i32 %mul.i25, 1
+  %arrayidx2.i = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27
+  %8 = load volatile i32, ptr %arrayidx2.i, align 4, !tbaa !9
+  store volatile i32 %7, ptr %scevgep30, align 4, !tbaa !9
+  store volatile i32 %8, ptr %lsr.iv, align 4, !tbaa !9
+  %add.i.1 = shl i32 %6, 1
+  %mul.i25.1 = add i32 %add.i.1, 6
+  %arrayidx.i26.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25.1
+  %9 = load volatile i32, ptr %arrayidx.i26.1, align 4, !tbaa !9
+  %add.i27.1 = or disjoint i32 %mul.i25.1, 1
+  %arrayidx2.i.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27.1
+  %10 = load volatile i32, ptr %arrayidx2.i.1, align 4, !tbaa !9
+  store volatile i32 %9, ptr %scevgep30, align 4, !tbaa !9
+  store volatile i32 %10, ptr %lsr.iv, align 4, !tbaa !9
+  %sub9 = xor i32 %owner.0, 3
+  %cmp10.not = icmp ule i32 %sub9, %threads_per_block
+  %add11 = add nuw nsw i32 %owner.0, %threads_per_block
+  %scevgep29 = getelementptr i8, ptr %lsr.iv, i32 %3
+  %scevgep33 = getelementptr i8, ptr %lsr.iv32, i32 %5
+  br label %Flow
+
+Flow:                                             ; preds = %for.cond3.preheader, %for.cond
+  %11 = phi i32 [ %add11, %for.cond3.preheader ], [ undef, %for.cond ]
+  %12 = phi ptr [ %scevgep29, %for.cond3.preheader ], [ undef, %for.cond ]
+  %13 = phi ptr [ %scevgep33, %for.cond3.preheader ], [ undef, %for.cond ]
+  %14 = phi i1 [ %cmp10.not, %for.cond3.preheader ], [ true, %for.cond ]
+  br i1 %14, label %cleanup13, label %for.cond
+
+cleanup13:                                        ; preds = %Flow
+  ret void
+}
+
+*** process loop: BB.for.cond
+*** backup thread mask 'V.tmask' before loop preheader branch: BB.entry
+*** insert thread predicate 'V.V.V.V.14.to.i1.to.i32.mov' before exiting block: BB.Flow
+*** after predicate change!
+0x63a5b6291cd8
+*** process branch BB.for.cond, region=for.cond => Flow
+*** insert split 'V.V.V.V.cmp.to.i1.to.i32.mov' before BB.for.cond's branch.
+*** insert join stub 'join_stub' before BB.Flow
+****** replace BB.for.cond.succ[1]: BB.Flow with BB.join_stub
+****** replace BB.for.cond3.preheader.succ[0]: BB.Flow with BB.join_stub
+*** after changes!
+; Function Attrs: mustprogress nofree norecurse nounwind memory(readwrite, argmem: none) uwtable
+define internal void @_ZL11kernel_bodyPvjjj(ptr nocapture readnone %0, i32 noundef %tid, i32 noundef %threads_per_block, i32 noundef %block_id) #2 {
+entry:
+  %mul = mul i32 %block_id, %threads_per_block
+  %add = add i32 %mul, %tid
+  %1 = shl i32 %add, 3
+  %2 = add nuw nsw i32 %1, 4
+  %scevgep = getelementptr i8, ptr @spatter_dense, i32 %2
+  %3 = shl i32 %threads_per_block, 3
+  %4 = shl i32 %add, 2
+  %scevgep31 = getelementptr i8, ptr @spatter_pattern, i32 %4
+  %5 = shl i32 %threads_per_block, 2
+  %tmask = call i32 @llvm.riscv.vx.tmask.i32()
+  br label %for.cond
+
+for.cond:                                         ; preds = %Flow, %entry
+  %lsr.iv32 = phi ptr [ %scevgep31, %entry ], [ %18, %Flow ]
+  %lsr.iv = phi ptr [ %scevgep, %entry ], [ %17, %Flow ]
+  %owner.0 = phi i32 [ %add, %entry ], [ %16, %Flow ]
+  %cmp = icmp ult i32 %owner.0, 3
+  %V.cmp.to.i1 = icmp ne i1 %cmp, false
+  %V.V.cmp.to.i1.to.i32 = zext i1 %V.cmp.to.i1 to i32
+  %V.V.V.cmp.to.i1.to.i32.mov = call i32 @llvm.riscv.vx.mov.i32(i32 %V.V.cmp.to.i1.to.i32)
+  %6 = call i32 @llvm.riscv.vx.split.i32(i32 %V.V.V.cmp.to.i1.to.i32.mov)
+  %V.V.V.V.cmp.to.i1.to.i32.mov.to.i1 = icmp ne i32 %V.V.V.cmp.to.i1.to.i32.mov, 0
+  br i1 %V.V.V.V.cmp.to.i1.to.i32.mov.to.i1, label %for.cond3.preheader, label %join_stub
+
+for.cond3.preheader:                              ; preds = %for.cond
+  %7 = load i32, ptr %lsr.iv32, align 4, !tbaa !9
+  %scevgep30 = getelementptr i8, ptr %lsr.iv, i32 -4
+  %mul.i25 = shl i32 %7, 1
+  %arrayidx.i26 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25
+  %8 = load volatile i32, ptr %arrayidx.i26, align 4, !tbaa !9
+  %add.i27 = or disjoint i32 %mul.i25, 1
+  %arrayidx2.i = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27
+  %9 = load volatile i32, ptr %arrayidx2.i, align 4, !tbaa !9
+  store volatile i32 %8, ptr %scevgep30, align 4, !tbaa !9
+  store volatile i32 %9, ptr %lsr.iv, align 4, !tbaa !9
+  %add.i.1 = shl i32 %7, 1
+  %mul.i25.1 = add i32 %add.i.1, 6
+  %arrayidx.i26.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %mul.i25.1
+  %10 = load volatile i32, ptr %arrayidx.i26.1, align 4, !tbaa !9
+  %add.i27.1 = or disjoint i32 %mul.i25.1, 1
+  %arrayidx2.i.1 = getelementptr inbounds i32, ptr @spatter_sparse, i32 %add.i27.1
+  %11 = load volatile i32, ptr %arrayidx2.i.1, align 4, !tbaa !9
+  store volatile i32 %10, ptr %scevgep30, align 4, !tbaa !9
+  store volatile i32 %11, ptr %lsr.iv, align 4, !tbaa !9
+  %sub9 = xor i32 %owner.0, 3
+  %cmp10.not = icmp ule i32 %sub9, %threads_per_block
+  %add11 = add nuw nsw i32 %owner.0, %threads_per_block
+  %scevgep29 = getelementptr i8, ptr %lsr.iv, i32 %3
+  %scevgep33 = getelementptr i8, ptr %lsr.iv32, i32 %5
+  br label %join_stub
+
+join_stub:                                        ; preds = %for.cond3.preheader, %for.cond
+  %12 = phi i1 [ true, %for.cond ], [ %cmp10.not, %for.cond3.preheader ]
+  %13 = phi ptr [ undef, %for.cond ], [ %scevgep33, %for.cond3.preheader ]
+  %14 = phi ptr [ undef, %for.cond ], [ %scevgep29, %for.cond3.preheader ]
+  %15 = phi i32 [ undef, %for.cond ], [ %add11, %for.cond3.preheader ]
+  call void @llvm.riscv.vx.join.i32(i32 %6)
+  br label %Flow
+
+Flow:                                             ; preds = %join_stub
+  %16 = phi i32 [ %15, %join_stub ]
+  %17 = phi ptr [ %14, %join_stub ]
+  %18 = phi ptr [ %13, %join_stub ]
+  %19 = phi i1 [ %12, %join_stub ]
+  %V.14.to.i1 = icmp ne i1 %19, false
+  %V.V.14.to.i1.to.i32 = zext i1 %V.14.to.i1 to i32
+  %V.V.V.14.to.i1.to.i32.mov = call i32 @llvm.riscv.vx.mov.i32(i32 %V.V.14.to.i1.to.i32)
+  call void @llvm.riscv.vx.pred.n.i32(i32 %V.V.V.14.to.i1.to.i32.mov, i32 %tmask)
+  %V.V.V.V.14.to.i1.to.i32.mov.to.i1 = icmp ne i32 %V.V.V.14.to.i1.to.i32.mov, 0
+  br i1 %V.V.V.V.14.to.i1.to.i32.mov.to.i1, label %cleanup13, label %for.cond
+
+cleanup13:                                        ; preds = %Flow
+  ret void
+}
+
+*** after changes!
+_ZL11kernel_bodyPvjjj
+# Machine code for function _ZL11kernel_bodyPvjjj: IsSSA, TracksLiveness
+Function Live Ins: $x11 in %23, $x12 in %24, $x13 in %25
+
+bb.0.entry:
+  successors: %bb.1(0x80000000); %bb.1(100.00%)
+  liveins: $x11, $x12, $x13
+  %25:gpr = COPY $x13
+  %24:gpr = COPY $x12
+  %23:gpr = COPY $x11
+  %26:gpr = MUL %25:gpr, %24:gpr
+  %0:gpr = ADD killed %26:gpr, %23:gpr
+  %27:gpr = SLLI %0:gpr, 3
+  %48:gpr = AUIPC target-flags(riscv-pcrel-hi) @spatter_dense, pre-instr-symbol <mcsymbol .Lpcrel_hi1>
+  %28:gpr = ADDI %48:gpr, target-flags(riscv-pcrel-lo) <mcsymbol .Lpcrel_hi1>
+  %29:gpr = ADD killed %27:gpr, killed %28:gpr
+  %1:gpr = ADDI killed %29:gpr, 4
+  %2:gpr = SLLI %24:gpr, 3
+  %30:gpr = SLLI %0:gpr, 2
+  %49:gpr = AUIPC target-flags(riscv-pcrel-hi) @spatter_pattern, pre-instr-symbol <mcsymbol .Lpcrel_hi2>
+  %31:gpr = ADDI %49:gpr, target-flags(riscv-pcrel-lo) <mcsymbol .Lpcrel_hi2>
+  %3:gpr = ADD killed %31:gpr, killed %30:gpr
+  %4:gpr = SLLI %24:gpr, 2
+  %5:gpr = CSRRS 3268, $x0
+  %34:gpr = IMPLICIT_DEF
+  %33:gpr = IMPLICIT_DEF
+  %50:gpr = AUIPC target-flags(riscv-pcrel-hi) @spatter_sparse, pre-instr-symbol <mcsymbol .Lpcrel_hi3>
+  %39:gpr = ADDI %50:gpr, target-flags(riscv-pcrel-lo) <mcsymbol .Lpcrel_hi3>
+
+bb.1.for.cond:
+; predecessors: %bb.0, %bb.4
+  successors: %bb.2(0x50000000), %bb.3(0x30000000); %bb.2(62.50%), %bb.3(37.50%)
+
+  %6:gpr = PHI %3:gpr, %bb.0, %20:gpr, %bb.4
+  %7:gpr = PHI %1:gpr, %bb.0, %19:gpr, %bb.4
+  %8:gpr = PHI %0:gpr, %bb.0, %18:gpr, %bb.4
+  %35:gpr = SLTIU %8:gpr, 3
+  %9:gpr = VX_SPLIT %35:gpr
+  %32:gpr = ADDI $x0, 1
+  BEQ %35:gpr, $x0, %bb.3
+  PseudoBR %bb.2
+
+bb.2.for.cond3.preheader:
+; predecessors: %bb.1
+  successors: %bb.3(0x80000000); %bb.3(100.00%)
+
+  %37:gpr = LW %6:gpr, 0 :: (load (s32) from %ir.lsr.iv32, !tbaa !9)
+  %38:gpr = SLLI killed %37:gpr, 3
+  %40:gpr = ADD %39:gpr, killed %38:gpr
+  %41:gpr = LW %40:gpr, 0 :: (volatile load (s32) from %ir.arrayidx.i26, !tbaa !9)
+  %42:gpr = LW %40:gpr, 4 :: (volatile load (s32) from %ir.arrayidx2.i, !tbaa !9)
+  SW killed %41:gpr, %7:gpr, -4 :: (volatile store (s32) into %ir.scevgep30, !tbaa !9)
+  SW killed %42:gpr, %7:gpr, 0 :: (volatile store (s32) into %ir.lsr.iv, !tbaa !9)
+  %43:gpr = LW %40:gpr, 24 :: (volatile load (s32) from %ir.arrayidx.i26.1, !tbaa !9)
+  %44:gpr = LW %40:gpr, 28 :: (volatile load (s32) from %ir.arrayidx2.i.1, !tbaa !9)
+  SW killed %43:gpr, %7:gpr, -4 :: (volatile store (s32) into %ir.scevgep30, !tbaa !9)
+  SW killed %44:gpr, %7:gpr, 0 :: (volatile store (s32) into %ir.lsr.iv, !tbaa !9)
+  %45:gpr = XORI %8:gpr, 3
+  %46:gpr = SLTU %24:gpr, killed %45:gpr
+  %10:gpr = XORI killed %46:gpr, 1
+  %11:gpr = nuw nsw ADD %8:gpr, %24:gpr
+  %12:gpr = ADD %7:gpr, %2:gpr
+  %13:gpr = ADD %6:gpr, %4:gpr
+
+bb.3.join_stub:
+; predecessors: %bb.1, %bb.2
+  successors: %bb.4(0x80000000); %bb.4(100.00%)
+
+  %14:gpr = PHI %32:gpr, %bb.1, %10:gpr, %bb.2
+  %15:gpr = PHI %33:gpr, %bb.1, %13:gpr, %bb.2
+  %16:gpr = PHI %33:gpr, %bb.1, %12:gpr, %bb.2
+  %17:gpr = PHI %34:gpr, %bb.1, %11:gpr, %bb.2
+  VX_JOIN %9:gpr
+
+bb.4.Flow:
+; predecessors: %bb.3
+  successors: %bb.5(0x04000000), %bb.1(0x7c000000); %bb.5(3.12%), %bb.1(96.88%)
+
+  %18:gpr = PHI %17:gpr, %bb.3
+  %19:gpr = PHI %16:gpr, %bb.3
+  %20:gpr = PHI %15:gpr, %bb.3
+  %21:gpr = PHI %14:gpr, %bb.3
+  VX_PRED_N %21:gpr, %5:gpr
+  BEQ %21:gpr, $x0, %bb.1
+  PseudoBR %bb.5
+
+bb.5.cleanup13:
+; predecessors: %bb.4
+
+  PseudoRET
+
+# End machine code for function _ZL11kernel_bodyPvjjj.
+
+*** Vortex: fixed predicate opcode!
+*** after changes!
+_ZL11kernel_bodyPvjjj
+# Machine code for function _ZL11kernel_bodyPvjjj: NoPHIs, TracksLiveness, NoVRegs, TiedOpsRewritten, TracksDebugUserValues
+Frame Objects:
+  fi#0: size=4, align=4, at location [SP-4]
+Function Live Ins: $x11, $x12, $x13
+
+bb.0.entry:
+  successors: %bb.2(0x80000000); %bb.2(100.00%)
+  liveins: $x11, $x12, $x13, $x1
+  $x2 = frame-setup ADDI $x2, -16
+  frame-setup CFI_INSTRUCTION def_cfa_offset 16
+  SW killed $x1, $x2, 12 :: (store (s32) into %stack.0)
+  frame-setup CFI_INSTRUCTION offset $x1, -4
+  renamable $x1 = MUL killed renamable $x13, renamable $x12
+  renamable $x10 = ADD killed renamable $x1, killed renamable $x11
+  renamable $x11 = SLLI renamable $x10, 3
+  renamable $x13 = AUIPC target-flags(riscv-pcrel-hi) @spatter_dense, pre-instr-symbol <mcsymbol .Lpcrel_hi1>
+  renamable $x14 = ADDI killed renamable $x13, target-flags(riscv-pcrel-lo) <mcsymbol .Lpcrel_hi1>
+  renamable $x13 = ADD killed renamable $x11, killed renamable $x14
+  renamable $x11 = ADDI killed renamable $x13, 4
+  renamable $x13 = SLLI renamable $x12, 3
+  renamable $x15 = SLLI renamable $x10, 2
+  renamable $x14 = AUIPC target-flags(riscv-pcrel-hi) @spatter_pattern, pre-instr-symbol <mcsymbol .Lpcrel_hi2>
+  renamable $x16 = ADDI killed renamable $x14, target-flags(riscv-pcrel-lo) <mcsymbol .Lpcrel_hi2>
+  renamable $x14 = ADD killed renamable $x16, killed renamable $x15
+  renamable $x15 = SLLI renamable $x12, 2
+  renamable $x16 = CSRRS 3268, $x0
+  renamable $x32 = AUIPC target-flags(riscv-pcrel-hi) @spatter_sparse, pre-instr-symbol <mcsymbol .Lpcrel_hi3>
+  renamable $x17 = ADDI killed renamable $x32, target-flags(riscv-pcrel-lo) <mcsymbol .Lpcrel_hi3>
+  PseudoBR %bb.2
+
+bb.1.join_stub:
+; predecessors: %bb.2, %bb.3
+  successors: %bb.4(0x04000000), %bb.2(0x7c000000); %bb.4(3.12%), %bb.2(96.88%)
+  liveins: $x10, $x11, $x12, $x13, $x14, $x15, $x16, $x17, $x32, $x33
+  VX_JOIN killed renamable $x32
+  VX_PRED_N renamable $x33, renamable $x16
+  BNE killed renamable $x33, $x0, %bb.4
+
+bb.2.for.cond:
+; predecessors: %bb.0, %bb.1
+  successors: %bb.3(0x50000000), %bb.1(0x30000000); %bb.3(62.50%), %bb.1(37.50%)
+  liveins: $x10, $x11, $x12, $x13, $x14, $x15, $x16, $x17
+  renamable $x35 = SLTIU renamable $x10, 3
+  renamable $x32 = VX_SPLIT_N renamable $x35
+  renamable $x33 = ADDI $x0, 1
+  BEQ killed renamable $x35, $x0, %bb.1
+
+bb.3.for.cond3.preheader:
+; predecessors: %bb.2
+  successors: %bb.1(0x80000000); %bb.1(100.00%)
+  liveins: $x10, $x11, $x12, $x13, $x14, $x15, $x16, $x17, $x32
+  renamable $x33 = LW renamable $x14, 0 :: (load (s32) from %ir.lsr.iv32, !tbaa !9)
+  renamable $x34 = SLLI killed renamable $x33, 3
+  renamable $x35 = ADD renamable $x17, killed renamable $x34
+  renamable $x33 = LW renamable $x35, 0 :: (volatile load (s32) from %ir.arrayidx.i26, !tbaa !9)
+  renamable $x34 = LW renamable $x35, 4 :: (volatile load (s32) from %ir.arrayidx2.i, !tbaa !9)
+  SW killed renamable $x33, renamable $x11, -4 :: (volatile store (s32) into %ir.scevgep30, !tbaa !9)
+  SW killed renamable $x34, renamable $x11, 0 :: (volatile store (s32) into %ir.lsr.iv, !tbaa !9)
+  renamable $x33 = LW renamable $x35, 24 :: (volatile load (s32) from %ir.arrayidx.i26.1, !tbaa !9)
+  renamable $x34 = LW killed renamable $x35, 28 :: (volatile load (s32) from %ir.arrayidx2.i.1, !tbaa !9)
+  SW killed renamable $x33, renamable $x11, -4 :: (volatile store (s32) into %ir.scevgep30, !tbaa !9)
+  SW killed renamable $x34, renamable $x11, 0 :: (volatile store (s32) into %ir.lsr.iv, !tbaa !9)
+  renamable $x33 = XORI renamable $x10, 3
+  renamable $x34 = SLTU renamable $x12, killed renamable $x33
+  renamable $x33 = XORI killed renamable $x34, 1
+  renamable $x10 = nuw nsw ADD killed renamable $x10, renamable $x12
+  renamable $x11 = ADD killed renamable $x11, renamable $x13
+  renamable $x14 = ADD killed renamable $x14, renamable $x15
+  PseudoBR %bb.1
+
+bb.4.cleanup13:
+; predecessors: %bb.1
+
+  $x1 = LW $x2, 12 :: (load (s32) from %stack.0)
+  $x2 = frame-destroy ADDI $x2, 16
+  PseudoRET
+
+# End machine code for function _ZL11kernel_bodyPvjjj.
+
+I type no longer exists. The immediate bounds might not be accurate
+I type no longer exists. The immediate bounds might not be accurate
+I type no longer exists. The immediate bounds might not be accurate
+pre ra expand pseudo old size was 52, new size is 60
+pre ra expand pseudo old size was 336, new size is 360
+old size was 92, new size is 92
+old size was 376, new size is 376
+/scratch2/agustin/radiance-kernels/llvm/llvm-muon/bin/clang++ --sysroot=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/riscv32-unknown-elf --gcc-toolchain=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools -nodefaultlibs -Xclang -target-feature -Xclang +vortex -march=rv32im_zfinx_zhinx -mabi=ilp32 -O3 -std=c++20 -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -mllvm -inline-threshold=262144 -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/mxgemmini -I/scratch/agustin/projects/radiance-kernels/lib/mxgemm -DRADIANCE -DRADIANCE_DEVICE -DNDEBUG -DLLVM_VORTEX -include /scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include/gemmini_abs_shim.h  -idirafter /scratch/agustin/projects/chipyard/.conda-env/riscv-tools/riscv64-unknown-elf/include -isystem /scratch2/agustin/radiance-kernels/llvm/llvm-muon/include/c++/v1 -x assembler-with-cpp -c data.S -o data.mu.o
+/scratch2/agustin/radiance-kernels/llvm/llvm-muon/bin/clang++ --sysroot=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/riscv32-unknown-elf --gcc-toolchain=/scratch/agustin/projects/chipyard/.conda-env/riscv-tools -nodefaultlibs -Xclang -target-feature -Xclang +vortex -march=rv32im_zfinx_zhinx -mabi=ilp32 -O3 -std=c++20 -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -mllvm -inline-threshold=262144 -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/mxgemmini -I/scratch/agustin/projects/radiance-kernels/lib/mxgemm -DRADIANCE -DRADIANCE_DEVICE -DNDEBUG -DLLVM_VORTEX -include /scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include/gemmini_abs_shim.h  -idirafter /scratch/agustin/projects/chipyard/.conda-env/riscv-tools/riscv64-unknown-elf/include -isystem /scratch2/agustin/radiance-kernels/llvm/llvm-muon/include/c++/v1 kernel.mu.o  data.mu.o -nodefaultlibs -nostartfiles -Wl,-Bstatic,-T,/scratch/agustin/projects/radiance-kernels/lib/linker/mu_link.ld,-z,norelro -fuse-ld=lld /scratch/agustin/projects/radiance-kernels/lib/libmuonrt.a /scratch/agustin/projects/radiance-kernels/lib/tohost.S -o kernel.radiance.elf
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+ld.lld: warning: todo! add back check for 8-byte alignment
+relaxLa with displace 9288
+no relaxLa with mismatching regno 11 10 11
+no relaxLa with mismatching regno 13 14 13
+no relaxLa with mismatching regno 14 16 14
+no relaxLa with mismatching regno 32 17 32
+no relaxLa with mismatching regno 13 1 13
+no relaxLa with mismatching regno 10 11 10
+no relaxLa with mismatching regno 12 13 12
+relaxLa with displace -268444688
+relaxLa with displace 7543
+relaxLa with displace 9248
+no relaxLa with mismatching regno 11 10 11
+no relaxLa with mismatching regno 13 14 13
+no relaxLa with mismatching regno 14 16 14
+no relaxLa with mismatching regno 32 17 32
+no relaxLa with mismatching regno 13 1 13
+no relaxLa with mismatching regno 10 11 10
+no relaxLa with mismatching regno 12 13 12
+relaxLa with displace -268444664
+relaxLa with displace 7567
+python3 emit_symbols.py /scratch2/agustin/radiance-kernels/llvm/llvm-muon/bin/llvm-nm kernel.radiance.elf generated/symbols.h
+/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/bin/riscv64-unknown-elf-g++ -march=rv64imafd -mabi=lp64d -mcmodel=medany -ffreestanding -fno-common -fno-builtin-printf -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/mxgemmini -O3 -DSPATTER_FORCE_FULL_READBACK=1 -c host.cpp -o host.host.o
+RV32_ELF="kernel.radiance.elf" OUT="kernel.soc.elf" \
+RV64_START="/scratch/agustin/projects/chipyard/radiance-kernels-firesim/soc/start.S" RV64_MAIN= \
+RV64_OBJS="host.host.o" RV64_CFLAGS="-march=rv64imafd -mabi=lp64d -mcmodel=medany -ffreestanding -fno-common -fno-builtin-printf -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/include -I/scratch/agustin/projects/chipyard/radiance-kernels-firesim/lib/mxgemmini" \
+RV64_LDFLAGS="-static -specs=htif_nano.specs" RV64_LIBS="" \
+CC="/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/bin/riscv64-unknown-elf-gcc" LD="/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/bin/riscv64-unknown-elf-ld" RV64_LINK="/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/bin/riscv64-unknown-elf-gcc" OBJCOPY="/scratch/agustin/projects/chipyard/.conda-env/riscv-tools/bin/riscv64-unknown-elf-objcopy" READELF="readelf" \
+/scratch/agustin/projects/chipyard/radiance-kernels-firesim/soc/fuse_rv32_into_rv64.sh
+wrote kernel.soc.elf
+verify:
+  readelf -lW kernel.soc.elf

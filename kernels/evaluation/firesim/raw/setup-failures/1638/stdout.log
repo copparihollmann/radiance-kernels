@@ -1,0 +1,18 @@
+
+=== [firesim-queue] phase=STAGING job_id=1638 ===
+hwdb snapshot /scratch/agustin/projects/chipyard/sims/firesim/deploy/built-hwdb-entries/radiance_u250 sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 -> /run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1638.yaml
+staged /scratch/agustin/projects/chipyard/spatter-clone-rtl-runs/smoke/kernel.soc.elf -> /scratch/firesim_queue/jobs/1638/deploy_overlay/workloads/radiance-spatter-smoke-agustin/kernel.soc.elf
+
+=== [firesim-queue] phase=INFRASETUP job_id=1638 ===
+hwdb verify phase=before_leading_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1638.yaml
+
+=== [firesim-queue] phase=LEADING_KILL job_id=1638 ===
+hwdb verify phase=before_infrasetup sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1638.yaml
+
+=== [firesim-queue] phase=INFRASETUP job_id=1638 ===
+
+=== [firesim-queue] phase=TEARDOWN job_id=1638 ===
+hwdb verify phase=before_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1638.yaml
+
+=== [firesim-queue] phase=TEARDOWN job_id=1638 ===
+hwdb verify phase=after_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1638.yaml

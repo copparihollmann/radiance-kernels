@@ -1,0 +1,69 @@
+
+=== [firesim-queue] phase=STAGING job_id=1639 ===
+hwdb snapshot /scratch/agustin/projects/chipyard/sims/firesim/deploy/built-hwdb-entries/radiance_u250 sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 -> /run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1639.yaml
+staged /scratch/agustin/projects/chipyard/spatter-clone-rtl-runs/smoke/kernel.soc.elf -> /scratch/agustin/projects/chipyard/sims/firesim/deploy/workloads/radiance-spatter-smoke-agustin/kernel.soc.elf
+
+=== [firesim-queue] phase=INFRASETUP job_id=1639 ===
+hwdb verify phase=before_leading_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1639.yaml
+
+=== [firesim-queue] phase=LEADING_KILL job_id=1639 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: kill
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+Fatal error.
+Traceback (most recent call last):
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 530, in <module>
+    main(args)
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 469, in main
+    t['task'](t['config'](args))
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 1135, in __init__
+    self.runtime_build_recipes = RuntimeBuildRecipes(
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 961, in __init__
+    with open(build_recipes_config_file, "r") as yaml_file:
+FileNotFoundError: [Errno 2] No such file or directory: 'config_build_recipes.yaml'
+The full log of this run is:
+/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-50-35-kill-UPDVS00OOFSQSAJU.log
+hwdb verify phase=before_infrasetup sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1639.yaml
+
+=== [firesim-queue] phase=INFRASETUP job_id=1639 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: infrasetup
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+Fatal error.
+Traceback (most recent call last):
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 530, in <module>
+    main(args)
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 469, in main
+    t['task'](t['config'](args))
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 1135, in __init__
+    self.runtime_build_recipes = RuntimeBuildRecipes(
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 961, in __init__
+    with open(build_recipes_config_file, "r") as yaml_file:
+FileNotFoundError: [Errno 2] No such file or directory: 'config_build_recipes.yaml'
+The full log of this run is:
+/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-50-40-infrasetup-GNLRO0O95YFD0973.log
+
+=== [firesim-queue] phase=TEARDOWN job_id=1639 ===
+hwdb verify phase=before_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1639.yaml
+
+=== [firesim-queue] phase=TEARDOWN job_id=1639 ===
+FireSim Manager. Docs: https://docs.fires.im
+Running: kill
+
+radiance_u250 is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+Fatal error.
+Traceback (most recent call last):
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 530, in <module>
+    main(args)
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 469, in main
+    t['task'](t['config'](args))
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 1135, in __init__
+    self.runtime_build_recipes = RuntimeBuildRecipes(
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/runtools/runtime_config.py", line 961, in __init__
+    with open(build_recipes_config_file, "r") as yaml_file:
+FileNotFoundError: [Errno 2] No such file or directory: 'config_build_recipes.yaml'
+The full log of this run is:
+/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-50-45-kill-DDJ94U89TIX7V2YE.log
+hwdb verify phase=after_trailing_kill sha256=d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4 path=/run/user/2630/firesim-queue-hwdb-d4122e42eebcbab3/job-1639.yaml

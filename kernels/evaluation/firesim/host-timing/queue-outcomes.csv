@@ -1,0 +1,8 @@
+job_id,case,queue_state,queue_phase,capture_status
+1959,stream-copy-smoke,FAILED,FAILED,queue-failed
+1960,spatter-gather-smoke,FAILED,FAILED,queue-failed
+1961,stream-copy-1048576,FAILED,FAILED,queue-failed
+1962,stream-triad-1048576,FAILED,FAILED,queue-failed
+1963,spatter-gpu-gather,FAILED,FAILED,queue-failed
+1964,spatter-gpu-scatter-ordered,FAILED,FAILED,queue-failed
+1966,spatter-gpu-scatter-parallel,FAILED,FAILED,queue-failed

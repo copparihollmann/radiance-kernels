@@ -1,0 +1,17 @@
+job_id,case,role,host_check,expected_uart,elf_path,elf_sha256,original_device_elf,expected_digest,original_count,count
+1681,amg-0,native-trace,full-digest,pass,native/amg-0/kernel.soc.elf,4ddb76147f099d734b9d5cec8a816933082e49c50c4102da6cd9fe075c46696c,,915654aaf1205028,1454647,1454647
+1682,amg-1,native-trace,full-digest,pass,native/amg-1/kernel.soc.elf,3f5cc63ccd50810fdbd2d67029d3e867d81418a9934741c97e59bc94bf45b06c,,e09f64361d4b11f1,1454647,1454647
+1683,lulesh-0,native-trace,full-digest,pass,native/lulesh-0/kernel.soc.elf,e4b93b2a628be4a05fc8e7666efc9b000751ee9513cf70a291a8c9d6f08a5c59,,ad51c6b407cfc9c7,577806,577806
+1684,lulesh-2,native-trace,full-digest,pass,native/lulesh-2/kernel.soc.elf,bed3e232d9213fbb5e739eb3674a81f5df7eeb450875b54d4be8a6273f30fe4f,,abda531c830f5feb,167805,167805
+1685,lulesh-4,native-trace,full-digest,pass,native/lulesh-4/kernel.soc.elf,f4bb42a6407469fbc8f73627e22c319572501cf7c6b1961d8c25825f3185c947,,ef51b8965450cfb1,96360,96360
+1686,lulesh-5,native-trace,full-digest,pass,native/lulesh-5/kernel.soc.elf,14fdae87b68b337b943fcf6c99a9f447cef0c493652cf71efcc0d8f2fc39e647,,9c1cfadd09b84ebf,96360,96360
+1687,lulesh-6,native-trace,full-digest,pass,native/lulesh-6/kernel.soc.elf,6e17871f34fd2e9247a3aa9f35324462748d6ce2185c4f9f6bc69839d7a72652,,00a8e1cd5f33e196,96186,96186
+1688,lulesh-7,native-trace,full-digest,pass,native/lulesh-7/kernel.soc.elf,0ce84a9831dafcc31b2da6ebf20d732fffe1fe1114b3947398c26a46d128ee27,,c7819ed7da35284b,88011,88011
+1689,lulesh-8,native-trace,full-digest,pass,native/lulesh-8/kernel.soc.elf,1031a3f2a8fdaef52032477d80de2785cbeee133a79241748a3c2f007503b1cf,,c2901c5a36a9498a,76794,76794
+1690,lulesh-9,native-trace,full-digest,pass,native/lulesh-9/kernel.soc.elf,d6fb6e21c730c937a1240661a8df3f10457dbf3772fefabe2bc4bc574d241ab2,,89d0367a570247e0,76794,76794
+1691,lulesh-10,native-trace,full-digest,pass,native/lulesh-10/kernel.soc.elf,c8b8ca29252bef0bd888f78565cf84bfff0be602af1d3b88be7cc1febee1357b,,1fe05f29cc394030,76794,76794
+1692,lulesh-11,native-trace,full-digest,pass,native/lulesh-11/kernel.soc.elf,e4acd4d519893518777ee06ded0e148ffa5e2312b68dea795a5eeaf05e06b9a5,,02e325921b7ebff5,72270,72270
+1693,nekbone-0,native-trace,full-digest,pass,native/nekbone-0/kernel.soc.elf,6bde6fb6e7380368f6063b0fddbaee3a2537b7f2f233dd2829c9131f22bf1881,,7d56b861ee5c246e,982980,982980
+1694,nekbone-1,native-trace,full-digest,pass,native/nekbone-1/kernel.soc.elf,5d4df0885ef8802abcbc202ac589d518dbca4a1449ee40a044b7658c2fd4ce5a,,994e32e911bb2ad6,982980,982980
+1695,nekbone-2,native-trace,full-digest,pass,native/nekbone-2/kernel.soc.elf,866af11bc8f45193dc1a908e8daa26e928f97a74844eb6a85c683ec07c0edd91,,eeb502a54593962a,491490,491490
+1705,lulesh-8,native-trace-retry,full-digest,pass,native/lulesh-8/kernel.soc.elf,1031a3f2a8fdaef52032477d80de2785cbeee133a79241748a3c2f007503b1cf,,c2901c5a36a9498a,76794,76794

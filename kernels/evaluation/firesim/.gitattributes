@@ -1,0 +1,3 @@
+# Keep captured simulator output byte-for-byte; the artifact manifest hashes it.
+*.csv whitespace=cr-at-eol
+raw/** -whitespace

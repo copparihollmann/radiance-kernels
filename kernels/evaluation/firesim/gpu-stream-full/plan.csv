@@ -1,0 +1,4 @@
+job_id,case,role,host_check,expected_uart,elf_path,elf_sha256,original_device_elf,expected_digest,original_count,count
+1702,rebuild-gpu-stream-1,full-readback,full-digest,pass,diagnostic/gpu-stream-full/case-1/kernel-exact-device.soc.elf,8025cf03ea36efd5f86f328fc1b3b6e07015d76801c762356a50ec3e6765cd61,elf-snapshot/spatter-current/rebuild-gpu-stream-1/kernel.soc.elf,6395beb9b9c4eb25,1024,1024
+1703,rebuild-gpu-stream-2,full-readback,full-digest,pass,diagnostic/gpu-stream-full/case-2/kernel-exact-device.soc.elf,c0f23d4135decc702988226957648612ac075f90dada57f7b4b01895f79dc037,elf-snapshot/spatter-current/rebuild-gpu-stream-2/kernel.soc.elf,5aa95b60e54bf326,1024,1024
+1704,rebuild-gpu-stream-3,full-readback,full-digest,pass,diagnostic/gpu-stream-full/case-3/kernel-exact-device.soc.elf,5e4e40c0afcfbd3cd8978ec552e7c8138fcd33342a95c6d68965df291e9fbc9e,elf-snapshot/spatter-current/rebuild-gpu-stream-3/kernel.soc.elf,6395beb9b9c4eb25,1024,1024

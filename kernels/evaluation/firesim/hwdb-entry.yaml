@@ -1,0 +1,5 @@
+radiance_u250:
+    bitstream_tar: file:///scratch/nicorakela/firesim_radiance-slim.tar.gz
+    deploy_quintuplet_override: null
+    deploy_makefrag_override: /scratch/nicorakela/chipyard/generators/firechip/chip/src/main/makefrag/firesim
+    custom_runtime_config: null

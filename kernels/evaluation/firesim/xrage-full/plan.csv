@@ -1,0 +1,2 @@
+job_id,case,role,host_check,expected_uart,elf_path,elf_sha256,original_device_elf,expected_digest,original_count,count
+1696,xrage5-gather,full-readback,full-digest,pass,diagnostic/xrage5-full/kernel-exact-device.soc.elf,1860dd20516fc69556b4b63642f41e164f1b22f34a2f7814300172f95dba6d5d,elf-snapshot/spatter-current/model/xrage5/kernel.soc.elf,2260887d7f6bc955,1,1

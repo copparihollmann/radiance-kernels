@@ -1,0 +1,7 @@
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110002000..110002508] to [10002000..10002508]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110003000..116d86888] to [10003000..16d86888]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [116d87000..116d87090] to [16d87000..16d87090]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110000000..110000068] to [10000000..10000068]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110001000..11000104c] to [10001000..1000104c]
+simulation finished after 1461440 cycles
+SPATTER_CHECK digest=215de6e81154b9c5 expected=215de6e81154b9c5 guards_intact=true nonzero_words=2383756 output_elements=2051101

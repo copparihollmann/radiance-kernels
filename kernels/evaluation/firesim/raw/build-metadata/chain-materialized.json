@@ -1,0 +1,76 @@
+{
+  "suite": [
+    "/scratch/agustin/projects/chipyard/radiance-kernels-main-full/kernels/spatter/inputs/standard-suite/basic-tests/gpu-stream.json",
+    "/scratch/agustin/projects/chipyard/radiance-kernels-main-full/kernels/spatter/inputs/standard-suite/basic-tests/gpu-stream.json"
+  ],
+  "suite_sha256": "ca0c9c2df4785dcf3228ae4e09c11194bae23a98f350026ce2815c9b4cc0376a",
+  "case": [
+    0,
+    1
+  ],
+  "kind": "gather-scatter-chain",
+  "pattern_length": 256,
+  "count": 1024,
+  "source_elements": 262144,
+  "intermediate_elements": 256,
+  "output_elements": 262144,
+  "logical_payload_bytes": 8388608,
+  "expected_digest": "7e49d79ec062db25",
+  "expected_sample_digest": "92b3a7bf0f811026",
+  "readback_samples": 64,
+  "destination_overlap": false,
+  "collision_policy": "parallel",
+  "address_plan": {
+    "stages": [
+      {
+        "source_array": "sparse",
+        "destination_array": "dense",
+        "read": {
+          "kind": "pattern",
+          "table": "pattern",
+          "inner": null,
+          "delta": 256,
+          "wrap": 0
+        },
+        "write": {
+          "kind": "dense",
+          "table": null,
+          "inner": null,
+          "delta": 0,
+          "wrap": 0
+        },
+        "schedule": "owner"
+      },
+      {
+        "source_array": "dense",
+        "destination_array": "sparse",
+        "read": {
+          "kind": "dense",
+          "table": null,
+          "inner": null,
+          "delta": 0,
+          "wrap": 0
+        },
+        "write": {
+          "kind": "pattern",
+          "table": "pattern",
+          "inner": null,
+          "delta": 256,
+          "wrap": 0
+        },
+        "schedule": "task"
+      }
+    ],
+    "intermediate": "spatter_dense",
+    "barrier": true
+  },
+  "kernel_source_sha256": "524c6dcde7fbac363e1a411c79ba99b66065d790d002ef3021cc3d8b32a6a788",
+  "correctness": "sample-checked",
+  "status": "passed",
+  "simulator": "Verilator 5.022 (8 threads)",
+  "simulator_path": "/scratch/agustin/projects/chipyard/spatter-verilator/sims/verilator/simulator-mt-chipyard.harness-RadianceSingleClusterConfig",
+  "elf_sha256": "d30ab551e4e519dfc007029ea7b6c46dd8285245aa612267dbe652de0eea8419",
+  "cyclotron_trace_requested": false,
+  "gpu_cycles": 2294139,
+  "simulation_wall_seconds": 4082.995
+}

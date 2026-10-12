@@ -1,0 +1,52 @@
+{
+  "suite": "/scratch/agustin/projects/spatter-data/spatter.json",
+  "suite_sha256": "7325525ada0dacb6e1206717d242f6721b6d8da77718506fd909444c388f7733",
+  "case": 4,
+  "kind": "gather",
+  "pattern_length": 8368968,
+  "address_plan": {
+    "source_array": "sparse",
+    "destination_array": "dense",
+    "read": {
+      "kind": "pattern",
+      "table": "pattern",
+      "inner": null,
+      "delta": 8,
+      "wrap": 0
+    },
+    "write": {
+      "kind": "dense",
+      "table": null,
+      "inner": null,
+      "delta": 0,
+      "wrap": 0
+    },
+    "schedule": "owner"
+  },
+  "count": 1,
+  "wrap": 1,
+  "source_tag": 1,
+  "requested_local_work_size": null,
+  "muon_warps_per_core": 4,
+  "source_elements": 1120525,
+  "output_elements": 8368968,
+  "logical_payload_bytes": 133903488,
+  "expected_digest": "2260887d7f6bc955",
+  "expected_sample_digest": "e71bbd575204575c",
+  "readback_samples": 64,
+  "exploratory_probe_index": null,
+  "destination_overlap": false,
+  "collision_policy": "parallel",
+  "status": "built",
+  "original_count": 1,
+  "count_overridden": false,
+  "spatter_revision": null,
+  "kernel_revision": "85469e24b6efd7b1459e6ac252cdc05acd9b35aa",
+  "kernel_source_sha256": "1e71c11472c8ac6c41a415208bb8e2b3344a21ce1c55510ba17764fbd9b1d5cd",
+  "radiance_revision": null,
+  "cyclotron_revision": null,
+  "simulator": null,
+  "cyclotron_trace_requested": false,
+  "correctness": "digest-checked",
+  "host_full_readback": true
+}

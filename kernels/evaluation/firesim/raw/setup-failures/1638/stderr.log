@@ -1,0 +1,25 @@
+Traceback (most recent call last):
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 501, in <module>
+    fileHandler = logging.FileHandler(full_log_filename)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/logging/__init__.py", line 1169, in __init__
+    StreamHandler.__init__(self, self._open())
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/logging/__init__.py", line 1201, in _open
+    return open_func(self.baseFilename, self.mode,
+PermissionError: [Errno 13] Permission denied: '/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-49-45-kill-XHH52GE0O36PTKB0.log'
+Traceback (most recent call last):
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 501, in <module>
+    fileHandler = logging.FileHandler(full_log_filename)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/logging/__init__.py", line 1169, in __init__
+    StreamHandler.__init__(self, self._open())
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/logging/__init__.py", line 1201, in _open
+    return open_func(self.baseFilename, self.mode,
+PermissionError: [Errno 13] Permission denied: '/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-49-50-infrasetup-56SDFVNYUPR38JTB.log'
+FireSim lifecycle failed: infrasetup rc=1
+Traceback (most recent call last):
+  File "/scratch/agustin/projects/chipyard/sims/firesim/deploy/firesim", line 501, in <module>
+    fileHandler = logging.FileHandler(full_log_filename)
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/logging/__init__.py", line 1169, in __init__
+    StreamHandler.__init__(self, self._open())
+  File "/scratch/agustin/projects/chipyard/.conda-env/lib/python3.10/logging/__init__.py", line 1201, in _open
+    return open_func(self.baseFilename, self.mode,
+PermissionError: [Errno 13] Permission denied: '/scratch/agustin/projects/chipyard/sims/firesim/deploy/logs/2026-10-04--22-49-55-kill-VE8G2QWW1N9F9OI8.log'

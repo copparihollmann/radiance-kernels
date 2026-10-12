@@ -1,0 +1,14 @@
+{
+  "job_id": 1653,
+  "user": "agustin",
+  "priority": 0,
+  "project": "radiance-hpc",
+  "chipyard": "/scratch/nicorakela/chipyard",
+  "workload": "agustin-radiance-gpu-stream-multiscatter",
+  "bootbinary": "kernel.soc.elf",
+  "stage_from": "/scratch/agustin/projects/chipyard/firesim-hpc-inputs/elf-snapshot/spatter-current/rebuild-gpu-stream-3/kernel.soc.elf",
+  "timeout": 900,
+  "hw_config": "radiance_u250",
+  "hwdb_config_artifact": "/scratch/nicorakela/chipyard/sims/firesim/deploy/built-hwdb-entries/radiance_u250",
+  "hwdb_config_artifact_sha256": "d4015580a0f7d58c0cd2606832d9579981feef98f4c5c1a29d25f7ba4f3c6bc4"
+}

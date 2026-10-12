@@ -1,0 +1,52 @@
+{
+  "suite": "/scratch/agustin/projects/chipyard/radiance-kernels-firesim/kernels/spatter/inputs/standard-suite/app-traces/lulesh.json",
+  "suite_sha256": "9073035ecf77e7fde65262f782286207e76cca24312b2e01688b038901d021ee",
+  "case": 9,
+  "kind": "gather",
+  "pattern_length": 16,
+  "address_plan": {
+    "source_array": "sparse",
+    "destination_array": "dense",
+    "read": {
+      "kind": "pattern",
+      "table": "pattern",
+      "inner": null,
+      "delta": 41,
+      "wrap": 0
+    },
+    "write": {
+      "kind": "dense",
+      "table": null,
+      "inner": null,
+      "delta": 0,
+      "wrap": 0
+    },
+    "schedule": "owner"
+  },
+  "count": 76794,
+  "wrap": 1,
+  "source_tag": 1,
+  "requested_local_work_size": null,
+  "muon_warps_per_core": 4,
+  "source_elements": 3148529,
+  "output_elements": 16,
+  "logical_payload_bytes": 19659264,
+  "expected_digest": "89d0367a570247e0",
+  "expected_sample_digest": null,
+  "readback_samples": 0,
+  "exploratory_probe_index": null,
+  "destination_overlap": false,
+  "collision_policy": "parallel",
+  "status": "built",
+  "original_count": 76794,
+  "count_overridden": false,
+  "spatter_revision": "85469e24b6efd7b1459e6ac252cdc05acd9b35aa",
+  "kernel_revision": "85469e24b6efd7b1459e6ac252cdc05acd9b35aa",
+  "kernel_source_sha256": "1e71c11472c8ac6c41a415208bb8e2b3344a21ce1c55510ba17764fbd9b1d5cd",
+  "radiance_revision": null,
+  "cyclotron_revision": null,
+  "simulator": null,
+  "cyclotron_trace_requested": false,
+  "correctness": "digest-checked",
+  "host_full_readback": true
+}

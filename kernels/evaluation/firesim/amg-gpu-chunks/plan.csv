@@ -1,0 +1,3 @@
+job_id,case,role,host_check,expected_uart,elf_path,elf_sha256,original_device_elf,expected_digest,original_count,count
+1699,first,original-count-chunk,full-digest,pass,amg-gpu-native-chunks/first/kernel.soc.elf,0fc5cd511871478c627e9b519a2d9497856d7ca4ccfb7dc7013bde7eaf5d2e2c,,bcdd15879381d51d,14705882,7352941
+1700,last,original-count-chunk,full-digest,pass,amg-gpu-native-chunks/last/kernel.soc.elf,dbd2cef9e97975de00b19c8aee6330ae6a5dbaa28fa376798b81000fa1959354,,0e8f823875db84ff,14705882,7352941
