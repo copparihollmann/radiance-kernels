@@ -1,0 +1,24 @@
+{
+  "model": "smolvla_base",
+  "scope": "checkpoint_action_time_embedding_only",
+  "check": "numpy_vs_pytorch_pinned_source_formula",
+  "passed": true,
+  "checkpoint_revision": "c83c3163b8ca9b7e67c509fffd9121e66cb96205",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "torch_version": "2.5.1+cpu",
+  "tolerance": {
+    "rtol": 0.0001,
+    "atol": 2e-05
+  },
+  "max_abs_error_by_stage": {
+    "action_projection": 1.1920928955078125e-07,
+    "time_embedding": 0.0,
+    "action_time_concat": 1.1920928955078125e-07,
+    "mlp_in": 9.5367431640625e-07,
+    "activation": 1.0728836059570312e-06,
+    "output": 9.5367431640625e-07
+  },
+  "pytorch_output_sha256": "1615ff5b0ad75cfb63fa945c85dd2b21530d02a97cc495bcc9f6f2f73b835a9e",
+  "full_policy_executed": false,
+  "device_execution": false
+}

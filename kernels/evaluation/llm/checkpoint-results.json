@@ -1,0 +1,54 @@
+{
+  "method": "verify_checkpoint.py --full; checkpoint-bound NumPy graph compared with Transformers full causal pass",
+  "software": {
+    "numpy": "2.4.6",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.9.0",
+    "safetensors": "0.7.0"
+  },
+  "checks": [
+    {
+      "model": "tinyllama",
+      "layers_checked": 22,
+      "prefill_tokens": 3,
+      "cached_decode_tokens": 2,
+      "comparison": "last_logits_vs_transformers_full_causal_pass",
+      "maximum_absolute_error": 1.8596649169921875e-05,
+      "mean_absolute_error": 3.1757297165313503e-06,
+      "embedding_maximum_absolute_error": 0.0,
+      "prefill_layer_hidden_maximum_absolute_error": 0.00045430660247802734,
+      "rtol": 0.001,
+      "atol": 0.001,
+      "passed": true,
+      "device_execution": false,
+      "checkpoint_weights": true,
+      "bound_tensors": 201,
+      "missing_tensors": 0,
+      "source": "https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0/resolve/fe8a4ea1ffedaf415f4da2f062534de366a451e6/config.json",
+      "config_sha256": "486bedda3a6988332e60d9638a09ca4b260d34ebcf1b19e22cf3b140b63d8fe9",
+      "checkpoint_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933"
+    },
+    {
+      "model": "deepseek_r1_distill_qwen_1_5b",
+      "layers_checked": 28,
+      "prefill_tokens": 3,
+      "cached_decode_tokens": 2,
+      "comparison": "last_logits_vs_transformers_full_causal_pass",
+      "maximum_absolute_error": 3.6716461181640625e-05,
+      "mean_absolute_error": 4.50930656370474e-06,
+      "embedding_maximum_absolute_error": 0.0,
+      "prefill_layer_hidden_maximum_absolute_error": 8.249282836914062e-05,
+      "rtol": 0.001,
+      "atol": 0.001,
+      "passed": true,
+      "device_execution": false,
+      "checkpoint_weights": true,
+      "bound_tensors": 339,
+      "missing_tensors": 0,
+      "source": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B/resolve/ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562/config.json",
+      "config_sha256": "37bd455e9679d2959536270fed49d25cc7c290a64f6e52abb97c71345a9cee41",
+      "checkpoint_sha256": "58858233513d76b8703e72eed6ce16807b523328188e13329257fb9594462945"
+    }
+  ],
+  "device_execution": false
+}
