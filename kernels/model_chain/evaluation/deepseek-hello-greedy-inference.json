@@ -1,0 +1,19 @@
+{
+  "model": "deepseek_r1_distill_qwen_1_5b",
+  "prompt": "Hello",
+  "input_token_ids": [
+    9707
+  ],
+  "generated_token_ids": [
+    22573,
+    4396
+  ],
+  "continuation_text": " ensuring correct",
+  "full_text": "Hello ensuring correct",
+  "checkpoint_weight_format": "mixed_fp16",
+  "native_status": "passed",
+  "native_result": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/infer-deep-hello/deepseek_r1_distill_qwen_1_5b/native-check/native-result.json",
+  "radiance_elf": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/infer-deep-hello/deepseek_r1_distill_qwen_1_5b/kernel.radiance.elf",
+  "device_execution": false,
+  "performance_measurement": false
+}

@@ -1,0 +1,20 @@
+{
+  "model": "gemma_2_2b_it",
+  "prompt": null,
+  "input_token_ids": [
+    2,
+    100
+  ],
+  "generated_token_ids": [
+    109,
+    235287
+  ],
+  "continuation_text": null,
+  "full_text": null,
+  "checkpoint_weight_format": "int8_fp16_tied",
+  "native_status": "passed",
+  "native_result": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/infer-gemma-token-ids/gemma_2_2b_it/native-check/native-result.json",
+  "radiance_elf": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/infer-gemma-token-ids/gemma_2_2b_it/kernel.radiance.elf",
+  "device_execution": false,
+  "performance_measurement": false
+}

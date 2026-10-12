@@ -1,0 +1,110 @@
+[
+  {
+    "model": "tinyllama",
+    "scope": "reduced_synthetic_decoder",
+    "layers": 1,
+    "prefill_tokens": 3,
+    "decode_steps": 1,
+    "stage_count": 40,
+    "checked_float_stages": 40,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "cycles_functional": 128536,
+    "tohost": 0,
+    "process_exit_code": 0,
+    "device_elf_sha256": "7e05be0e0e5840cf66db84473151310fe4bd9647d35667a8d76c76a9632973ff",
+    "generated_source_sha256": "9161a0f7e40ace2e428d11ca6b58ba5eeeaf2cdf7a63e74f4efa4b0698dab036",
+    "portable_ops_sha256": "2bd82fcb2040b668124af27f827a32af0f5ce490f13c41037dba19e8ceacac93",
+    "numpy_reference_sha256": "9b660d6639e8e657921363770576296fc843e1e82b3a8e2c6b099db8d8bfe527",
+    "model_specs_sha256": "c59a6673058584409e588e226b2780722216a96e55969ba5c7097f813c82a13a",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "70ef96c088c01caf3093bdff649fdb1926ea60ee68c4fcbd98af5edbf6dbf508",
+    "log_sha256": "c554b81e5b9e4fc517259c47ed9697ef37f62002296ee10c7ff932131b511ca9",
+    "checkpoint_weights": false,
+    "original_model_dimensions": false,
+    "upstream_execution_equivalent": false,
+    "native_check_tolerance": {
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  },
+  {
+    "model": "deepseek_r1_distill_qwen_1_5b",
+    "scope": "reduced_synthetic_decoder",
+    "layers": 1,
+    "prefill_tokens": 3,
+    "decode_steps": 1,
+    "stage_count": 46,
+    "checked_float_stages": 46,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "cycles_functional": 130278,
+    "tohost": 0,
+    "process_exit_code": 0,
+    "device_elf_sha256": "2624e12b11cbd9c7e5a8c450ca113d661d59d0edc8a9c5e0edc4f2bd72d4d229",
+    "generated_source_sha256": "638bcf2cec2faab5334f1b5beae05a86dda0ceae6f46bb8e462cee04a073dbcb",
+    "portable_ops_sha256": "2bd82fcb2040b668124af27f827a32af0f5ce490f13c41037dba19e8ceacac93",
+    "numpy_reference_sha256": "9b660d6639e8e657921363770576296fc843e1e82b3a8e2c6b099db8d8bfe527",
+    "model_specs_sha256": "c59a6673058584409e588e226b2780722216a96e55969ba5c7097f813c82a13a",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "70ef96c088c01caf3093bdff649fdb1926ea60ee68c4fcbd98af5edbf6dbf508",
+    "log_sha256": "3f1c09a615630551897c16abcf47c1b78e3d3073530e6339058e5f9772d15fdf",
+    "checkpoint_weights": false,
+    "original_model_dimensions": false,
+    "upstream_execution_equivalent": false,
+    "native_check_tolerance": {
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  },
+  {
+    "model": "gemma_2_2b_it",
+    "scope": "reduced_synthetic_decoder",
+    "layers": 1,
+    "prefill_tokens": 3,
+    "decode_steps": 1,
+    "stage_count": 46,
+    "checked_float_stages": 46,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "cycles_functional": 123153,
+    "tohost": 0,
+    "process_exit_code": 0,
+    "device_elf_sha256": "42836255f88ec8303a73071d33a3443d9ac537634e72976fef28025e80a2f3aa",
+    "generated_source_sha256": "d8cd9fd30e6e804328f1c966e7867ca2496d37c4fc0c1921292de4b9f738bbc6",
+    "portable_ops_sha256": "2bd82fcb2040b668124af27f827a32af0f5ce490f13c41037dba19e8ceacac93",
+    "numpy_reference_sha256": "9b660d6639e8e657921363770576296fc843e1e82b3a8e2c6b099db8d8bfe527",
+    "model_specs_sha256": "c59a6673058584409e588e226b2780722216a96e55969ba5c7097f813c82a13a",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "70ef96c088c01caf3093bdff649fdb1926ea60ee68c4fcbd98af5edbf6dbf508",
+    "log_sha256": "726d543f86c7cd858057394414eeeae57bbaa662915742b6e540e484a370cfbc",
+    "checkpoint_weights": false,
+    "original_model_dimensions": false,
+    "upstream_execution_equivalent": false,
+    "native_check_tolerance": {
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "model": "tinyllama",
+    "scope": "reduced_synthetic_decoder",
+    "layers": 2,
+    "prefill_tokens": 3,
+    "decode_steps": 1,
+    "stage_count": 74,
+    "checked_float_stages": 74,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "cycles_functional": 236765,
+    "tohost": 0,
+    "process_exit_code": 0,
+    "device_elf_sha256": "c3697ec6898e54748b2dc9766a5681ccb04d2907fa35db5f73df77dbd7fc9ebd",
+    "generated_source_sha256": "f810a5f3da11dff904fbaf8bc3f58f7198ca33f6afa2e2728c1176ec1a4ff312",
+    "portable_ops_sha256": "2bd82fcb2040b668124af27f827a32af0f5ce490f13c41037dba19e8ceacac93",
+    "numpy_reference_sha256": "9b660d6639e8e657921363770576296fc843e1e82b3a8e2c6b099db8d8bfe527",
+    "model_specs_sha256": "c59a6673058584409e588e226b2780722216a96e55969ba5c7097f813c82a13a",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "70ef96c088c01caf3093bdff649fdb1926ea60ee68c4fcbd98af5edbf6dbf508",
+    "log_sha256": "bbbab4947eee74e0008e49b553f91d6f1e730871bf13d55374ea276f46e16206",
+    "checkpoint_weights": false,
+    "original_model_dimensions": false,
+    "upstream_execution_equivalent": false,
+    "native_check_tolerance": {
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  }
+]

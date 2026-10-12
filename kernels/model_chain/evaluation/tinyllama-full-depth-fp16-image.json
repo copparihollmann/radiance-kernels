@@ -1,0 +1,3820 @@
+{
+  "model": "tinyllama",
+  "family": "llama",
+  "layers": 22,
+  "pinned_model_layers": 22,
+  "graph_stages": 754,
+  "parameter_uses": 402,
+  "distinct_parameters": 201,
+  "dtype": "mixed_fp16",
+  "linear_layout": "row_major_in_out",
+  "alignment_bytes": 64,
+  "gpu_base_address": 536870912,
+  "gpu_end_address_exclusive": 2765185024,
+  "image_size_bytes": 2200281088,
+  "fits_32_bit_address_space": true,
+  "warp_stack_reserved_range": [
+    2128609280,
+    2130706432
+  ],
+  "stack_overlap_parameters": [],
+  "segments": [
+    {
+      "index": 0,
+      "image_file": "weights-0.bin",
+      "gpu_base_address": 536870912,
+      "image_size_bytes": 1582579712,
+      "image_sha256": "90fae49e46d7b4b24daf00eaf43a5e13ed1ba8bf569dbca3d0578efeaecf77b9"
+    },
+    {
+      "index": 1,
+      "image_file": "weights-1.bin",
+      "gpu_base_address": 2147483648,
+      "image_size_bytes": 617701376,
+      "image_sha256": "9c10fe16647e2d80e4cde8c46ac341648d2be3220acc1852eb3e1ddea8c948d4"
+    }
+  ],
+  "parameters": [
+    {
+      "logical_name": "embed_tokens",
+      "operation": "embedding",
+      "shape": [
+        32000,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 131072000,
+      "segment_index": 0,
+      "offset_bytes": 0,
+      "gpu_address": 536870912,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 244044,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.embed_tokens.weight",
+      "packed_sha256": "9a111cb9b6418f368b8905ab91eac077732d6ce2a54516acef6b9d060b921e23"
+    },
+    {
+      "logical_name": "layers.0.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 131072000,
+      "gpu_address": 667942912,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.0.input_layernorm.weight",
+      "packed_sha256": "5a1b3fea19a3c45363b83168115ecdfdfef2f8cad5bcf5b48b255c6a12bcf561"
+    },
+    {
+      "logical_name": "layers.0.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 131080192,
+      "gpu_address": 667951104,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 4234,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.0.self_attn.q_proj.weight",
+      "packed_sha256": "96c152387ec90dad6893bd8443d984a9ae9ed0f6c41bc138e3f87528323649b1"
+    },
+    {
+      "logical_name": "layers.0.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 139468800,
+      "gpu_address": 676339712,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 346,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.0.self_attn.k_proj.weight",
+      "packed_sha256": "68b61e1ba20b8b59418be6f64b43154c7e8c2c3600b239382b146066b6c0bd83"
+    },
+    {
+      "logical_name": "layers.0.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 140517376,
+      "gpu_address": 677388288,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 299,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.0.self_attn.v_proj.weight",
+      "packed_sha256": "bbcbf7d51932d975354cdb709ae46baae526e0d8d769686e00528c846cc33f36"
+    },
+    {
+      "logical_name": "layers.0.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 141565952,
+      "gpu_address": 678436864,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 3205,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.0.self_attn.o_proj.weight",
+      "packed_sha256": "05ec290438c4fcde94713d9daa75fa0a446a14f6a14457c594fa34975030a398"
+    },
+    {
+      "logical_name": "layers.0.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 149954560,
+      "gpu_address": 686825472,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.0.post_attention_layernorm.weight",
+      "packed_sha256": "303d39ae5c51c55db5ef435b8d101814c730499b19e7dc69d1b5439d5cbd93e6"
+    },
+    {
+      "logical_name": "layers.0.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 149962752,
+      "gpu_address": 686833664,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2942,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.0.mlp.gate_proj.weight",
+      "packed_sha256": "5acd681a0e9826aa353a01631dbf1a014a0a4d5b4a1d8e69390601a021a0c50b"
+    },
+    {
+      "logical_name": "layers.0.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 173031424,
+      "gpu_address": 709902336,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2834,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.0.mlp.up_proj.weight",
+      "packed_sha256": "df2ab6754cc07c9992358e3c056fe88b9be64579084de5a3452d1d9659624fec"
+    },
+    {
+      "logical_name": "layers.0.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 196100096,
+      "gpu_address": 732971008,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2936,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.0.mlp.down_proj.weight",
+      "packed_sha256": "283cae138bd77f35a7b8ae7a5ca8fde137cd90ccccc21f5f96690e77f80fa6c5"
+    },
+    {
+      "logical_name": "layers.1.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 219168768,
+      "gpu_address": 756039680,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.1.input_layernorm.weight",
+      "packed_sha256": "708e59a8a88c823bc934f1ad5d6237343585d55087d9c6d26314427d7482be1a"
+    },
+    {
+      "logical_name": "layers.1.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 219176960,
+      "gpu_address": 756047872,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1621,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.1.self_attn.q_proj.weight",
+      "packed_sha256": "80fb51c1cf94636f776a161755be54988add95a12dfb19c8af5f7a166cb58daa"
+    },
+    {
+      "logical_name": "layers.1.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 227565568,
+      "gpu_address": 764436480,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 121,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.1.self_attn.k_proj.weight",
+      "packed_sha256": "e2cb2fd86e8cfeb3a248053242fd1c40216278685518c213671441f6fcbf859d"
+    },
+    {
+      "logical_name": "layers.1.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 228614144,
+      "gpu_address": 765485056,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 204,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.1.self_attn.v_proj.weight",
+      "packed_sha256": "10bf6ca095e2c532821b977ea0e54e59655f824b5ddfd5a17a4c93435ac610a1"
+    },
+    {
+      "logical_name": "layers.1.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 229662720,
+      "gpu_address": 766533632,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1309,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.1.self_attn.o_proj.weight",
+      "packed_sha256": "97a84059ba6b4e18ea5401690d79ef3335684e86c764e40882d4d4ab6d474935"
+    },
+    {
+      "logical_name": "layers.1.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 238051328,
+      "gpu_address": 774922240,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.1.post_attention_layernorm.weight",
+      "packed_sha256": "cda623680d5992596a931a41ebdd46f62d10afc48cb32ce01c3fc8f586dd7f82"
+    },
+    {
+      "logical_name": "layers.1.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 238059520,
+      "gpu_address": 774930432,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2710,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.1.mlp.gate_proj.weight",
+      "packed_sha256": "70346a5dcf14e2ab00b5c0fe8dfd4447f1f5ed1618c16c27202e3d5f2831c7bd"
+    },
+    {
+      "logical_name": "layers.1.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 261128192,
+      "gpu_address": 797999104,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2721,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.1.mlp.up_proj.weight",
+      "packed_sha256": "d412f4c420295876d1e7fa7d38ff0ccec418d6eb15e9baa1b120d0aa3f749f40"
+    },
+    {
+      "logical_name": "layers.1.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 284196864,
+      "gpu_address": 821067776,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2738,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.1.mlp.down_proj.weight",
+      "packed_sha256": "339e16c391e1470c198c727751dc91adbb235376163429048e9bac64ca10f3fb"
+    },
+    {
+      "logical_name": "layers.2.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 307265536,
+      "gpu_address": 844136448,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.2.input_layernorm.weight",
+      "packed_sha256": "92cd23cfc9982add9d507408a1ba7a6fa5ceefc5c71255bf52680403fc24f7e3"
+    },
+    {
+      "logical_name": "layers.2.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 307273728,
+      "gpu_address": 844144640,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 613,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.2.self_attn.q_proj.weight",
+      "packed_sha256": "b539d6e6a135fd6773f29874d7efff8776766a6c9c34f85f1a837ff402cd711a"
+    },
+    {
+      "logical_name": "layers.2.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 315662336,
+      "gpu_address": 852533248,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 57,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.2.self_attn.k_proj.weight",
+      "packed_sha256": "7337a58d7287aa44d69e0824be27bcaa2484b46804c33af61f7195f7e01fe60a"
+    },
+    {
+      "logical_name": "layers.2.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 316710912,
+      "gpu_address": 853581824,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 246,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.2.self_attn.v_proj.weight",
+      "packed_sha256": "dd83c1bdf0950ed0fa5fb9ec546e5608067a28c0627ff0892b82c37dffec994d"
+    },
+    {
+      "logical_name": "layers.2.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 317759488,
+      "gpu_address": 854630400,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1339,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.2.self_attn.o_proj.weight",
+      "packed_sha256": "b357dfaed2e5dcf35815474e7c983017db5f26466b9f23867e0f1f6c230fa060"
+    },
+    {
+      "logical_name": "layers.2.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 326148096,
+      "gpu_address": 863019008,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.2.post_attention_layernorm.weight",
+      "packed_sha256": "f339fec8a8cfe83ef6bc68bbdaab0219f3a756ccb0921dab243f518c961c711e"
+    },
+    {
+      "logical_name": "layers.2.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 326156288,
+      "gpu_address": 863027200,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2597,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.2.mlp.gate_proj.weight",
+      "packed_sha256": "b794be0739ad1e1d36f49c4f457c414e024ff8d0db6f8851ce1f9094e407f83b"
+    },
+    {
+      "logical_name": "layers.2.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 349224960,
+      "gpu_address": 886095872,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2669,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.2.mlp.up_proj.weight",
+      "packed_sha256": "ce4b5c08b62830cc6fd333bd9225297fcb05e6ae86da09a20b09f2e70e1a4dc4"
+    },
+    {
+      "logical_name": "layers.2.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 372293632,
+      "gpu_address": 909164544,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2716,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.2.mlp.down_proj.weight",
+      "packed_sha256": "ed700a7a00a98262950046ff233dc11e7d350e4e39817d5d77df54bf407d6607"
+    },
+    {
+      "logical_name": "layers.3.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 395362304,
+      "gpu_address": 932233216,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.3.input_layernorm.weight",
+      "packed_sha256": "16a4d443eb1ac8a7d666ba1758b58625601615a3cf03d93c2520693ed61c4dd3"
+    },
+    {
+      "logical_name": "layers.3.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 395370496,
+      "gpu_address": 932241408,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 758,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.3.self_attn.q_proj.weight",
+      "packed_sha256": "b37caa212bad27599c4b2564c286a5cecc5bd1b87f4e022963fee23e089912e1"
+    },
+    {
+      "logical_name": "layers.3.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 403759104,
+      "gpu_address": 940630016,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 48,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.3.self_attn.k_proj.weight",
+      "packed_sha256": "d2cefb64aa164fa6a20606d58b0d63c0be98c7951b20ec607cd310249c85e8f1"
+    },
+    {
+      "logical_name": "layers.3.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 404807680,
+      "gpu_address": 941678592,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 215,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.3.self_attn.v_proj.weight",
+      "packed_sha256": "47ea1475df8ef63b389725f26f08d4bf2d4a4565a506da520d8101a25a3725d5"
+    },
+    {
+      "logical_name": "layers.3.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 405856256,
+      "gpu_address": 942727168,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1230,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.3.self_attn.o_proj.weight",
+      "packed_sha256": "a562d078fe3eeb856744a55680a055f6f827e5347052608e518a04f415aad5a0"
+    },
+    {
+      "logical_name": "layers.3.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 414244864,
+      "gpu_address": 951115776,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.3.post_attention_layernorm.weight",
+      "packed_sha256": "52446759f6caaa3c13466f06d97b62931f8026ca3f422f24e90f1e3b4618351b"
+    },
+    {
+      "logical_name": "layers.3.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 414253056,
+      "gpu_address": 951123968,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2589,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.3.mlp.gate_proj.weight",
+      "packed_sha256": "4f16a5a68420da28a3de781c93aa32346b2113155cfb171b4b065b0799e91cc1"
+    },
+    {
+      "logical_name": "layers.3.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 437321728,
+      "gpu_address": 974192640,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2714,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.3.mlp.up_proj.weight",
+      "packed_sha256": "bed4ecff32d1b404f7e963681dba36cac98b539f9e553488e46d8326795af6be"
+    },
+    {
+      "logical_name": "layers.3.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 460390400,
+      "gpu_address": 997261312,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2725,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.3.mlp.down_proj.weight",
+      "packed_sha256": "f4ccbc30ad6f3c40dd5e199210c2cd5190ccb162f7a5755f365f85a0b68b0cda"
+    },
+    {
+      "logical_name": "layers.4.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 483459072,
+      "gpu_address": 1020329984,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.4.input_layernorm.weight",
+      "packed_sha256": "06fe5c6430b4246df24329da6929ff81a2a7e265dca71b672e46748706381d7f"
+    },
+    {
+      "logical_name": "layers.4.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 483467264,
+      "gpu_address": 1020338176,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 804,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.4.self_attn.q_proj.weight",
+      "packed_sha256": "6da6d1590a10d689a383e1398e5e007afcfe76862567b857f3f56f055648586c"
+    },
+    {
+      "logical_name": "layers.4.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 491855872,
+      "gpu_address": 1028726784,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 65,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.4.self_attn.k_proj.weight",
+      "packed_sha256": "0c32533613a0fe0d2633fc7ebc1735e8f91ea0bfbeee250081357195b0981413"
+    },
+    {
+      "logical_name": "layers.4.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 492904448,
+      "gpu_address": 1029775360,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 235,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.4.self_attn.v_proj.weight",
+      "packed_sha256": "3575a3e60c98fa68ac9428fee8de161663cc85c24ca2872e3d4f84190001ee92"
+    },
+    {
+      "logical_name": "layers.4.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 493953024,
+      "gpu_address": 1030823936,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1272,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.4.self_attn.o_proj.weight",
+      "packed_sha256": "52fa38b132d109f1d00657d5f2c6552ed8e04eafa2f6da5e89762bf8a2be17cc"
+    },
+    {
+      "logical_name": "layers.4.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 502341632,
+      "gpu_address": 1039212544,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.4.post_attention_layernorm.weight",
+      "packed_sha256": "a4dcc6cd1f36953832fd5797fe1190a698ef69b3501d2cfb3aa28fa109b4c368"
+    },
+    {
+      "logical_name": "layers.4.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 502349824,
+      "gpu_address": 1039220736,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2528,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.4.mlp.gate_proj.weight",
+      "packed_sha256": "39bbfe4c3a9ad50432bffa911a391c8e9768b20ff15a783ba4fe5ec57e564064"
+    },
+    {
+      "logical_name": "layers.4.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 525418496,
+      "gpu_address": 1062289408,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2689,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.4.mlp.up_proj.weight",
+      "packed_sha256": "b001f2f223aa18893ac874d83fcacc93e8eccf3d62cfe10eff3bb9b90b02a906"
+    },
+    {
+      "logical_name": "layers.4.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 548487168,
+      "gpu_address": 1085358080,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2722,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.4.mlp.down_proj.weight",
+      "packed_sha256": "bc7fb1f554fb8fc288ecdba5d82723689f7af1d81566905c87b3102d04cfe358"
+    },
+    {
+      "logical_name": "layers.5.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 571555840,
+      "gpu_address": 1108426752,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.5.input_layernorm.weight",
+      "packed_sha256": "49b1c2b277e576a64fa19555975d24c012b990f6bf5690e4c2550d3b34962396"
+    },
+    {
+      "logical_name": "layers.5.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 571564032,
+      "gpu_address": 1108434944,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 781,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.5.self_attn.q_proj.weight",
+      "packed_sha256": "862750c46ead01abd68cd3ec1ba855bdddc1f10c394f23ac16e7d0cbbc5a5e63"
+    },
+    {
+      "logical_name": "layers.5.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 579952640,
+      "gpu_address": 1116823552,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 42,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.5.self_attn.k_proj.weight",
+      "packed_sha256": "549f81d76eec876fbcb097dd687252cb77aa2601a6be3f737d90491e0473d546"
+    },
+    {
+      "logical_name": "layers.5.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 581001216,
+      "gpu_address": 1117872128,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 189,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.5.self_attn.v_proj.weight",
+      "packed_sha256": "ea2e241263a74ea72c90a482b8c5649e04b42c5262c866b36685894febf24287"
+    },
+    {
+      "logical_name": "layers.5.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 582049792,
+      "gpu_address": 1118920704,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1206,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.5.self_attn.o_proj.weight",
+      "packed_sha256": "60f9068f658083fe88aeb634e015614e8611d4dc8d0c77c5aea3f848bbeb7eed"
+    },
+    {
+      "logical_name": "layers.5.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 590438400,
+      "gpu_address": 1127309312,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.5.post_attention_layernorm.weight",
+      "packed_sha256": "87582f8e071db5f0d266643a24ee611d0e5243b60c58b24fedfd760abe3d9ef3"
+    },
+    {
+      "logical_name": "layers.5.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 590446592,
+      "gpu_address": 1127317504,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2449,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.5.mlp.gate_proj.weight",
+      "packed_sha256": "26d9059d1287a687d40a3907aaa02e15030ab61db7ccb4adc14431f4781a4236"
+    },
+    {
+      "logical_name": "layers.5.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 613515264,
+      "gpu_address": 1150386176,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2745,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.5.mlp.up_proj.weight",
+      "packed_sha256": "ae86e9b849aceef02976479ac3bf2056f642f61d9be30e132a58b08aae675c3d"
+    },
+    {
+      "logical_name": "layers.5.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 636583936,
+      "gpu_address": 1173454848,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2674,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.5.mlp.down_proj.weight",
+      "packed_sha256": "3ca6b481f053b9128835f3f8bc641357baeb1b3034901b63f60136371f323466"
+    },
+    {
+      "logical_name": "layers.6.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 659652608,
+      "gpu_address": 1196523520,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.6.input_layernorm.weight",
+      "packed_sha256": "38024819d5189678b12fc3b7abcc723158af455186429ce11a2515db28b183b0"
+    },
+    {
+      "logical_name": "layers.6.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 659660800,
+      "gpu_address": 1196531712,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 771,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.6.self_attn.q_proj.weight",
+      "packed_sha256": "ef7c042713503e992475ff32ae64dffe48650c56e2116814963af93b47825ec2"
+    },
+    {
+      "logical_name": "layers.6.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 668049408,
+      "gpu_address": 1204920320,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 53,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.6.self_attn.k_proj.weight",
+      "packed_sha256": "263be77a04de76df36bb64b0b20f58132afdb6665e24e07b45ff7e90a94c1f61"
+    },
+    {
+      "logical_name": "layers.6.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 669097984,
+      "gpu_address": 1205968896,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 212,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.6.self_attn.v_proj.weight",
+      "packed_sha256": "fc782a4dbfb78afe7bfd4cc040d1cc99096670591bac787db3e2a107be1fa370"
+    },
+    {
+      "logical_name": "layers.6.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 670146560,
+      "gpu_address": 1207017472,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1268,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.6.self_attn.o_proj.weight",
+      "packed_sha256": "e144eb2cd0b71840e258f7500936d38d61b58347b85efd06d423a3c820ed9b1f"
+    },
+    {
+      "logical_name": "layers.6.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 678535168,
+      "gpu_address": 1215406080,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.6.post_attention_layernorm.weight",
+      "packed_sha256": "ddf78229a5e425f531e659f5484163e178e4d220bc72633d4c85e91441966fff"
+    },
+    {
+      "logical_name": "layers.6.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 678543360,
+      "gpu_address": 1215414272,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2449,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.6.mlp.gate_proj.weight",
+      "packed_sha256": "56c8d69689a12b283529f5c170bf846744aaec3781d46fd53e742f293778ca47"
+    },
+    {
+      "logical_name": "layers.6.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 701612032,
+      "gpu_address": 1238482944,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2809,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.6.mlp.up_proj.weight",
+      "packed_sha256": "a9a273b322f8374a6b553234f7fc554eb15e61b4b233b3ab9ae204c177703bb3"
+    },
+    {
+      "logical_name": "layers.6.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 724680704,
+      "gpu_address": 1261551616,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2764,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.6.mlp.down_proj.weight",
+      "packed_sha256": "7799cd34a89d5d392c0f7a20736a9e6667bb06d7d9d9cdcd2d6540243418a906"
+    },
+    {
+      "logical_name": "layers.7.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 747749376,
+      "gpu_address": 1284620288,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.7.input_layernorm.weight",
+      "packed_sha256": "e9120b5562d13570da18d42c4cd45453d682f28c7f3a4c994e213383b740296d"
+    },
+    {
+      "logical_name": "layers.7.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 747757568,
+      "gpu_address": 1284628480,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 812,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.7.self_attn.q_proj.weight",
+      "packed_sha256": "77aa15967fb882122d314df260de0734a6c4f08cabb05d1eabc089ed75a84ee7"
+    },
+    {
+      "logical_name": "layers.7.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 756146176,
+      "gpu_address": 1293017088,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 61,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.7.self_attn.k_proj.weight",
+      "packed_sha256": "d7a6a0fbee08769d2494613f5e752b96c0810e5b95e7350539d554480de6f8cc"
+    },
+    {
+      "logical_name": "layers.7.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 757194752,
+      "gpu_address": 1294065664,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 172,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.7.self_attn.v_proj.weight",
+      "packed_sha256": "b865efa753a52f43c88838156f3533ae85b8418fc30f781aa4c4d703a38ff224"
+    },
+    {
+      "logical_name": "layers.7.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 758243328,
+      "gpu_address": 1295114240,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1176,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.7.self_attn.o_proj.weight",
+      "packed_sha256": "3e92981121b87ed324eb2958da9dbff384bde88734cefd98652e376d5c09bba2"
+    },
+    {
+      "logical_name": "layers.7.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 766631936,
+      "gpu_address": 1303502848,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.7.post_attention_layernorm.weight",
+      "packed_sha256": "cc8a37e7077f47bd402e662be7c48f334bcc89b80758b30740e2d964b2ee238b"
+    },
+    {
+      "logical_name": "layers.7.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 766640128,
+      "gpu_address": 1303511040,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2296,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.7.mlp.gate_proj.weight",
+      "packed_sha256": "3f4616ce52f4ccbad6b17c49e791cf96948e5c0fcdf7aa11aab7e6ad701fb510"
+    },
+    {
+      "logical_name": "layers.7.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 789708800,
+      "gpu_address": 1326579712,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2793,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.7.mlp.up_proj.weight",
+      "packed_sha256": "dba40d043e391737b374b7f78b6bb445efb584e56a5ffeda1b153e21b072bbb4"
+    },
+    {
+      "logical_name": "layers.7.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 812777472,
+      "gpu_address": 1349648384,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2859,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.7.mlp.down_proj.weight",
+      "packed_sha256": "e952d712220644cd0eb1da6ca029012f1204b1ef967bcf9e60e4232aadc0976b"
+    },
+    {
+      "logical_name": "layers.8.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 835846144,
+      "gpu_address": 1372717056,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.8.input_layernorm.weight",
+      "packed_sha256": "113a92e8e8c285cbf8a4ec8c189dd5410e6ea656b863aa401770ca70f2f50b67"
+    },
+    {
+      "logical_name": "layers.8.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 835854336,
+      "gpu_address": 1372725248,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 870,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.8.self_attn.q_proj.weight",
+      "packed_sha256": "8c814897ead253e7eac9cab2cf2e8f0324d6a4f5bd97b4e15b96cd394d7e7ca8"
+    },
+    {
+      "logical_name": "layers.8.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 844242944,
+      "gpu_address": 1381113856,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 57,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.8.self_attn.k_proj.weight",
+      "packed_sha256": "2451cbe4aa63f230ce726a1ddcaee8125c5cbfeaeccd438ff197160172584a9b"
+    },
+    {
+      "logical_name": "layers.8.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 845291520,
+      "gpu_address": 1382162432,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 189,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.8.self_attn.v_proj.weight",
+      "packed_sha256": "36b43eda7f852f19edcb7fea670dfd81d63859d432ac9f532b066506e4c06c39"
+    },
+    {
+      "logical_name": "layers.8.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 846340096,
+      "gpu_address": 1383211008,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1184,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.8.self_attn.o_proj.weight",
+      "packed_sha256": "952e9517412dc173577f77f73d291a896df0dfb729d831c53d02c7297e01bc67"
+    },
+    {
+      "logical_name": "layers.8.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 854728704,
+      "gpu_address": 1391599616,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.8.post_attention_layernorm.weight",
+      "packed_sha256": "6adbbd244d5f9935a0724b6cf3659ae4d8dd0ef48f9f4581ce343dd33d9b852a"
+    },
+    {
+      "logical_name": "layers.8.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 854736896,
+      "gpu_address": 1391607808,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2414,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.8.mlp.gate_proj.weight",
+      "packed_sha256": "0a79aa6bba6fadbfb9a6e628891a9122059527641c598964daf8f5fa7f6d7d4c"
+    },
+    {
+      "logical_name": "layers.8.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 877805568,
+      "gpu_address": 1414676480,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2743,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.8.mlp.up_proj.weight",
+      "packed_sha256": "1286710ae0cc47a315e3c68dada3e623e67a3bb00f91c101476ae5050b62734d"
+    },
+    {
+      "logical_name": "layers.8.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 900874240,
+      "gpu_address": 1437745152,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2823,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.8.mlp.down_proj.weight",
+      "packed_sha256": "b85f5d99a58e6e913f22017a86e803e6819e8b435071cef5df3fcb6d1f714050"
+    },
+    {
+      "logical_name": "layers.9.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 923942912,
+      "gpu_address": 1460813824,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.9.input_layernorm.weight",
+      "packed_sha256": "de08aceec15801177e166ce2f2aecc60cf685c174dc98a200743cdaecd3e282b"
+    },
+    {
+      "logical_name": "layers.9.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 923951104,
+      "gpu_address": 1460822016,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 767,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.9.self_attn.q_proj.weight",
+      "packed_sha256": "53c252438eae33095cd19d1cf54a978f8c9a72267727dd3e1a320aa425f3e8fa"
+    },
+    {
+      "logical_name": "layers.9.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 932339712,
+      "gpu_address": 1469210624,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 53,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.9.self_attn.k_proj.weight",
+      "packed_sha256": "0e70df8a4861c33882c6b46251f89202b00be651df0a12d0f719506a45e72766"
+    },
+    {
+      "logical_name": "layers.9.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 933388288,
+      "gpu_address": 1470259200,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 204,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.9.self_attn.v_proj.weight",
+      "packed_sha256": "5bb10accf22511fae139ddbc9175765e0ed172068642d1727dc89693d70dee7f"
+    },
+    {
+      "logical_name": "layers.9.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 934436864,
+      "gpu_address": 1471307776,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1135,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.9.self_attn.o_proj.weight",
+      "packed_sha256": "e2b43648d1056996adbabbc83dca08baf68f8f2e3b88f34d7dfe4232e4668268"
+    },
+    {
+      "logical_name": "layers.9.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 942825472,
+      "gpu_address": 1479696384,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.9.post_attention_layernorm.weight",
+      "packed_sha256": "2fc5d907b51ce0e4e85a179ee6b52925bcfcd5ad456b9b14579d46fd7d2c4089"
+    },
+    {
+      "logical_name": "layers.9.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 942833664,
+      "gpu_address": 1479704576,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2276,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.9.mlp.gate_proj.weight",
+      "packed_sha256": "224d73777bca48d1afc2b1199a4de0a99f6ec7cb77587a79503447f70c2ac6f2"
+    },
+    {
+      "logical_name": "layers.9.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 965902336,
+      "gpu_address": 1502773248,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2935,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.9.mlp.up_proj.weight",
+      "packed_sha256": "25b20c0ff0972563f9a66791df7c8bc63e79af47ca56004f98a73997d24681ef"
+    },
+    {
+      "logical_name": "layers.9.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 988971008,
+      "gpu_address": 1525841920,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2844,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.9.mlp.down_proj.weight",
+      "packed_sha256": "666daac3e687462e058d0f5ac5dea9a96da97a2923b7f884e6f97f5ac2807267"
+    },
+    {
+      "logical_name": "layers.10.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1012039680,
+      "gpu_address": 1548910592,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.10.input_layernorm.weight",
+      "packed_sha256": "c1c1e4c7fd09d8a03fbad37445a4edb49116dc787e441704de9dc00fa5b0caf8"
+    },
+    {
+      "logical_name": "layers.10.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1012047872,
+      "gpu_address": 1548918784,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 782,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.10.self_attn.q_proj.weight",
+      "packed_sha256": "a97afb8fbfaf365395b75d7216191547c20f3d6306ca54d846be57f06e2fd42b"
+    },
+    {
+      "logical_name": "layers.10.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1020436480,
+      "gpu_address": 1557307392,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 56,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.10.self_attn.k_proj.weight",
+      "packed_sha256": "8b74b9fab3e49f61cd2eb02451fb7b9dce741669c39fbf23efe056db208d122e"
+    },
+    {
+      "logical_name": "layers.10.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1021485056,
+      "gpu_address": 1558355968,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 197,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.10.self_attn.v_proj.weight",
+      "packed_sha256": "de08a913562bfa53d8ce1c70e3ad34782d35158944973a8cb2fd4c05f554eaaa"
+    },
+    {
+      "logical_name": "layers.10.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1022533632,
+      "gpu_address": 1559404544,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1175,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.10.self_attn.o_proj.weight",
+      "packed_sha256": "ac96dcdbe750add52cfe01a5ee326db601098969c263b25cdcb289d0e2e7e51e"
+    },
+    {
+      "logical_name": "layers.10.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1030922240,
+      "gpu_address": 1567793152,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.10.post_attention_layernorm.weight",
+      "packed_sha256": "8ee7aadaa45610e14a61beae7cd8bd9b7d93df2e15d01139dd75d5f77311ac7b"
+    },
+    {
+      "logical_name": "layers.10.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1030930432,
+      "gpu_address": 1567801344,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2365,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.10.mlp.gate_proj.weight",
+      "packed_sha256": "091ebc0385780d532e41611fcc7cff53edc60a7811c145da9baf3fd711ef1438"
+    },
+    {
+      "logical_name": "layers.10.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1053999104,
+      "gpu_address": 1590870016,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2739,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.10.mlp.up_proj.weight",
+      "packed_sha256": "a0db8ea8f0fdf183236562fada2183d4b9add214f14660184b478ee576d5e978"
+    },
+    {
+      "logical_name": "layers.10.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1077067776,
+      "gpu_address": 1613938688,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2827,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.10.mlp.down_proj.weight",
+      "packed_sha256": "b47c62562f11ed71a71cd0db2665ffc3dccbb68291f157498e4769a413c4f287"
+    },
+    {
+      "logical_name": "layers.11.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1100136448,
+      "gpu_address": 1637007360,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.11.input_layernorm.weight",
+      "packed_sha256": "03bbe22f2fc5349ebc1dd11ce0b9d7920a2aa717522d30bd438003e40cfdfac5"
+    },
+    {
+      "logical_name": "layers.11.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1100144640,
+      "gpu_address": 1637015552,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 876,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.11.self_attn.q_proj.weight",
+      "packed_sha256": "5e18d5ecad66bbc1facd812531cd033878b76eef5beaad89414426a7cef18544"
+    },
+    {
+      "logical_name": "layers.11.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1108533248,
+      "gpu_address": 1645404160,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 75,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.11.self_attn.k_proj.weight",
+      "packed_sha256": "c07feddd106782c5b8739577e0e67d5038a49c493cb50f9634029f0416347f32"
+    },
+    {
+      "logical_name": "layers.11.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1109581824,
+      "gpu_address": 1646452736,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 218,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.11.self_attn.v_proj.weight",
+      "packed_sha256": "82e07e57d61741a2b2323f2c58a10809658fa643236738f615ee4d675131d73d"
+    },
+    {
+      "logical_name": "layers.11.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1110630400,
+      "gpu_address": 1647501312,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1256,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.11.self_attn.o_proj.weight",
+      "packed_sha256": "f1d07360e8fd2dfcb9280a6057f256be81b86e697254fabe393edf63f46b20a1"
+    },
+    {
+      "logical_name": "layers.11.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1119019008,
+      "gpu_address": 1655889920,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.11.post_attention_layernorm.weight",
+      "packed_sha256": "609626b7c97902564aa053a4d08dd2f8ed1de6ea4a17c33744fee7499500109c"
+    },
+    {
+      "logical_name": "layers.11.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1119027200,
+      "gpu_address": 1655898112,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2439,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.11.mlp.gate_proj.weight",
+      "packed_sha256": "996566bc2d52812156f72f6d6ab40731937b24a0de85159d523fd5c1d87a5b81"
+    },
+    {
+      "logical_name": "layers.11.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1142095872,
+      "gpu_address": 1678966784,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2794,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.11.mlp.up_proj.weight",
+      "packed_sha256": "3f0910d98917d4842f30353f017175c83810c95349383193cc9ec4311901b94b"
+    },
+    {
+      "logical_name": "layers.11.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1165164544,
+      "gpu_address": 1702035456,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2737,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.11.mlp.down_proj.weight",
+      "packed_sha256": "ca4264926169de997a87d5f8f7dd6373e087c8292de20d4171a2c125b3f84749"
+    },
+    {
+      "logical_name": "layers.12.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1188233216,
+      "gpu_address": 1725104128,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.12.input_layernorm.weight",
+      "packed_sha256": "f3639b8e78a652856b390f6c0282dbd149f54d07c04e4eb436d1e3a5fdbbc9e5"
+    },
+    {
+      "logical_name": "layers.12.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1188241408,
+      "gpu_address": 1725112320,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 805,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.12.self_attn.q_proj.weight",
+      "packed_sha256": "c539ff92a6d4cd978ef252aca686c4cbce095d4e47fc3ddaf71a6fcc80a9e2bc"
+    },
+    {
+      "logical_name": "layers.12.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1196630016,
+      "gpu_address": 1733500928,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 68,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.12.self_attn.k_proj.weight",
+      "packed_sha256": "746fd3b92821ddd208541cebcc74bd6431ada1d9bde1ba5c55b9e018f96d4738"
+    },
+    {
+      "logical_name": "layers.12.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1197678592,
+      "gpu_address": 1734549504,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 185,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.12.self_attn.v_proj.weight",
+      "packed_sha256": "371b8161434aa47ba2e2535521751d8f7f4547ed7bad16ba6472ffc2d535415d"
+    },
+    {
+      "logical_name": "layers.12.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1198727168,
+      "gpu_address": 1735598080,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1134,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.12.self_attn.o_proj.weight",
+      "packed_sha256": "8ac5e5bcec1448c4dc5568263b647c9ac95426a26154db29113d50b52a9ea90e"
+    },
+    {
+      "logical_name": "layers.12.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1207115776,
+      "gpu_address": 1743986688,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.12.post_attention_layernorm.weight",
+      "packed_sha256": "51a321af8cc55ed4c7751bf5dd7a3a0895d1c123e4b22e9e07ab849fd58550c1"
+    },
+    {
+      "logical_name": "layers.12.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1207123968,
+      "gpu_address": 1743994880,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2307,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.12.mlp.gate_proj.weight",
+      "packed_sha256": "831de94d8f71b70d91d1ce2d3281fe56166872c3dc1b05d8737ac2ac4f037cf9"
+    },
+    {
+      "logical_name": "layers.12.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1230192640,
+      "gpu_address": 1767063552,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2852,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.12.mlp.up_proj.weight",
+      "packed_sha256": "db6dda6ed3f423049e267521a740bb96f8cf5fc1f04b2cbf75e3a66880f42de0"
+    },
+    {
+      "logical_name": "layers.12.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1253261312,
+      "gpu_address": 1790132224,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2868,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.12.mlp.down_proj.weight",
+      "packed_sha256": "1457aa7f603e795e8088073680488aaedc50bc93e2524c1c0d501b007919f025"
+    },
+    {
+      "logical_name": "layers.13.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1276329984,
+      "gpu_address": 1813200896,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.13.input_layernorm.weight",
+      "packed_sha256": "e3ea43c5a37f298169815d0a869bf8dc7db8aa0ade6d71e2a7a2e8f81b3b28e0"
+    },
+    {
+      "logical_name": "layers.13.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1276338176,
+      "gpu_address": 1813209088,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 736,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.13.self_attn.q_proj.weight",
+      "packed_sha256": "7eb32c5b95dac595ba7ef95717c8c0fde19321ef4c713f6f329569aa20ddaf62"
+    },
+    {
+      "logical_name": "layers.13.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1284726784,
+      "gpu_address": 1821597696,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 63,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.13.self_attn.k_proj.weight",
+      "packed_sha256": "c3c97635cddd8c0d03cdacbb8feb417efcbbeaf39e36090e9388188559b5b8e5"
+    },
+    {
+      "logical_name": "layers.13.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1285775360,
+      "gpu_address": 1822646272,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 207,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.13.self_attn.v_proj.weight",
+      "packed_sha256": "bbaf18a24e000e5a45b807716df23127798dc7ec5639ab96d9578f619936a13f"
+    },
+    {
+      "logical_name": "layers.13.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1286823936,
+      "gpu_address": 1823694848,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1191,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.13.self_attn.o_proj.weight",
+      "packed_sha256": "b1cb5e3e272ad7b531c29d2e5b4ec236d724d047b97bcf03d655aa10133fd49f"
+    },
+    {
+      "logical_name": "layers.13.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1295212544,
+      "gpu_address": 1832083456,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.13.post_attention_layernorm.weight",
+      "packed_sha256": "edfe0ab7c2348968647f9ae75e9c7c12240284b1bc8213df56baefb87d531308"
+    },
+    {
+      "logical_name": "layers.13.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1295220736,
+      "gpu_address": 1832091648,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2413,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.13.mlp.gate_proj.weight",
+      "packed_sha256": "74e8f5b2345a485267e0b149461894343ede6d0233762e99b1b9e08a44632ab0"
+    },
+    {
+      "logical_name": "layers.13.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1318289408,
+      "gpu_address": 1855160320,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2743,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.13.mlp.up_proj.weight",
+      "packed_sha256": "fddd1752e22f7333d95c02284ea0cfa7cf541f2e78971e0e0704da950a0b53c0"
+    },
+    {
+      "logical_name": "layers.13.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1341358080,
+      "gpu_address": 1878228992,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2838,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.13.mlp.down_proj.weight",
+      "packed_sha256": "2d9e7aa14f0feb0f8ac84cdb60846e86ca304b6512895dd678934f3606632612"
+    },
+    {
+      "logical_name": "layers.14.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1364426752,
+      "gpu_address": 1901297664,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.14.input_layernorm.weight",
+      "packed_sha256": "54fe761a307a8d7ed35aa59dd4cdc96a3116122eda2a06366b1794922a26fe1b"
+    },
+    {
+      "logical_name": "layers.14.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1364434944,
+      "gpu_address": 1901305856,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 775,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.14.self_attn.q_proj.weight",
+      "packed_sha256": "361857084ed2210fed156236240605550a580bd19189b11f647df66d90d526b1"
+    },
+    {
+      "logical_name": "layers.14.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1372823552,
+      "gpu_address": 1909694464,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 57,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.14.self_attn.k_proj.weight",
+      "packed_sha256": "91e101f5de3ac9964f7c1dd4cef28b7bc9662e29f662a2182308fee9fd4b45fe"
+    },
+    {
+      "logical_name": "layers.14.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1373872128,
+      "gpu_address": 1910743040,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 197,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.14.self_attn.v_proj.weight",
+      "packed_sha256": "07d6d2cbaede8bd8b0363c5527793ffac4c1bd249243b478ecdac2ea29cb68eb"
+    },
+    {
+      "logical_name": "layers.14.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1374920704,
+      "gpu_address": 1911791616,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1189,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.14.self_attn.o_proj.weight",
+      "packed_sha256": "e9846bdc36ebdcb2051d31dfe47d829fd6178ec773637dd7e873cba150926ada"
+    },
+    {
+      "logical_name": "layers.14.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1383309312,
+      "gpu_address": 1920180224,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.14.post_attention_layernorm.weight",
+      "packed_sha256": "fb3f78cefb5793faf88c7b6e2bfdfc9af6bba19c19f856a40066521da69156f0"
+    },
+    {
+      "logical_name": "layers.14.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1383317504,
+      "gpu_address": 1920188416,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2358,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.14.mlp.gate_proj.weight",
+      "packed_sha256": "be36027fc81e92d26b88ef6cc29d6199afddb9cfa90f3bc8c07d2403bc9d115e"
+    },
+    {
+      "logical_name": "layers.14.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1406386176,
+      "gpu_address": 1943257088,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2747,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.14.mlp.up_proj.weight",
+      "packed_sha256": "d7b275db976b4aff273f8f5a134873e79c93ffa2712e5e93969b4c510b0856e9"
+    },
+    {
+      "logical_name": "layers.14.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1429454848,
+      "gpu_address": 1966325760,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2706,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.14.mlp.down_proj.weight",
+      "packed_sha256": "b49d6cc51ce2a8e643d02580f8260744b87d92d697ddfb0647fd49e3c54aa142"
+    },
+    {
+      "logical_name": "layers.15.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1452523520,
+      "gpu_address": 1989394432,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.15.input_layernorm.weight",
+      "packed_sha256": "0f17e59d769687f50d34d968cda3a43e4b648a714cbddc6ac654e0ddef7c308f"
+    },
+    {
+      "logical_name": "layers.15.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1452531712,
+      "gpu_address": 1989402624,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 891,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.15.self_attn.q_proj.weight",
+      "packed_sha256": "b3415f3cdf495226f3ce1f1857dedd4bae2133c61fec02518777cad32ea2cbd4"
+    },
+    {
+      "logical_name": "layers.15.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1460920320,
+      "gpu_address": 1997791232,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 63,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.15.self_attn.k_proj.weight",
+      "packed_sha256": "46567d668cc54a7448c6e2079f0a4fa7c611338999b1b478df0de8e372323e0e"
+    },
+    {
+      "logical_name": "layers.15.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1461968896,
+      "gpu_address": 1998839808,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 151,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.15.self_attn.v_proj.weight",
+      "packed_sha256": "41c21b9360af0ec5fd7cfa38adeabcc7a6be7efa7f8c2d33864607e4ae6c73a9"
+    },
+    {
+      "logical_name": "layers.15.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1463017472,
+      "gpu_address": 1999888384,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1148,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.15.self_attn.o_proj.weight",
+      "packed_sha256": "6d5ad3b45a7a806944c0ea8be04a24c730d602a3f8c541f554a680f84831bdac"
+    },
+    {
+      "logical_name": "layers.15.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1471406080,
+      "gpu_address": 2008276992,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.15.post_attention_layernorm.weight",
+      "packed_sha256": "0dfd30307abd404fdf7a55e90ceb4695aa28566b7dd5d0c9f3722254dba4128c"
+    },
+    {
+      "logical_name": "layers.15.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1471414272,
+      "gpu_address": 2008285184,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2353,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.15.mlp.gate_proj.weight",
+      "packed_sha256": "cb7a45644d34390bfed7a8fa15ecb0c45da5ba0171af9b1fc00e225ebb22126a"
+    },
+    {
+      "logical_name": "layers.15.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1494482944,
+      "gpu_address": 2031353856,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2699,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.15.mlp.up_proj.weight",
+      "packed_sha256": "e8c666b11474855663aac93a13cb690ed033836305cf7b0a4f5fd20af94f5a47"
+    },
+    {
+      "logical_name": "layers.15.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1517551616,
+      "gpu_address": 2054422528,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2740,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.15.mlp.down_proj.weight",
+      "packed_sha256": "ec97d5d20f82f0431ed5e74a893f2a49ce79fa18e8601238eca124e9248f2adb"
+    },
+    {
+      "logical_name": "layers.16.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1540620288,
+      "gpu_address": 2077491200,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.16.input_layernorm.weight",
+      "packed_sha256": "a44c19e3673dd7e07615ae8c71e631ce0bf7604ad52e75abdc03bfc331d089c2"
+    },
+    {
+      "logical_name": "layers.16.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1540628480,
+      "gpu_address": 2077499392,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 865,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.16.self_attn.q_proj.weight",
+      "packed_sha256": "935cc685fcb02065845d3fbbe6657cf9283379fba6537bd3bdf8ce2c23a4f484"
+    },
+    {
+      "logical_name": "layers.16.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1549017088,
+      "gpu_address": 2085888000,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 45,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.16.self_attn.k_proj.weight",
+      "packed_sha256": "0f89fb57d45b2b0a7d55dd7f501b49772b715f81a33d574b244c312493eb8112"
+    },
+    {
+      "logical_name": "layers.16.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 0,
+      "offset_bytes": 1550065664,
+      "gpu_address": 2086936576,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 157,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.16.self_attn.v_proj.weight",
+      "packed_sha256": "323522f3d18f87b15d00715242c1ac94f99c0fd1a831fb0a904f7624a8aee667"
+    },
+    {
+      "logical_name": "layers.16.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 0,
+      "offset_bytes": 1551114240,
+      "gpu_address": 2087985152,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1164,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.16.self_attn.o_proj.weight",
+      "packed_sha256": "e8bc453f0b7dd81ed5f35851657804ab228fa5b52a60aff551ae103e45b287af"
+    },
+    {
+      "logical_name": "layers.16.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 1559502848,
+      "gpu_address": 2096373760,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.16.post_attention_layernorm.weight",
+      "packed_sha256": "bfb23c665d542cf4581aab93959fe060bf53e54294153fb11c331a533f4d6d35"
+    },
+    {
+      "logical_name": "layers.16.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 0,
+      "offset_bytes": 1559511040,
+      "gpu_address": 2096381952,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2298,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.16.mlp.gate_proj.weight",
+      "packed_sha256": "1948c3103f1da196c876f7b8ba050355a1579f83ef2bc3519ae596762416ba6a"
+    },
+    {
+      "logical_name": "layers.16.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 0,
+      "gpu_address": 2147483648,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2636,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.16.mlp.up_proj.weight",
+      "packed_sha256": "468f73985619b18e8cf6e47c35bc1b5e256a135676d2e717e01eebdc1edf0e5e"
+    },
+    {
+      "logical_name": "layers.16.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 23068672,
+      "gpu_address": 2170552320,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2691,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.16.mlp.down_proj.weight",
+      "packed_sha256": "95dccf77e04aa71c716d556657493cff007516c1af121068f61cceb72e32c9d3"
+    },
+    {
+      "logical_name": "layers.17.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 46137344,
+      "gpu_address": 2193620992,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.17.input_layernorm.weight",
+      "packed_sha256": "c78f16160a8b55ff5232b97729f8a6a9ca40abfde6b7ef79600766f3f29442ea"
+    },
+    {
+      "logical_name": "layers.17.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 46145536,
+      "gpu_address": 2193629184,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 866,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.17.self_attn.q_proj.weight",
+      "packed_sha256": "0c0f9fec26694a98f51eea6572f1620a7369d8b0c929192ad05343fa55db7884"
+    },
+    {
+      "logical_name": "layers.17.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 54534144,
+      "gpu_address": 2202017792,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 60,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.17.self_attn.k_proj.weight",
+      "packed_sha256": "c4e4189e389ccc8a81b48ddc0bcac56b0756d39940057e931df43cfa1d05893e"
+    },
+    {
+      "logical_name": "layers.17.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 55582720,
+      "gpu_address": 2203066368,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 119,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.17.self_attn.v_proj.weight",
+      "packed_sha256": "ad72acb11e54a71db75148b27b7c6fc1442775c13f9262c688659a2fd53b193e"
+    },
+    {
+      "logical_name": "layers.17.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 56631296,
+      "gpu_address": 2204114944,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1060,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.17.self_attn.o_proj.weight",
+      "packed_sha256": "0f848692996108c2a5fd3f8990e93ac7e33624b065cd63ea5f1a35ba9a28dc76"
+    },
+    {
+      "logical_name": "layers.17.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 65019904,
+      "gpu_address": 2212503552,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.17.post_attention_layernorm.weight",
+      "packed_sha256": "bf2fd3796634285995aa327ddbdcee5f14b35282fd756c9afe3bda63d57dbfb2"
+    },
+    {
+      "logical_name": "layers.17.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 65028096,
+      "gpu_address": 2212511744,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2216,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.17.mlp.gate_proj.weight",
+      "packed_sha256": "00ce44cc4a254ce3e62fbc33dd87d3e0c62b21164446d67d686a8bcbf21272a0"
+    },
+    {
+      "logical_name": "layers.17.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 88096768,
+      "gpu_address": 2235580416,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2587,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.17.mlp.up_proj.weight",
+      "packed_sha256": "d495702f9a4dd218fa216bef717271170d17165274945f5073a0e06dfda7ea63"
+    },
+    {
+      "logical_name": "layers.17.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 111165440,
+      "gpu_address": 2258649088,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2739,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.17.mlp.down_proj.weight",
+      "packed_sha256": "8db1cad1d760c5a28e3b662104f896204fb43a91bb8343c5efd62c1ed6a0c28e"
+    },
+    {
+      "logical_name": "layers.18.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 134234112,
+      "gpu_address": 2281717760,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.18.input_layernorm.weight",
+      "packed_sha256": "b99fdfbfd380a0c42ce7f9fb80b15b97f35e7909c1a6d6327baf6c94aa7a7c74"
+    },
+    {
+      "logical_name": "layers.18.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 134242304,
+      "gpu_address": 2281725952,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 869,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.18.self_attn.q_proj.weight",
+      "packed_sha256": "04dd7592796ddd20dc8a0a4665d7e34b8e7529c97db96abdf49a468e93afd869"
+    },
+    {
+      "logical_name": "layers.18.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 142630912,
+      "gpu_address": 2290114560,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 53,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.18.self_attn.k_proj.weight",
+      "packed_sha256": "c20ee0445bb169cac18e76207a0d57c13f52c85d3a73e34b755da2a13a193ad8"
+    },
+    {
+      "logical_name": "layers.18.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 143679488,
+      "gpu_address": 2291163136,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 117,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.18.self_attn.v_proj.weight",
+      "packed_sha256": "783a7eeee2ee192dc0837801f693b11fc4087ec8ddc318d8d5eb01f2aa7b34d6"
+    },
+    {
+      "logical_name": "layers.18.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 144728064,
+      "gpu_address": 2292211712,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1017,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.18.self_attn.o_proj.weight",
+      "packed_sha256": "83eaa4892f530ff65df998711ccea117377bd42c14734d3ef9263b3d2877b1ad"
+    },
+    {
+      "logical_name": "layers.18.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 153116672,
+      "gpu_address": 2300600320,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.18.post_attention_layernorm.weight",
+      "packed_sha256": "c6be1bb4e0be39aa4683b22b23aaeb607ddf5d34bc9fd4f0c442b3425911db77"
+    },
+    {
+      "logical_name": "layers.18.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 153124864,
+      "gpu_address": 2300608512,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2286,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.18.mlp.gate_proj.weight",
+      "packed_sha256": "47acaaabe06cabd27ba9cc3313cdc9d0f10efeeca362881108451a916e7b693a"
+    },
+    {
+      "logical_name": "layers.18.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 176193536,
+      "gpu_address": 2323677184,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2537,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.18.mlp.up_proj.weight",
+      "packed_sha256": "b1ba63738c52965d15d28af848225c058193370cfb903c2cf460689a1bd812df"
+    },
+    {
+      "logical_name": "layers.18.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 199262208,
+      "gpu_address": 2346745856,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2582,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.18.mlp.down_proj.weight",
+      "packed_sha256": "3268511c29b82ba63fb505fcd413ddcebf05b1c8e96c1db9ad84944236d7d61b"
+    },
+    {
+      "logical_name": "layers.19.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 222330880,
+      "gpu_address": 2369814528,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.19.input_layernorm.weight",
+      "packed_sha256": "c36ed8645efad39d2e3fc35f2eef24d0777e297d44183939927b3b6e046556b4"
+    },
+    {
+      "logical_name": "layers.19.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 222339072,
+      "gpu_address": 2369822720,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 869,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.19.self_attn.q_proj.weight",
+      "packed_sha256": "6e046e61aa2032ac7a6f1ea468fc3d3c9a5e07338a9f1c2ca9bcc1b8e2f3bed4"
+    },
+    {
+      "logical_name": "layers.19.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 230727680,
+      "gpu_address": 2378211328,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 68,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.19.self_attn.k_proj.weight",
+      "packed_sha256": "ebabff7497773b6f9cabda97dee2dc936b852f7cbdecff9252344cc01d741de9"
+    },
+    {
+      "logical_name": "layers.19.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 231776256,
+      "gpu_address": 2379259904,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 111,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.19.self_attn.v_proj.weight",
+      "packed_sha256": "4a36cde7521c7d8ea8c26b294ef8e6ec5228fab91a4d719741e1914afae84ea0"
+    },
+    {
+      "logical_name": "layers.19.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 232824832,
+      "gpu_address": 2380308480,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 971,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.19.self_attn.o_proj.weight",
+      "packed_sha256": "a884df6f7e9b5e2fe81b2a6eef19f5c08ae012188a5cd0c7f6ef04c703f7ab46"
+    },
+    {
+      "logical_name": "layers.19.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 241213440,
+      "gpu_address": 2388697088,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.19.post_attention_layernorm.weight",
+      "packed_sha256": "8b6ceac0283bae12920a5db2b0673f8bc69e7ffef0813a7a728e1091d6d86782"
+    },
+    {
+      "logical_name": "layers.19.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 241221632,
+      "gpu_address": 2388705280,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2181,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.19.mlp.gate_proj.weight",
+      "packed_sha256": "0fee3c488f4b18338d5061b4e35872fc6f39b949c90800de41450788a7fea618"
+    },
+    {
+      "logical_name": "layers.19.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 264290304,
+      "gpu_address": 2411773952,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2561,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.19.mlp.up_proj.weight",
+      "packed_sha256": "526a0786bc09bbe288b5349ab737d0f4779a928d038c5ec6f4439ce56cb8f05b"
+    },
+    {
+      "logical_name": "layers.19.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 287358976,
+      "gpu_address": 2434842624,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2590,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.19.mlp.down_proj.weight",
+      "packed_sha256": "27744d30794ec63a66fe28af7ff0f9df279f3306cbf70ab9b839ea3ff6338110"
+    },
+    {
+      "logical_name": "layers.20.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 310427648,
+      "gpu_address": 2457911296,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.20.input_layernorm.weight",
+      "packed_sha256": "4ea48365b9c241590d82d343ede116fa9baf005ca0dad8e16b418fc896a0ebbe"
+    },
+    {
+      "logical_name": "layers.20.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 310435840,
+      "gpu_address": 2457919488,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 884,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.20.self_attn.q_proj.weight",
+      "packed_sha256": "4f835d2b3659ce3fe1f04f3921af7a80d94dc3cf56b3d9fc92b55eabd7d6f83b"
+    },
+    {
+      "logical_name": "layers.20.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 318824448,
+      "gpu_address": 2466308096,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 67,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.20.self_attn.k_proj.weight",
+      "packed_sha256": "171f070b7722ccc63852210e80a9e92006926c4aaf5f5f9d4180eca5a08c6eb4"
+    },
+    {
+      "logical_name": "layers.20.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 319873024,
+      "gpu_address": 2467356672,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 101,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.20.self_attn.v_proj.weight",
+      "packed_sha256": "278c65effbe05580727488309c27d7366d6ad1e09c57ad922a2e54880de4c16d"
+    },
+    {
+      "logical_name": "layers.20.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 320921600,
+      "gpu_address": 2468405248,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 977,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.20.self_attn.o_proj.weight",
+      "packed_sha256": "1c1abdd2f06e198dc765e8c3cd23d8a22f7ba2edd6ddf41d1ad34b1c8fbf835e"
+    },
+    {
+      "logical_name": "layers.20.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 329310208,
+      "gpu_address": 2476793856,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.20.post_attention_layernorm.weight",
+      "packed_sha256": "b1eb45d812467c466db327acbe0525ae257075be56d10ebdf21bc9bd3c8fce86"
+    },
+    {
+      "logical_name": "layers.20.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 329318400,
+      "gpu_address": 2476802048,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2192,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.20.mlp.gate_proj.weight",
+      "packed_sha256": "1cc9585c0eeed965b6061307470bce60ab146c8cbf049f041c75ccda577947fd"
+    },
+    {
+      "logical_name": "layers.20.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 352387072,
+      "gpu_address": 2499870720,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2440,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.20.mlp.up_proj.weight",
+      "packed_sha256": "eb7d6afabd38f2ef1af483bde4668abd2d46cba8cc0f80a71b78b48c32eda045"
+    },
+    {
+      "logical_name": "layers.20.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 375455744,
+      "gpu_address": 2522939392,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2468,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.20.mlp.down_proj.weight",
+      "packed_sha256": "014789915826952e0b6a2f3c6d970678ad16f8e26fc4bfc3afb32f16e3338414"
+    },
+    {
+      "logical_name": "layers.21.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 398524416,
+      "gpu_address": 2546008064,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.21.input_layernorm.weight",
+      "packed_sha256": "f2d17f6ffe3beeecbb0418dac75f59dfa6c55f338ec8d085c16f8d86b0d62585"
+    },
+    {
+      "logical_name": "layers.21.q_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 398532608,
+      "gpu_address": 2546016256,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 899,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.21.self_attn.q_proj.weight",
+      "packed_sha256": "375c764bbe654f507faf611be042c1c9876f69fa62e64c73e9cd030603603d5c"
+    },
+    {
+      "logical_name": "layers.21.k_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 406921216,
+      "gpu_address": 2554404864,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 74,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.21.self_attn.k_proj.weight",
+      "packed_sha256": "f11e2eb993387d17ed9e8ca7c82eeb53cc77dcad33e81aa73b3c7210e9132306"
+    },
+    {
+      "logical_name": "layers.21.v_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        256
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 1048576,
+      "segment_index": 1,
+      "offset_bytes": 407969792,
+      "gpu_address": 2555453440,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 78,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.21.self_attn.v_proj.weight",
+      "packed_sha256": "9695bae41b37a4dec516092e9d733b32609f9bbc320eea320367cdb18e597525"
+    },
+    {
+      "logical_name": "layers.21.o_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 8388608,
+      "segment_index": 1,
+      "offset_bytes": 409018368,
+      "gpu_address": 2556502016,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 888,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.21.self_attn.o_proj.weight",
+      "packed_sha256": "d17c151098c45c002aaa3afe7151ac7a7dc450821efcf30b64a5f87206d104c0"
+    },
+    {
+      "logical_name": "layers.21.ffn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 417406976,
+      "gpu_address": 2564890624,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.21.post_attention_layernorm.weight",
+      "packed_sha256": "678bdb6ac6e55b5b8d5a13db21f405569c6aeae72a8cef4d28af2b0aaeaa59f6"
+    },
+    {
+      "logical_name": "layers.21.gate_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 417415168,
+      "gpu_address": 2564898816,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 1996,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.21.mlp.gate_proj.weight",
+      "packed_sha256": "d4e3e36129fe138b74d53fa32943da0607d42f778ff8013d932ac39000ba43f2"
+    },
+    {
+      "logical_name": "layers.21.up_proj",
+      "operation": "linear",
+      "shape": [
+        2048,
+        5632
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 440483840,
+      "gpu_address": 2587967488,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2502,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.21.mlp.up_proj.weight",
+      "packed_sha256": "01b58dcd1e7c2b557f02671f47dc314a09962d4154795b1c9b76c841851fa22f"
+    },
+    {
+      "logical_name": "layers.21.down_proj",
+      "operation": "linear",
+      "shape": [
+        5632,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 23068672,
+      "segment_index": 1,
+      "offset_bytes": 463552512,
+      "gpu_address": 2611036160,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 2653,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "model.layers.21.mlp.down_proj.weight",
+      "packed_sha256": "f87046c7edf42560bcf8fe9657551794f3ff2c752ad45ea6d2ea81d44da139f5"
+    },
+    {
+      "logical_name": "final_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 8192,
+      "segment_index": 1,
+      "offset_bytes": 486621184,
+      "gpu_address": 2634104832,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.norm.weight",
+      "packed_sha256": "fc55e713ccbd685cd6c0defdd045332210d5f3a8621ba77a715a2295967d2e0b"
+    },
+    {
+      "logical_name": "lm_head",
+      "operation": "linear",
+      "shape": [
+        2048,
+        32000
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp16",
+      "size_bytes": 131072000,
+      "segment_index": 1,
+      "offset_bytes": 486629376,
+      "gpu_address": 2634113024,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 11615,
+      "roundtrip_max_abs_error": 2.9802322387695312e-08,
+      "checkpoint_key": "lm_head.weight",
+      "packed_sha256": "79e04d426f7520274a2f43bcc91c91847f513ac7dfef601d56000c7b2ea12bb0"
+    }
+  ],
+  "checkpoint_weights": true,
+  "device_execution": false,
+  "checkpoint_config_sha256": "486bedda3a6988332e60d9638a09ca4b260d34ebcf1b19e22cf3b140b63d8fe9",
+  "checkpoint_weight_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933",
+  "image_sha256": "cd512c04c5830961fc146f3b4faddf220f296ff667a92d3dd79e2a3297e0e199",
+  "roundtrip_changed_elements": 483339,
+  "roundtrip_max_abs_error": 2.9802322387695312e-08
+}

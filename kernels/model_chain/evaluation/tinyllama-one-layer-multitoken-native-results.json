@@ -1,0 +1,62 @@
+{
+  "model": "tinyllama",
+  "scope": "partial_checkpoint_generated_cpp_on_cpu",
+  "layers": 1,
+  "stage_count": 60,
+  "checked_float_stages": 60,
+  "checked_integer_stages": 0,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "input_token_ids": {
+    "decode0.token_ids": [
+      4
+    ],
+    "decode1.token_ids": [
+      5
+    ],
+    "prefill.token_ids": [
+      1,
+      2,
+      3
+    ]
+  },
+  "checkpoint_weight_format": "fp32",
+  "checkpoint_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933",
+  "weight_image_sha256": "fb5c1c0fc15589741686bb663cf0790e08c77e27d8da04d0ee0e78e6937b85f0",
+  "reference_output_sha256": "51a3a7b1cc286da0c33474bea571f7974d9083a9b8dfd69f96bae9d9b505e798",
+  "comparison_tolerance": {
+    "rtol": 0.005,
+    "atol": 0.0005
+  },
+  "status": "passed",
+  "process_exit_code": 0,
+  "failed_check_chunk": null,
+  "tohost": 0,
+  "host_threads": 4,
+  "native_binary_sha256": "cef21d77374895ca5fa3c7c1210b74934b48216bd43713e4a5be82e4f0fc4d11",
+  "native_main_sha256": "a82b15a91bbd9561015215e3fd697f38829f96bd42f3a58320a63b258b6697f6",
+  "device_elf_sha256": "c9bdbe0300ac70aec5e563df852665302708ce23c271e544361db7c639a7609c",
+  "device_source_files_sha256": {
+    "kernel.cpp": "5b32d88c0ab7fb1e29e7d8f6fc28c1943396f7f5b3296ad81510a38145045304",
+    "stage_chunk_000.cpp": "01f3f87424353ecc80364e4e0fca8629a44fe5cb5b284186d4d3a9a814d21daf",
+    "stage_chunk_001.cpp": "020b5110fd61db3eaf3f2207e1441b1b081798e7ad2ec9d2d6157a58b4e535df",
+    "stage_chunk_002.cpp": "f35fb6ccf7f96802719598277517020cb5b78ad3b3944a3e12d9508f43ae8e95",
+    "stage_chunk_003.cpp": "e9c5bfb0af90fc8717e99c9a70c582f1e1a3a642ee0003ce29ba8fdbfec55f4f",
+    "stage_chunk_004.cpp": "c18e097b8f00460eff9e47ae6d41460b4eb313d29eb99064c0f06595deef1a09",
+    "stage_chunk_005.cpp": "8b318331f495d91e6cc9566670444a618fc13a1f05f2c5de569a0777984be18f",
+    "model_data.cpp": "5540c1f47fbd8c18b7572c023423e0ec58ac5c08a92151f0f9057a39a7189bb8",
+    "verify_chunk_000.cpp": "6aa7a95dd32e04eec8278a9a1ce9ba68f58b2649bcf3abccac0e84388563d194",
+    "verify_chunk_001.cpp": "7a635187685bd35657901fd93c22b2957ee1e0083f01fe2efd3a52361637ddd5",
+    "verify_chunk_002.cpp": "989573c13057761fd1f5da21b2ca138f7308d087621bd49e70fa78fe58ffe60c",
+    "verify_chunk_003.cpp": "98da136d48efac8ce2a000d960c641dcbe6d97dcd433e8460882abb75a915553",
+    "verify_chunk_004.cpp": "7275a39df5140ecd3eaaf6fd48b7f8cabc14f30c03c7e84a877c633f8763d412",
+    "verify_chunk_005.cpp": "52f798e62232cd6200e4706d80f8378b3994edf6b260a57a6b67b6ac2b84febd"
+  },
+  "model_specs_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "log_sha256": "0644881be3bc8a625bfaa698cd08a41e868d67655702e4d96124bb84b8d67a78",
+  "log_path": "/scratch/agustin/projects/chipyard/radiance-kernels-firesim/kernels/model_chain/generated/checkpoint-one-layer-multitoken-upstream-elf/tinyllama/native-check/native.log",
+  "log_tail": "completed 60/60 stages\nstages=60 check_chunks=6 tohost=0\n",
+  "device_execution": false,
+  "rtl_execution": false,
+  "performance_measurement": false
+}

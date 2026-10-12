@@ -1,0 +1,19 @@
+{
+  "model": "gemma_2_2b_it",
+  "check": "pinned_sharded_checkpoint_graph_binding",
+  "passed": true,
+  "checkpoint_revision": "299a8560bedf22ed1c72a8a11e7dce4a7f9f51f8",
+  "config_sha256": "eacec6c5ca317a87ed2c46789d9705b9274db5027e7ba59da739bfae23addb55",
+  "checkpoint_files_sha256": {
+    "model-00001-of-00002.safetensors": "532d792c9178805064170a3ec485b7dedbfccc6fd297b92c31a6091b6c7e41bf",
+    "model-00002-of-00002.safetensors": "6d6d9ce84db398fb6e0191f91542e5da0a73da2cb695e172a24edc2146dc8d20",
+    "model.safetensors.index.json": "ada0043f3e3b2e5ab2f445cad9c0fbbf9d91ad444675e6a82b822591c63abf5a"
+  },
+  "graph_stages": 996,
+  "parameter_uses": 578,
+  "bound_checkpoint_tensors": 288,
+  "unbound_checkpoint_tensors": 0,
+  "lm_head_tied_to_embedding": true,
+  "numerical_execution": false,
+  "device_execution": false
+}

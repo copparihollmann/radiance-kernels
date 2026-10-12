@@ -1,0 +1,53 @@
+[
+  {
+    "model": "deepseek_r1_distill_qwen_1_5b",
+    "scope": "full_dimension_checkpoint_stage_probe",
+    "layers": 1,
+    "prefill_tokens": 1,
+    "decode_steps": 0,
+    "stage_count": 18,
+    "checked_float_stages": 18,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "failure_reason": null,
+    "cycles_functional": 19947650,
+    "tohost": 0,
+    "failed_stage_index_one_based": null,
+    "failed_element_index": null,
+    "process_exit_code": 0,
+    "device_elf_sha256": "6225b26b272b15d6a61022907b816af1eda7db4ae426d3dd9403fa04d7eefee4",
+    "generated_source_sha256": "512fc5ee9a299c04c5c54574d4191a1980049ca18b8e312f3367d9c93297a6ad",
+    "device_source_files_sha256": {
+      "kernel.cpp": "512fc5ee9a299c04c5c54574d4191a1980049ca18b8e312f3367d9c93297a6ad",
+      "stage_chunk_000.cpp": "38bfd24b01662006a1feda1dce1b8b2481c086656feafab095e3ec421095b449",
+      "stage_chunk_001.cpp": "91a16110e41af066023a86bb77cb12a0537f5053c1d98b3f8b8b46b70bd610bf",
+      "model_data.cpp": "554f057171f868e38aa1fbb15ef88f7bf4690d54ff71a612c3e946049ad6fa68",
+      "verify_chunk_000.cpp": "b72f20d97c7fb7b716551333dbf095e8536dad09691a0d10f8f1bee40f2792fc",
+      "verify_chunk_001.cpp": "5bc2c2640a0b06e685c8cace957f3b9c3e082cda080d2520de68f9d5628a95c4"
+    },
+    "device_optimization": "O3",
+    "stages_per_device_object": 10,
+    "portable_ops_sha256": "2bd82fcb2040b668124af27f827a32af0f5ce490f13c41037dba19e8ceacac93",
+    "numpy_reference_sha256": "0cb0ed80092ab9925a00fb44099b834671210e26fc7b0f5af3a40979f6371725",
+    "model_specs_sha256": "1e0627ce805ec815d32f0a002a0c6b769422ee97a00c420d25711801b111a469",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "c3e9b2ec266a8453819a4ee08797230017f0c7d4a7fb5232dad1aefdbde12d60",
+    "simulator_cycle_limit": 250000000,
+    "log_sha256": "8a9e6c1e8badd409401795b203c56fb9efce9e9c61c8598da981981fc2e87d58",
+    "checkpoint_weights": true,
+    "original_model_dimensions": true,
+    "upstream_execution_equivalent": false,
+    "checkpoint_sha256": "58858233513d76b8703e72eed6ce16807b523328188e13329257fb9594462945",
+    "weight_image_sha256": "7c2b163751d4c94a4b93f6bc8068f4c4654147fe14002c08cdef296165fd84d1",
+    "reference_output_sha256": "2ac6dbf8a69230d9baaad902c749f3eb37118c7968207a5ecaf7557a2e432f86",
+    "stage_limit": 18,
+    "native_check_tolerance": null,
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  }
+]

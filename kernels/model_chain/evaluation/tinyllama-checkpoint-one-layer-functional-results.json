@@ -1,0 +1,51 @@
+[
+  {
+    "model": "tinyllama",
+    "scope": "full_dimension_checkpoint_decoder",
+    "layers": 1,
+    "prefill_tokens": 1,
+    "decode_steps": 0,
+    "stage_count": 20,
+    "checked_float_stages": 20,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "failure_reason": null,
+    "cycles_functional": 64348772,
+    "tohost": 0,
+    "process_exit_code": 0,
+    "device_elf_sha256": "526ae4771ebb13f52842ff72f4b58af8d282a467a78143581e3babfffbe99a05",
+    "generated_source_sha256": "14f1f078e67ca25563494455664a7bc16dd96429337d54f84d78101a4c5eb741",
+    "device_source_files_sha256": {
+      "kernel.cpp": "14f1f078e67ca25563494455664a7bc16dd96429337d54f84d78101a4c5eb741",
+      "stage_chunk_000.cpp": "4de5c0e0d8efc790f96a0e5f093579cc98dd7f3842f60e6a92665e3ea37728db",
+      "stage_chunk_001.cpp": "177f98fcefb868d4262afddf49cf995dfa57c21a6241b51cc868e6b70156a8d4",
+      "model_data.cpp": "406f5490a44ec0bfd3f4a1f1e85169fb512033b7700bafb6bb695def5d09f8ad",
+      "verify_chunk_000.cpp": "26f152ed8b4ec3a96ca649b0a335d28a27e111eabe5e09b2758ea3c58b2a51d0",
+      "verify_chunk_001.cpp": "9e8fdef0e98e933b93244786e7a35bc6b16d8f8f14086e3783bd26e9bee33ded"
+    },
+    "device_optimization": "O3",
+    "stages_per_device_object": 10,
+    "portable_ops_sha256": "2bd82fcb2040b668124af27f827a32af0f5ce490f13c41037dba19e8ceacac93",
+    "numpy_reference_sha256": "0cb0ed80092ab9925a00fb44099b834671210e26fc7b0f5af3a40979f6371725",
+    "model_specs_sha256": "1e0627ce805ec815d32f0a002a0c6b769422ee97a00c420d25711801b111a469",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "c3e9b2ec266a8453819a4ee08797230017f0c7d4a7fb5232dad1aefdbde12d60",
+    "simulator_cycle_limit": 250000000,
+    "log_sha256": "d20b0aadb3d6be3f189c5e560c7cac83ac04ffdb221426dc532069c591ed9089",
+    "checkpoint_weights": true,
+    "original_model_dimensions": true,
+    "upstream_execution_equivalent": false,
+    "checkpoint_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933",
+    "weight_image_sha256": "fb5c1c0fc15589741686bb663cf0790e08c77e27d8da04d0ee0e78e6937b85f0",
+    "reference_output_sha256": "38b7c8290b7c8c4723a67e13c365b93abc2e5738139627346a1fdc41b8eb167a",
+    "stage_limit": null,
+    "native_check_tolerance": null,
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  }
+]

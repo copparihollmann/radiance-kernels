@@ -1,0 +1,20 @@
+{
+  "model": "tinyllama",
+  "prompt": "Hello",
+  "input_token_ids": [
+    1,
+    15043
+  ],
+  "generated_token_ids": [
+    29892,
+    2787
+  ],
+  "continuation_text": ", World",
+  "full_text": "<s> Hello, World",
+  "checkpoint_weight_format": "mixed_fp16",
+  "native_status": "passed",
+  "native_result": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/infer-hello/tinyllama/native-check/native-result.json",
+  "radiance_elf": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/infer-hello/tinyllama/kernel.radiance.elf",
+  "device_execution": false,
+  "performance_measurement": false
+}

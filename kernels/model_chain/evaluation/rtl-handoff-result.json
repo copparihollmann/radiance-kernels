@@ -1,0 +1,27 @@
+{
+  "case": "RMSNorm -> FP32 linear -> residual, M=3 K=16 N=16",
+  "scope": "synthetic_shared_buffer_handoff",
+  "simulation": "VCS RadianceSingleClusterFastConfig RTL",
+  "status": "passed",
+  "run_exit_code": 0,
+  "timeout_seconds": null,
+  "termination": null,
+  "tohost_failure_code": null,
+  "verification": "device checks normalization, projection, and residual; nonzero tohost asserts",
+  "simulation_time_ps_includes_host_boot": 114255000,
+  "device_cycles": null,
+  "elf_sha256": "47310588da386be189750e1edb07285c668647722a230eaf639bf2604937498a",
+  "simulator_sha256": "5c7c55c2a3697ae94c678bc3ceded3c3696683cf29111547f0b4bb602fe7cbf6",
+  "source_sha256": "b3e0835174ff6ac4ad4fca91a4a4ac361e8aa15fb187fa931ca0ac0c809e44f7",
+  "log_sha256": "bd75b2f0a524188ffda0b7ce508834dcfc7710ae11412781070c74661783069e",
+  "checkpoint_weights": false,
+  "full_model_execution": false,
+  "upstream_execution_equivalent": false,
+  "performance_measurement": false,
+  "checked_output_elements_per_stage": [
+    48,
+    48,
+    48
+  ],
+  "input_generator_sha256": "6368983031e734bdd25b9d5d3ec6b5eb24b22fbb657560ddc28486157c8487fd"
+}

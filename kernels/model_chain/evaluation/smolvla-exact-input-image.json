@@ -1,0 +1,146 @@
+{
+  "model": "smolvla_base",
+  "scope": "exact_upstream_policy_input_fixture",
+  "image_file": "inputs.bin",
+  "gpu_base_address": 536870912,
+  "image_size_bytes": 9444288,
+  "gpu_end_address_exclusive": 546315200,
+  "image_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea",
+  "parameters": [
+    {
+      "logical_name": "camera0.image",
+      "shape": [
+        1,
+        3,
+        512,
+        512
+      ],
+      "dtype": "float32",
+      "offset_bytes": 0,
+      "gpu_address": 536870912,
+      "size_bytes": 3145728,
+      "packed_sha256": "99944f971a4dee3faffc8c1af0f52cc593516725bef0609edc3750940786d440"
+    },
+    {
+      "logical_name": "camera0.valid",
+      "shape": [
+        1
+      ],
+      "dtype": "uint32",
+      "offset_bytes": 3145728,
+      "gpu_address": 540016640,
+      "size_bytes": 4,
+      "packed_sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450"
+    },
+    {
+      "logical_name": "camera1.image",
+      "shape": [
+        1,
+        3,
+        512,
+        512
+      ],
+      "dtype": "float32",
+      "offset_bytes": 3145792,
+      "gpu_address": 540016704,
+      "size_bytes": 3145728,
+      "packed_sha256": "1115cd6508d8e54e8fffa06ede7fa4d821303796c41a39bdb276914cfb7ab347"
+    },
+    {
+      "logical_name": "camera1.valid",
+      "shape": [
+        1
+      ],
+      "dtype": "uint32",
+      "offset_bytes": 6291520,
+      "gpu_address": 543162432,
+      "size_bytes": 4,
+      "packed_sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450"
+    },
+    {
+      "logical_name": "camera2.image",
+      "shape": [
+        1,
+        3,
+        512,
+        512
+      ],
+      "dtype": "float32",
+      "offset_bytes": 6291584,
+      "gpu_address": 543162496,
+      "size_bytes": 3145728,
+      "packed_sha256": "c577807b8f3c3c5e5de6947ce2371314586a46b7b9b50d63cc06c923f5ff6249"
+    },
+    {
+      "logical_name": "camera2.valid",
+      "shape": [
+        1
+      ],
+      "dtype": "uint32",
+      "offset_bytes": 9437312,
+      "gpu_address": 546308224,
+      "size_bytes": 4,
+      "packed_sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450"
+    },
+    {
+      "logical_name": "language.ids",
+      "shape": [
+        1,
+        48
+      ],
+      "dtype": "int32",
+      "offset_bytes": 9437376,
+      "gpu_address": 546308288,
+      "size_bytes": 192,
+      "packed_sha256": "aeb63db345168a2b73755639d5ef055da5834cb4aab10e68c64ae64903a85a71"
+    },
+    {
+      "logical_name": "language.valid",
+      "shape": [
+        1,
+        48
+      ],
+      "dtype": "uint32",
+      "offset_bytes": 9437568,
+      "gpu_address": 546308480,
+      "size_bytes": 192,
+      "packed_sha256": "70c4404b556709021e66d0be0af8d6f21c5f0dd12a2354ffe7cd2f10879a5d11"
+    },
+    {
+      "logical_name": "robot.state",
+      "shape": [
+        1,
+        32
+      ],
+      "dtype": "float32",
+      "offset_bytes": 9437760,
+      "gpu_address": 546308672,
+      "size_bytes": 128,
+      "packed_sha256": "80b6c6104fa7ff74dc3b2facea5496ded97a9c54bad49d827596e0f23d44ba54"
+    },
+    {
+      "logical_name": "action.noise",
+      "shape": [
+        1,
+        50,
+        32
+      ],
+      "dtype": "float32",
+      "offset_bytes": 9437888,
+      "gpu_address": 546308800,
+      "size_bytes": 6400,
+      "packed_sha256": "59d291261bc50174a35f67ab8064c4c91608789176e4d310fc4700786bde9a91"
+    }
+  ],
+  "source_input_sha256": {
+    "camera0": "99944f971a4dee3faffc8c1af0f52cc593516725bef0609edc3750940786d440",
+    "camera1": "1115cd6508d8e54e8fffa06ede7fa4d821303796c41a39bdb276914cfb7ab347",
+    "camera2": "c577807b8f3c3c5e5de6947ce2371314586a46b7b9b50d63cc06c923f5ff6249",
+    "language": "7fe787bb4624f1055bb825af35776ec814951fcf6fcc0ef913fe9259a307add2",
+    "state": "80b6c6104fa7ff74dc3b2facea5496ded97a9c54bad49d827596e0f23d44ba54",
+    "noise": "59d291261bc50174a35f67ab8064c4c91608789176e4d310fc4700786bde9a91"
+  },
+  "source_golden_output_sha256": "72510abe5e55c793c52138f159133af892bc117efe4413b914f319b8a9ea6c65",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "device_execution": false
+}

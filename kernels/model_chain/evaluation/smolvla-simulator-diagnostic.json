@@ -1,0 +1,45 @@
+{
+  "model": "smolvla_base",
+  "mapping": {
+    "scheduled_stages": 3673,
+    "scheduled_warps_per_stage": [
+      1
+    ],
+    "declared_warps": 1,
+    "scalar_linear_calls": 1492,
+    "scalar_linear_multiply_accumulates": 354131264512,
+    "by_family": {
+      "vision": {
+        "calls": 216,
+        "multiply_accumulates": 260919263232
+      },
+      "expert": {
+        "calls": 1120,
+        "multiply_accumulates": 52240384000
+      },
+      "other": {
+        "calls": 156,
+        "multiply_accumulates": 40971617280
+      }
+    },
+    "stage_sources_sha256": "68ac1415babf005a290d8c03e94f480ca48133108a13531228daaf088db34ec4"
+  },
+  "probe": {
+    "scope": "bounded_cyclotron_diagnostic_not_model_completion",
+    "cycle_cap": 4000000,
+    "status": "cycle_cap_reached",
+    "exit_code": 1,
+    "all_images_preloaded": true,
+    "wall_seconds_including_preload": 10.996622953098267,
+    "user_cpu_seconds": 9.136366,
+    "system_cpu_seconds": 1.848872,
+    "elf_sha256": "67c0a211cdb1c5bf81f88128ba03cb719e7990c1ea99bda445b49a1da0d38a6c",
+    "weight_image_sha256": "66173e02bf55e918c37cc0bd94406aeb0c50d0ee1e52f866e8e06f7b395e9501",
+    "input_image_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "d3a1f76f8ea86aa5bfba5870f579cad0f4bd3c995f6cd22039408c2c90ebb4d5",
+    "log_sha256": "153825109d163bea455b067dda7bf6ef516a3bf19f7486d966492a8167774cf4",
+    "full_model_output_checked": false,
+    "performance_measurement": false
+  }
+}

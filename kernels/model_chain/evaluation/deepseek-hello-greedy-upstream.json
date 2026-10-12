@@ -1,0 +1,36 @@
+{
+  "model": "deepseek_r1_distill_qwen_1_5b",
+  "source": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B/resolve/ad9f0ae0864d7fbcd1cd905e3c6c5b069cc8b562/config.json",
+  "config_sha256": "37bd455e9679d2959536270fed49d25cc7c290a64f6e52abb97c71345a9cee41",
+  "checkpoint_sha256": "58858233513d76b8703e72eed6ce16807b523328188e13329257fb9594462945",
+  "checkpoint_files_sha256": null,
+  "layers_checked": 28,
+  "prefill_tokens": 1,
+  "cached_decode_tokens": 2,
+  "input_token_ids": [
+    9707
+  ],
+  "generation": "greedy",
+  "stitched_generated_token_ids": [
+    22573,
+    4396
+  ],
+  "upstream_generated_token_ids": [
+    22573,
+    4396
+  ],
+  "comparison": "greedy_tokens_and_last_logits_vs_transformers_full_causal_pass",
+  "upstream_attention_implementation": "sdpa",
+  "maximum_absolute_error": 2.09808349609375e-05,
+  "mean_absolute_error": 3.1868846690485952e-06,
+  "embedding_maximum_absolute_error": 0.0,
+  "prefill_layer_hidden_maximum_absolute_error": 0.00018405914306640625,
+  "upstream_module_max_abs_error": {},
+  "rtol": 0.001,
+  "atol": 0.001,
+  "passed": true,
+  "device_execution": false,
+  "checkpoint_weights": true,
+  "bound_tensors": 339,
+  "missing_tensors": 0
+}

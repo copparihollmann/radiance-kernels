@@ -1,0 +1,28 @@
+{
+  "model": "smolvla_base",
+  "scope": "generated_stage_cpp_on_cpu",
+  "stage_count": 3673,
+  "host_threads": 8,
+  "status": "passed",
+  "process_exit_code": 0,
+  "upstream_golden_compared": true,
+  "golden_output_sha256": "8f0c08d72ef7102e39bd377252dfd5501554ee157de973ef56aee28b7f522eb9",
+  "golden_policy_precision": "checkpoint_weights_promoted_fp32",
+  "comparison_tolerance": {
+    "rtol": 0.001,
+    "atol": 0.001
+  },
+  "output_elements": 1600,
+  "failed_output_elements": 0,
+  "first_failed_element": 0,
+  "max_abs_error": 4.67896461e-06,
+  "native_binary_sha256": "df20d81f287b98b931d1af5d26215f9d694dde69bca668ea17b9ab6dbdad00a9",
+  "generated_source_sha256": "41f474b482c2561c3ac69abb12a1a4ebcd01c24a54d5d591f31fad959afa5be6",
+  "device_elf_sha256": "67c0a211cdb1c5bf81f88128ba03cb719e7990c1ea99bda445b49a1da0d38a6c",
+  "log_sha256": "f6ed1ef31725d8d7dc2af683cd73b6bdd05fef03b10a0fa62729aaa11d8e9e1c",
+  "log_path": "/scratch/agustin/projects/chipyard/radiance-kernels-firesim/kernels/model_chain/generated/checkpoint-smolvla-exact-golden-elf/smolvla_base/native-run-full.log",
+  "log_tail": "eted 1500/3673: denoise2.expert01.q_proj\ncompleted 1600/3673: denoise2.expert07.cross_attention_mask\ncompleted 1700/3673: denoise2.expert13.ffn_norm\ncompleted 1800/3673: denoise3.expert02.attn_residual\ncompleted 1900/3673: denoise3.expert08.activation\ncompleted 2000/3673: denoise3.expert15.q_proj\ncompleted 2100/3673: denoise4.expert04.q_rope\ncompleted 2200/3673: denoise4.expert10.k_append\ncompleted 2300/3673: denoise5.action_time_mlp_in_linear\ncompleted 2400/3673: denoise5.expert05.ffn_norm\ncompleted 2500/3673: denoise5.expert11.down_proj\ncompleted 2600/3673: denoise6.expert00.activation\ncompleted 2700/3673: denoise6.expert07.q_proj\ncompleted 2800/3673: denoise6.expert13.cross_attention_mask\ncompleted 2900/3673: denoise7.expert02.k_append\ncompleted 3000/3673: denoise7.expert08.attn_residual\ncompleted 3100/3673: denoise7.expert14.activation\ncompleted 3200/3673: denoise8.expert03.down_proj\ncompleted 3300/3673: denoise8.expert10.q_rope\ncompleted 3400/3673: denoise9.action_in\ncompleted 3500/3673: denoise9.expert05.cross_attention_mask\ncompleted 3600/3673: denoise9.expert11.ffn_norm\ncompleted 3673/3673: denoise9.euler\nactions=1600 failures=0 first_failure=0 max_abs_error=4.67896461e-06\n",
+  "rtl_execution": false,
+  "device_execution": false,
+  "performance_measurement": false
+}
