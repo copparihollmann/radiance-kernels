@@ -1,0 +1,5 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+materialized-chain-ordered,Verilator 5.022,passed,digest-checked,gather-scatter-chain,3,2,192,14134,0.0:769;0.1:619,0.0:0.054;0.1:0.045,0.013584,0.006792,,
+materialized-chain-ordered,Cyclotron timing model,passed,digest-checked,gather-scatter-chain,3,2,192,5890,,,0.032598,0.016299,,
+composed-ordered,Verilator 5.022,passed,digest-checked,gs,3,2,96,9649,0.0:484;0.1:357,0.0:0.050;0.1:0.040,0.009949,0.004975,,
+composed-ordered,Cyclotron timing model,passed,digest-checked,gs,3,2,96,4752,,,0.020202,0.010101,,

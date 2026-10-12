@@ -1,0 +1,3 @@
+run,kind,gpu_cycles,logical_payload_bytes,model_gmem_bytes_issued,model_gmem_transactions,model_gmem_bytes_per_cycle,model_lsu_global_loads_issued,model_lsu_global_stores_issued,l0_accesses,l0_hits,gmem_queue_full_rejects
+composed-gpu-stream-current,gs,1060936,4194304,10509568,163960,9.90594,65582,32804,163956,68157,7152971
+chain-gpu-stream-no-fence,gather-scatter-chain,3100336,8388608,17850624,278664,5.757642,81982,65572,278660,114664,20673492

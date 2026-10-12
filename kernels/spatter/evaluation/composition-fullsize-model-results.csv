@@ -1,0 +1,3 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+composed-gpu-stream-current,Cyclotron timing model,passed,digest-checked,gs,256,1024,4194304,1060936,,,3.9534,1.9767,,
+chain-gpu-stream-no-fence,Cyclotron timing model,passed,digest-checked,gather-scatter-chain,256,1024,8388608,3100336,,,2.705709,1.352855,,

@@ -1,0 +1,8 @@
+[
+  {"kernel":"Gather", "pattern":"UNIFORM:8:2:NR", "count":2},
+  {"kernel":"Scatter", "pattern":"UNIFORM:8:2:NR", "count":2},
+  {"kernel":"GS", "pattern-gather":"UNIFORM:8:2:NR", "pattern-scatter":"UNIFORM:8:3:NR", "count":2},
+  {"kernel":"MultiGather", "pattern":"UNIFORM:8:2:NR", "pattern-gather":"UNIFORM:8:1:NR", "count":2},
+  {"kernel":"MultiScatter", "pattern":"UNIFORM:8:2:NR", "pattern-scatter":"UNIFORM:8:1:NR", "count":2},
+  {"kernel":"Scatter", "pattern":[0,0,1,1], "count":1}
+]

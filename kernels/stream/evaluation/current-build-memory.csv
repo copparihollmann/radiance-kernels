@@ -1,0 +1,5 @@
+run,kind,gpu_cycles,logical_payload_bytes,model_gmem_bytes_issued,model_gmem_transactions,model_gmem_bytes_per_cycle,model_lsu_global_loads_issued,model_lsu_global_stores_issued,l0_accesses,l0_hits,gmem_queue_full_rejects
+copy-1048576,stream-copy,3987096,8388608,8412416,131192,2.109911,65582,65572,131188,24,17196735
+scale-1048576,stream-scale,4024544,8388608,8412416,131192,2.090278,65582,65572,131188,22,17037155
+add-1048576,stream-add,6346569,12582912,12606720,196728,1.986384,131118,65572,196724,24,16334984
+triad-1048576,stream-triad,6346349,12582912,12606720,196728,1.986452,131118,65572,196724,22,16360814

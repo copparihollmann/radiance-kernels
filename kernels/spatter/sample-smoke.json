@@ -1,0 +1,3 @@
+[
+  {"name":"sampled-gather-smoke","kernel":"Gather","pattern":"UNIFORM:1025:1","count":1,"wrap":1}
+]

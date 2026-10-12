@@ -1,0 +1,3 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+xrage9,Cyclotron timing model,exploratory,guards-and-nonzero-exploratory,scatter,6664304,1,106628864,99547352,,,1.071137,0.535569,,
+rebuild-xrage9,Cyclotron timing model,exploratory,guards-and-nonzero-exploratory,scatter,6664304,1,106628864,98895114,,,1.078202,0.539101,,

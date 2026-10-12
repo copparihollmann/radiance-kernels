@@ -11,6 +11,7 @@
 **/*.trace
 **/*.npy
 **/*.bak
+**/__pycache__/
 **/performance_logs/
 
 # clangd

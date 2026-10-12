@@ -1,0 +1,12 @@
+run,simulator,status,correctness,kind,pattern_length,count,logical_payload_bytes,gpu_cycles,core_instructions,core_ipc,payload_bytes_per_cycle,spatter_one_sided_bytes_per_cycle,payload_gbps,spatter_one_sided_gbps
+rebuild-gpu-stream-0,Cyclotron timing model,passed,digest-checked,gather,256,1024,4194304,1998857,,,2.098351,1.049176,,
+rebuild-gpu-stream-1,Cyclotron timing model,passed,digest-checked,scatter,256,1024,4194304,1040016,,,4.032923,2.016461,,
+rebuild-gpu-stream-2,Cyclotron timing model,passed,digest-checked,gs,256,1024,4194304,2038053,,,2.057996,1.028998,,
+rebuild-gpu-stream-3,Cyclotron timing model,passed,digest-checked,multiscatter,256,1024,4194304,1046089,,,4.00951,2.004755,,
+rebuild-gpu-stream-4,Cyclotron timing model,passed,digest-checked,multigather,256,1024,4194304,1999593,,,2.097579,1.048789,,
+xrage5,Cyclotron timing model,passed,digest-checked,gather,8368968,1,133903488,100529234,,,1.331986,0.665993,,
+rebuild-xrage9,Cyclotron timing model,exploratory,guards-and-nonzero-exploratory,scatter,6664304,1,106628864,98895114,,,1.078202,0.539101,,
+xrage9-ordered,Cyclotron timing model,passed,digest-checked,scatter,6664304,1,106628864,96235005,,,1.108005,0.554002,,
+lulesh-gather,Cyclotron timing model,passed,digest-checked,gather,16,231198,59186688,74419767,,,0.795309,0.397654,,
+lulesh-scatter-ordered,Cyclotron timing model,passed,digest-checked,scatter,16,128002,32768512,74611507,,,0.439188,0.219594,,
+amg-gpu-scaled-1024,Cyclotron timing model,passed,digest-checked,gather,256,1024,4194304,1156957,,,3.625289,1.812645,,

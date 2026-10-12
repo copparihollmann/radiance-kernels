@@ -1,0 +1,37 @@
+{
+  "suite": "chunk-smoke.json",
+  "suite_sha256": "91b9d2fc47426f49ac6ebb063a788415d2b19db735e24134f672baa49af48591",
+  "case": 0,
+  "kind": "gather",
+  "wrap": 1,
+  "pattern_length": 3,
+  "delta": 3,
+  "original_count": 5,
+  "original_source_elements": 17,
+  "original_source_bytes": 136,
+  "logical_payload_bytes": 240,
+  "expected_full_digest": "ccf6545c128b8c14",
+  "chunk_count": 2,
+  "chunks": [
+    {
+      "iteration_start": 0,
+      "count": 3,
+      "iteration_end_exclusive": 3,
+      "source_index_base": 0,
+      "source_elements": 11,
+      "source_bytes": 88,
+      "logical_payload_bytes": 144,
+      "expected_digest": "d57e7ef7d8db33fc"
+    },
+    {
+      "iteration_start": 3,
+      "count": 2,
+      "iteration_end_exclusive": 5,
+      "source_index_base": 9,
+      "source_elements": 8,
+      "source_bytes": 64,
+      "logical_payload_bytes": 96,
+      "expected_digest": "ccf6545c128b8c14"
+    }
+  ]
+}

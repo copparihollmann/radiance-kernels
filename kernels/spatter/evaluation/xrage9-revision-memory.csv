@@ -1,0 +1,3 @@
+run,kind,gpu_cycles,logical_payload_bytes,model_gmem_bytes_issued,model_gmem_transactions,model_gmem_bytes_per_cycle,l0_accesses,l0_hits,gmem_queue_full_rejects
+xrage9,scatter,99547352,106628864,389316672,6082821,3.910869,6082817,833015,1502591710
+rebuild-xrage9,scatter,98895114,106628864,389316672,6082821,3.936662,6082817,833007,1446421635
