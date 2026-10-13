@@ -121,6 +121,20 @@ class PackageFireSimTest(unittest.TestCase):
         self.assertEqual(verify_package(hashed.with_suffix(".elf.json"))[
             "hashed_images_present"], 1)
 
+    def test_hashed_layout_can_package_a_device_only_smoke_elf(self):
+        contents = bytearray(self.elf.read_bytes())
+        struct.pack_into("<H", contents, 0x38, 2)
+        struct.pack_into("<IIQQQQQQ", contents, 120, 1, 5, 8192,
+                         0x100002000, 0x100002000, 64, 64, 4096)
+        contents.extend(b"\0" * (8192 - len(contents)))
+        contents.extend(bytes(range(64)))
+        self.elf.write_bytes(contents)
+        result = package_hashed(self.elf, [], self.output, 0x40000, 32, 4)
+        self.assertEqual(result["images"], [])
+        self.assertEqual(len(result["source_gpu_segments"]), 1)
+        self.assertEqual(verify_package(
+            self.output.with_suffix(".elf.json"))["embedded_images_verified"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -279,8 +279,6 @@ def package_hashed(elf, image_manifests, output, hash_size, unit, slices,
     folds = hash_folds(hash_size, unit, slices)
     header, _, existing = read_elf(elf)
     entries = collect_entries(image_manifests, receipts)
-    if not entries:
-        raise ValueError("at least one image is required")
     check_placement(existing, entries)
     hash_end = GPU_HOST_ALIAS + hash_size
     hashed_source = []
@@ -530,8 +528,10 @@ def main():
             parser.error("--verify cannot be combined with packaging arguments")
         result = verify_package(args.verify)
     else:
-        if not args.elf or not (args.image or args.receipt) or not args.output:
-            parser.error("--elf, --output, and --image or --receipt are required")
+        if not args.elf or not args.output:
+            parser.error("--elf and --output are required")
+        if not (args.image or args.receipt or args.hash_size):
+            parser.error("--image or --receipt is required without --hash-size")
         if args.hash_size:
             result = package_hashed(args.elf, args.image or (), args.output,
                                     args.hash_size, args.hash_unit,

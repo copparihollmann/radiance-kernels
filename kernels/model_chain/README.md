@@ -213,6 +213,8 @@ embedded checkpoint bytes using `--receipt /path/to/tinyllama.soc.elf.json`
 instead of `--image`. Keep that receipt beside its `.elf` file. The packer
 checks the donor ELF, each recorded load segment, and each embedded image hash
 before creating the HBM ELF; it needs no second copy of the weight files.
+Hash mode also accepts a device-only SoC ELF without `--image` or `--receipt`,
+which lets the nightly smoke check use the same target memory map.
 `build_firesim_targets.py` applies the packer to selected models in a portable
 handoff directory, checks that the declared hash range covers their highest
 checkpoint addresses, verifies each output, and writes `target-bundle.json`.
