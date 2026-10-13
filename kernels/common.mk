@@ -67,7 +67,8 @@ ifneq ($(MU_STACK_WORD_STRIDE),1)
 MU_CFLAGS += -mllvm -riscv-stack-word-stride=$(MU_STACK_WORD_STRIDE)
 endif
 
-MU_LDFLAGS += -nodefaultlibs -nostartfiles -Wl,-Bstatic,-T,$(RADIANCE_LIB_PATH)/linker/mu_link.ld,-z,norelro -fuse-ld=lld
+MU_LINKER_SCRIPT ?= $(RADIANCE_LIB_PATH)/linker/mu_link.ld
+MU_LDFLAGS += -nodefaultlibs -nostartfiles -Wl,-Bstatic,-T,$(MU_LINKER_SCRIPT),-z,norelro -fuse-ld=lld
 # RAD_TAPEOUT=1 links the TAPEOUT runtime: mu_schedule ends in rad_tapeout_epilogue() instead of
 # letting a core assert `finished`.  On the taped-out part the finish edge fires the L0d flush unit
 # (MuonTile.scala:371-374), which wedges the L0d, and at occupancy >= 2 `finished` never asserts at

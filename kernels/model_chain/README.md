@@ -160,7 +160,8 @@ Radiance device program, but its checkpoint weights remain in separate GPU
 memory images. Loading that ELF alone would leave the model parameters
 uninitialized. `package_firesim.py` adds each checked image as a `PT_LOAD`
 segment at its CPU-visible GPU DRAM alias, so a single ELF can be staged by a
-FireSim workload. SmolVLA also needs its exact input image. For example:
+FireSim workload. SmolVLA also needs its exact input image. For example, on
+an unhashed memory system:
 
 ```sh
 python3 kernels/model_chain/package_firesim.py \
@@ -176,11 +177,48 @@ addresses, and SHA-256 of every embedded image. Verification rehashes the ELF
 and each embedded byte range. The model prompt, generated token checks, and
 SmolVLA action checks are fixed at compile time; these files are reproducible
 workload fixtures, not interactive inference servers. The packer does not
-change the instruction stream. Its load placement assumes the FireSim ELF
-loader writes CPU-visible GPU DRAM aliases through the address map used by the
-kernel. A target using direct physical LoadMem with a hashed GPU address map
-may require a target-specific image layout. Check the bitstream's memory size,
-address map, load path, and completion protocol before interpreting a run.
+change the instruction stream.
+
+For the nightly HBM launch and completion protocol, adapt an existing generated
+source bundle with `prepare_hbm.py`. It copies all scheduled stage sources and
+changes only the launch, completion, and verification reporting paths. The
+resulting SoC ELF still needs the checkpoint images:
+
+```sh
+python3 kernels/model_chain/prepare_hbm.py \
+  --source /path/to/generated/tinyllama --out /path/to/hbm/tinyllama --build
+```
+
+For a target that directly loads a hashed GPU DRAM region, pass the **exact**
+RTL hash size, unit, and slice count. The hash-aware mode scatters both device
+program bytes and checkpoint bytes into one physical hash region. Verification
+reconstructs each logical source region from the output ELF and compares its
+SHA-256 with the original. If the bitstream confirms a 4 GiB GPU hash range
+with 32-byte units and four slices, the packaging command is:
+
+```sh
+python3 kernels/model_chain/package_firesim.py \
+  --elf /path/to/hbm/tinyllama/kernel.soc.elf \
+  --image /path/to/tinyllama/weights-image.json \
+  --hash-size 0x100000000 --hash-unit 32 --hash-slices 4 \
+  --output /path/to/handoff/tinyllama-hbm.soc.elf
+python3 kernels/model_chain/package_firesim.py \
+  --verify /path/to/handoff/tinyllama-hbm.soc.elf.json
+```
+
+When transferring an earlier logical handoff ELF, the HBM packer can read its
+embedded checkpoint bytes using `--receipt /path/to/tinyllama.soc.elf.json`
+instead of `--image`. Keep that receipt beside its `.elf` file. The packer
+checks the donor ELF, each recorded load segment, and each embedded image hash
+before creating the HBM ELF; it needs no second copy of the weight files.
+
+This 4 GiB layout is an example, not a verified configuration for the XB10
+images. The repository's documented standard `RadianceHBMConfig` hashes only
+2 GiB; the four complete checkpoint images end at GPU addresses
+`0xa4d16000` (TinyLlama), `0xf5170000` (DeepSeek/Qwen), `0xe0c9ec00`
+(Gemma), and `0x914c6680` (SmolVLA). The packer refuses an image beyond the
+declared hash range. Confirm the target bitstream's memory size, hash
+parameters, LoadMem path, and number of cores per cluster before packaging.
 Packaging and host checks alone do not establish FPGA correctness or timing.
 
 ### Full-depth checkpoint builds

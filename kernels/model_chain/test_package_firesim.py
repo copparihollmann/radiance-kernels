@@ -8,7 +8,8 @@ import struct
 import tempfile
 import unittest
 
-from package_firesim import package, verify_package
+from package_firesim import package, package_hashed, read_elf, verify_package
+from soc.scramble_gpu_elf import AddressHash
 
 
 class PackageFireSimTest(unittest.TestCase):
@@ -59,6 +60,62 @@ class PackageFireSimTest(unittest.TestCase):
         self.image.write_bytes(b"!" * 64)
         with self.assertRaisesRegex(ValueError, "SHA-256 differs"):
             package(self.elf, [self.manifest], self.output)
+
+    def test_hashed_layout_contains_image_and_device_code(self):
+        contents = bytearray(self.elf.read_bytes())
+        struct.pack_into("<H", contents, 0x38, 2)
+        struct.pack_into("<IIQQQQQQ", contents, 120, 1, 5, 8192,
+                         0x100002000, 0x100002000, 64, 128, 4096)
+        contents.extend(b"\0" * (8192 - len(contents)))
+        code = bytes(range(64, 128))
+        contents.extend(code)
+        self.elf.write_bytes(contents)
+        self.image.write_bytes(bytes(range(256)))
+        image_manifest = json.loads(self.manifest.read_text())
+        image_manifest["gpu_base_address"] = 0x1000
+        image_manifest["image_size_bytes"] = self.image.stat().st_size
+        image_manifest["image_sha256"] = hashlib.sha256(
+            self.image.read_bytes()).hexdigest()
+        self.manifest.write_text(json.dumps(image_manifest))
+        result = package_hashed(self.elf, [self.manifest], self.output,
+                                0x4000, 32, 4)
+        self.assertEqual(result["load_method"],
+                         "direct LoadMem, physically hashed GPU region")
+        self.assertEqual(verify_package(
+            self.output.with_suffix(".elf.json"))["hashed_images_present"], 1)
+        _, _, segments = read_elf(self.output)
+        self.assertEqual(sum(seg[0] == 1 for seg in segments), 2)
+        address_hash = AddressHash(0, 0x4000, 32, 4)
+        with self.output.open("rb") as source:
+            physical_base = result["hash_layout"]["file_offset"]
+            for gpu_address, data in ((0x1000, self.image.read_bytes()),
+                                      (0x2000, code)):
+                for offset, expected in enumerate(data):
+                    source.seek(physical_base +
+                                address_hash.forward(gpu_address + offset))
+                    self.assertEqual(source.read(1), bytes((expected,)))
+            source.seek(physical_base + 0x3000)
+            self.assertEqual(source.read(32), b"\0" * 32)
+
+    def test_hashed_layout_rejects_image_past_capacity(self):
+        image_manifest = json.loads(self.manifest.read_text())
+        image_manifest["gpu_base_address"] = 0x4000
+        self.manifest.write_text(json.dumps(image_manifest))
+        with self.assertRaisesRegex(ValueError, "exceed the configured hashed GPU memory"):
+            package_hashed(self.elf, [self.manifest], self.output,
+                           0x4000, 32, 4)
+
+    def test_hashed_layout_can_reuse_portable_handoff_receipt(self):
+        image_manifest = json.loads(self.manifest.read_text())
+        image_manifest["gpu_base_address"] = 0x1000
+        self.manifest.write_text(json.dumps(image_manifest))
+        package(self.elf, [self.manifest], self.output)
+        receipt = self.output.with_suffix(".elf.json")
+        hashed = self.root / "hashed.elf"
+        package_hashed(self.elf, [], hashed, 0x4000, 32, 4,
+                       receipts=[receipt])
+        self.assertEqual(verify_package(hashed.with_suffix(".elf.json"))[
+            "hashed_images_present"], 1)
 
 
 if __name__ == "__main__":
