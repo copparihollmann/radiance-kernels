@@ -228,6 +228,11 @@ images. The repository's documented standard `RadianceHBMConfig` hashes only
 declared hash range. Confirm the target bitstream's memory size, hash
 parameters, LoadMem path, and number of cores per cluster before packaging.
 Packaging and host checks alone do not establish FPGA correctness or timing.
+The model HBM adapter reads both halves of Radiance's `mcycle` CSR and posts
+64-bit start/end stamps through printBuf. Its host reports `kernel_cycles64`;
+the standard nightly `kernel_cycles` field is 32-bit and should not be used
+for these long model chains. This depends on the target image implementing
+the `mcycleh` CSR present in the current Radiance source.
 
 ### Full-depth checkpoint builds
 

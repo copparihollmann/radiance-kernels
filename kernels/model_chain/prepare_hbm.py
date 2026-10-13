@@ -88,6 +88,7 @@ def prepare(source_dir, output_dir):
         shutil.copy2(source_dir / name, output_dir / name)
     shutil.copy2(HERE / "host_hbm.cpp", output_dir / "host.cpp")
     shutil.copy2(HERE / "model_hbm_bridge.h", output_dir / "model_hbm_bridge.h")
+    shutil.copy2(HERE / "model_hbm_pb.h", output_dir / "model_hbm_pb.h")
     transformed, changes = transform_kernel((output_dir / "kernel.cpp").read_text())
     (output_dir / "kernel.cpp").write_text(transformed)
     verifier_count = 0

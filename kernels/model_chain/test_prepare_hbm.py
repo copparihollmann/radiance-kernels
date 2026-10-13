@@ -49,6 +49,9 @@ class PrepareHbmTest(unittest.TestCase):
         self.assertIn("model_hbm_status(3)",
                       (target / "verify_chunk_000.cpp").read_text())
         self.assertIn("mu_link_nightly.ld", (target / "Makefile").read_text())
+        self.assertIn("mcycleh", (target / "model_hbm_bridge.h").read_text())
+        self.assertIn("MODEL_HBM_PB_END_HIGH", (target / "model_hbm_pb.h").read_text())
+        self.assertIn("kernel_cycles64=", (target / "host.cpp").read_text())
         manifest = json.loads((target / "manifest.json").read_text())
         self.assertEqual(manifest["source_device_elf_sha256"], "old-device-hash")
         self.assertEqual(manifest["hbm_transform"]["scheduled_calls"], 1)
