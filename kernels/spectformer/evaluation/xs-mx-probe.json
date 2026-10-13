@@ -1,0 +1,23 @@
+{
+  "scope": "spectformer_block4_attention_projection_16x16x32_partial_tile",
+  "model": "spectformer_vanilla",
+  "upstream_source_sha256": "611aee409308e898d23fcbb1c75de3a0c5fafc205df74c6250e49bfe2ac53250",
+  "image_sha256": "7eaa9b7ae5ab05a77aeb3269a5e94fb717fecb65bc923f38209328cd89bd54c1",
+  "checkpoint_sha256": null,
+  "weight_provenance": "upstream_random_initialization",
+  "format": "mx_fp8_e4m3_e8m0_bounded_per_row_column_scales_bf16_output",
+  "operand_sha256": {
+    "A.bin": "f5dc8aa6d1e46eecb345bbc30a3159dacf5bfa00f97484f317b469d890b2ed75",
+    "B.bin": "b5bcb40ce7b65b18984904fcca03863056eae663cbc2832bdb15be73bdc39c31",
+    "SA.bin": "87dcde7fa6df23e15fa7ba9b2a1f31408eac832f4e615ea815ae92024e3d818b",
+    "SB.bin": "e01cadf794de2b1a3b8647b65c90ad3ad46c145db2ab39e96fff25eb4a8f2a6d"
+  },
+  "model_output_sha256": "f4796a8331788314066c9bcfcf634f82a76f2ad1653230ba1759693299c1fc17",
+  "mx_model_sha256": "155d74d7be11cb951cac180af2515322e03c234a9f99600ec59e7b84d7e0b065",
+  "max_abs_error_vs_fp32_partial_projection": 0.0064743682742118835,
+  "rms_error_vs_fp32_partial_projection": 0.0023668971844017506,
+  "max_abs_error_vs_ideal_fp8_matmul": 0.003604888916015625,
+  "spike_execution": false,
+  "radiance_device_execution": false,
+  "performance_measurement": false
+}

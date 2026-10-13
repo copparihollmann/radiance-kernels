@@ -1,0 +1,17 @@
+{
+  "model": "spectformer_vanilla",
+  "image_size": 224,
+  "embed_dim": 384,
+  "depth": 19,
+  "num_classes": 1000,
+  "stages": 198,
+  "arena_bytes": 3729344,
+  "weight_provenance": "upstream_random_initialization",
+  "upstream_source_sha256": "611aee409308e898d23fcbb1c75de3a0c5fafc205df74c6250e49bfe2ac53250",
+  "image_sha256": "6ccd51497e342d4b40d4723f5dee8ac422673c9ecc76683bade51ebaa70259ba",
+  "radiance_elf_sha256": "35842de427909ec2640c335cae21d114a889ef4ad2d646164bec3a8e4c0877a3",
+  "soc_elf_sha256": "10b0ca8fc99db3b0c374a0c0457ec412ca3e82632a2129e4c070744fb233e633",
+  "device_elf_built": true,
+  "logit_rtol": 0.005,
+  "logit_atol": 0.001
+}

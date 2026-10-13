@@ -1,0 +1,36 @@
+{
+  "model": "spectformer_vanilla",
+  "shape": [
+    3,
+    32,
+    32
+  ],
+  "depth": 12,
+  "embed_dim": 24,
+  "weight_provenance": "upstream_random_initialization",
+  "input_provenance": "torch.linspace(-1,1)",
+  "stage_count": 128,
+  "status": "passed",
+  "failure_reason": null,
+  "cycles_functional": 1039544,
+  "tohost": 0,
+  "failed_logit_index": null,
+  "logit_comparison": {
+    "all_finite": true,
+    "max_abs_error": 0.0008427053689956665,
+    "rms_error": 0.00040270107409273975,
+    "top1_agrees": true,
+    "logits_dump_sha256": "a722c91666b42e162fd20c1cf9581fdbc9a1cbf8776cee2bb3fb570f69b466fa"
+  },
+  "logit_rtol": 0.005,
+  "logit_atol": 0.001,
+  "validated_against": "upstream SpectFormer.eval() FP32 CPU",
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "device_elf_sha256": "0d204e10585590fe4dd2d32a1f8ee987fdad66f566df2558963c76e91bfb959d",
+  "image_sha256": "5f846f3f286094a5f39459e78531a1016f5b541a7d15d7a3e8e4b2eace485978",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+  "log_sha256": "ac863cd1472e6c19e1b6a88dc0ed5a0265244e611d322b891434487e5c3a24f2",
+  "process_exit_code": 0
+}

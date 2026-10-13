@@ -1,0 +1,16 @@
+{
+  "model": "spectformer_vanilla",
+  "status": "passed",
+  "host_generated_source_execution": true,
+  "device_execution": false,
+  "performance_measurement": false,
+  "weight_provenance": "upstream_random_initialization",
+  "input_provenance": "torch.linspace(-1,1)",
+  "stage_count": 128,
+  "image_sha256": "7eaa9b7ae5ab05a77aeb3269a5e94fb717fecb65bc923f38209328cd89bd54c1",
+  "max_abs_logit_error": 8.9407e-07,
+  "native_binary_sha256": "82721e8108d6996de5c9a72fabd1c34d172b1891bcfe4c0516785ee788acd475",
+  "log_sha256": "6e40e717a256ee58e60d9fe8ba10e09e4ab144bfbad08e6039916cfc8fb6c87a",
+  "exit_code": 0,
+  "output": "tohost=0 max_abs_error=8.9407e-07\n"
+}

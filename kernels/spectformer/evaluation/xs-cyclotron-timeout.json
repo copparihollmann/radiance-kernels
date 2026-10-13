@@ -1,0 +1,26 @@
+{
+  "model": "spectformer_vanilla",
+  "shape": [
+    3,
+    224,
+    224
+  ],
+  "depth": 12,
+  "embed_dim": 384,
+  "weight_provenance": "upstream_random_initialization",
+  "stage_count": 128,
+  "status": "failed",
+  "failure_reason": "wall_clock_timeout",
+  "cycles_functional": null,
+  "tohost": null,
+  "failed_logit_index": null,
+  "validated_against": "upstream SpectFormer.eval() FP32 CPU",
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "device_elf_sha256": "54b1a345cbf784c6ee66a5c0c786569bf4f2c826f0f7c042497f5a97d5045323",
+  "image_sha256": "7eaa9b7ae5ab05a77aeb3269a5e94fb717fecb65bc923f38209328cd89bd54c1",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "14c425c441bfceb6b8602b5862787f955bc06ec1298712456c9074d628fe1339",
+  "log_sha256": "a42d088589ef2697aedf4f708f56c33c7b7bb8197821fe54715770f2a21fdd92",
+  "process_exit_code": 124
+}
