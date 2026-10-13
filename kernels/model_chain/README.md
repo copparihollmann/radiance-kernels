@@ -153,6 +153,36 @@ of the new token handoff, but it is not a full-depth greedy device result.
 The three full-depth greedy runs above are host executions of the generated
 stage sources; none provides Radiance latency or throughput.
 
+### FireSim handoff for checkpoint ELFs
+
+The SoC ELF produced by `infer_decoder.py` contains the host program and the
+Radiance device program, but its checkpoint weights remain in separate GPU
+memory images. Loading that ELF alone would leave the model parameters
+uninitialized. `package_firesim.py` adds each checked image as a `PT_LOAD`
+segment at its CPU-visible GPU DRAM alias, so a single ELF can be staged by a
+FireSim workload. SmolVLA also needs its exact input image. For example:
+
+```sh
+python3 kernels/model_chain/package_firesim.py \
+  --elf /path/to/tinyllama/kernel.soc.elf \
+  --image /path/to/tinyllama/weights-image.json \
+  --output /path/to/handoff/tinyllama.soc.elf
+python3 kernels/model_chain/package_firesim.py \
+  --verify /path/to/handoff/tinyllama.soc.elf.json
+```
+
+The `.elf.json` receipt records the source ELF hash, output ELF hash, GPU
+addresses, and SHA-256 of every embedded image. Verification rehashes the ELF
+and each embedded byte range. The model prompt, generated token checks, and
+SmolVLA action checks are fixed at compile time; these files are reproducible
+workload fixtures, not interactive inference servers. The packer does not
+change the instruction stream. Its load placement assumes the FireSim ELF
+loader writes CPU-visible GPU DRAM aliases through the address map used by the
+kernel. A target using direct physical LoadMem with a hashed GPU address map
+may require a target-specific image layout. Check the bitstream's memory size,
+address map, load path, and completion protocol before interpreting a run.
+Packaging and host checks alone do not establish FPGA correctness or timing.
+
 ### Full-depth checkpoint builds
 
 `export_decoder_fp16.py` stores linear and embedding weights as IEEE FP16,
