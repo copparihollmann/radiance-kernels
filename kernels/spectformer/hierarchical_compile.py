@@ -33,10 +33,13 @@ def align64(value: int) -> int:
 
 
 def generate(image_manifest: Path, out: Path, runtime_input: bool = True,
-             logit_rtol: float = 5e-3, logit_atol: float = 1e-3) -> Path:
+             logit_rtol: float = 5e-3, logit_atol: float = 1e-3,
+             stop_after_stem: bool = False) -> Path:
     image = json.loads(image_manifest.read_text())
     if image["format"] != "spectformer.hierarchical.fp32.v1":
         raise ValueError("wrong image format")
+    if stop_after_stem and not runtime_input:
+        raise ValueError("a prefix build requires runtime input and an external reference")
     if not (math.isfinite(logit_rtol) and math.isfinite(logit_atol) and
             logit_rtol >= 0 and logit_atol >= 0):
         raise ValueError("invalid tolerance")
@@ -244,6 +247,15 @@ def generate(image_manifest: Path, out: Path, runtime_input: bool = True,
             trace_points.append({"name": prefix, "stage_index": index,
                                  "offset": offsets["tokens"], "count": h * h * d})
 
+    if stop_after_stem:
+        if stages[7]["name"] != "stem.norm":
+            raise AssertionError("hierarchical stem no longer ends at stage eight")
+        stages = stages[:8]
+        trace_points = []
+    output_offset = offsets["tokens"] if stop_after_stem else offsets["logits"]
+    output_count = 56 * 56 * dims[0] if stop_after_stem else 1000
+    output_kind = "hierarchical_stem" if stop_after_stem else "logits"
+
     out.mkdir(parents=True, exist_ok=True)
     def float_array(name: str, values: np.ndarray) -> str:
         data = ", ".join(literal(x) for x in values.ravel())
@@ -348,7 +360,7 @@ VERIFY_BLOCK
         "STAGE_CAPACITY": (len(stages) + 7) // 8 * 8,
         "STAGE_RECORDS": records, "STAGE_COUNT": len(stages),
         "SCRATCH_OFFSET": offsets["attention_scratch"],
-        "LOGITS_OFFSET": offsets["logits"],
+        "LOGITS_OFFSET": output_offset,
         "VERIFY_BLOCK": verify,
         "TRACE_BLOCK": trace_block,
         "GOLDEN_ADDRESS": f"0x{addr('output.logits'):08x}u",
@@ -380,6 +392,8 @@ VERIFY_BLOCK
         "stages": len(stages), "stage_names": [stage["name"] for stage in stages],
         "trace_points": trace_points,
         "arena_bytes": arena_bytes, "logits_offset": offsets["logits"],
+        "output_offset": output_offset, "output_count": output_count,
+        "output_kind": output_kind, "stop_after_stem": stop_after_stem,
         "weight_provenance": image["weight_provenance"],
         "device_elf_built": False, "device_execution": False,
         "performance_measurement": False,
@@ -396,9 +410,12 @@ def main() -> None:
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--fixture-check", action="store_true",
                         help="embed the exported golden in the device pass/fail check")
+    parser.add_argument("--stop-after-stem", action="store_true",
+                        help="device probe of the full-size convolutional stem output")
     args = parser.parse_args()
     target = generate(args.image_manifest, args.out,
-                      runtime_input=not args.fixture_check)
+                      runtime_input=not args.fixture_check,
+                      stop_after_stem=args.stop_after_stem)
     if args.build:
         build_device(target)
     print(target)

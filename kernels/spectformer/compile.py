@@ -30,13 +30,19 @@ def align64(value: int) -> int:
 
 def generate(image_manifest: Path, out: Path,
              logit_rtol: float = 5e-3, logit_atol: float = 1e-3,
-             runtime_input: bool = False) -> Path:
+             runtime_input: bool = False,
+             stop_after_patch: bool = False,
+             stop_after_block: int | None = None) -> Path:
     manifest = json.loads(image_manifest.read_text())
     if not (math.isfinite(logit_rtol) and math.isfinite(logit_atol) and
             logit_rtol >= 0 and logit_atol >= 0):
         raise ValueError("logit tolerances must be finite and nonnegative")
     if manifest["format"] != "spectformer.vanilla.fp32.v1":
         raise ValueError("unsupported image format")
+    if (stop_after_patch or stop_after_block is not None) and not runtime_input:
+        raise ValueError("a prefix build requires runtime input and an external reference")
+    if stop_after_patch and stop_after_block is not None:
+        raise ValueError("choose one prefix endpoint")
     image_path = image_manifest.parent / "image.bin"
     if sha256(image_path) != manifest["image_sha256"]:
         raise ValueError("image hash differs from manifest")
@@ -56,6 +62,8 @@ def generate(image_manifest: Path, out: Path,
         raise ValueError("source schedule differs from the checked vanilla graph")
     if manifest["depth"] < 5 or h * 16 != manifest["image_size"]:
         raise ValueError("invalid SpectFormer dimensions")
+    if stop_after_block is not None and not 0 <= stop_after_block < manifest["depth"]:
+        raise ValueError("block index is outside the upstream graph")
 
     # These named buffers are reused across blocks. Each stage has its own
     # read/write contract; the residual lives in tokens throughout the graph.
@@ -150,6 +158,22 @@ def generate(image_manifest: Path, out: Path,
                     for index, stage in enumerate(stages)
                     if stage["name"].startswith("blocks.") and
                     stage["name"].endswith(".mlp_residual")]
+    if stop_after_patch:
+        stages = stages[:1]
+        trace_points = []
+    elif stop_after_block is not None:
+        endpoint = f"blocks.{stop_after_block}.mlp_residual"
+        last_index = next(i for i, stage in enumerate(stages)
+                          if stage["name"] == endpoint)
+        stages = stages[:last_index + 1]
+        trace_points = [point for point in trace_points
+                        if point["stage_index"] <= last_index]
+    prefix = stop_after_patch or stop_after_block is not None
+    output_offset = offsets["tokens"] if prefix else offsets["logits"]
+    output_count = n * d if prefix else manifest["num_classes"]
+    output_kind = ("vanilla_patch_embed" if stop_after_patch else
+                   f"vanilla_block_{stop_after_block}" if stop_after_block is not None
+                   else "logits")
     out.mkdir(parents=True, exist_ok=True)
     twiddle = np.arange(h, dtype=np.float32)
     phase = 2 * np.pi * np.outer(twiddle, twiddle) / h
@@ -254,7 +278,7 @@ VERIFY_BLOCK
         "STAGE_COUNT": len(stages),
         "SF_DIM": d,
         "SCRATCH_OFFSET": offsets["attention_scratch"],
-        "LOGITS_OFFSET": offsets["logits"],
+        "LOGITS_OFFSET": output_offset,
         "GOLDEN_ADDRESS": f"0x{addr('output.logits'):08x}u",
         "NUM_CLASSES": manifest["num_classes"],
         "VERIFY_RTOL": literal(logit_rtol),
@@ -281,6 +305,9 @@ VERIFY_BLOCK
         "stages": len(stages), "stage_names": [stage["name"] for stage in stages],
         "trace_points": trace_points,
         "arena_bytes": arena_bytes, "logits_offset": offsets["logits"],
+        "output_offset": output_offset, "output_count": output_count,
+        "output_kind": output_kind, "stop_after_patch": stop_after_patch,
+        "stop_after_block": stop_after_block,
         "weight_provenance": manifest["weight_provenance"],
         "runtime_input": runtime_input,
         "weights_sha256": manifest.get("weights_sha256"),
@@ -303,12 +330,17 @@ def main() -> None:
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--runtime-input", action="store_true",
                         help="read weights and input separately; compare logits in the runner")
+    parser.add_argument("--stop-after-patch", action="store_true",
+                        help="device probe of the full-size patch embedding output")
+    parser.add_argument("--stop-after-block", type=int,
+                        help="device probe through a zero-based upstream block")
     parser.add_argument("--logit-rtol", type=float, default=5e-3)
     parser.add_argument("--logit-atol", type=float, default=1e-3)
     args = parser.parse_args()
     target = generate(args.image_manifest, args.out,
                       args.logit_rtol, args.logit_atol,
-                      args.runtime_input)
+                      args.runtime_input, args.stop_after_patch,
+                      args.stop_after_block)
     if args.build:
         build_device(target)
     print(target)

@@ -1,0 +1,64 @@
+{
+  "schema": "spectformer.full-size-prefixes.v1",
+  "source_revision": "b6cf487a0ea71eeb252d5ba0fc7410b3f5dbd256",
+  "comparison": {
+    "rtol": 0.005,
+    "atol": 0.001
+  },
+  "prefixes": {
+    "vanilla_xs_patch": {
+      "host": {
+        "status": "passed",
+        "stage_count": 1,
+        "output_kind": "vanilla_patch_embed",
+        "output_count": 75264,
+        "all_elements_close": true,
+        "max_abs_error": 5.7220458984375e-06,
+        "elf_sha256": "fbdc1ef27abebf22e5becbada9d5b129c84567ec3c61d2776db3b23369b724ee",
+        "receipt_sha256": "2e7411c63670fe4ba3b34c8d7ebf624386ed280f5c39256e7c8229e0f4390e7b"
+      },
+      "cyclotron": {
+        "status": "passed",
+        "output_kind": "vanilla_patch_embed",
+        "output_count": 75264,
+        "all_elements_close": true,
+        "max_abs_error": 5.602836608886719e-06,
+        "rms_error": 5.639476974183358e-07,
+        "output_sha256": "68d9b04a237b425467e13208b9667177fa2b81dc3198af289b6cd5325b734ad5",
+        "functional_cycles": 42985699,
+        "elf_sha256": "fbdc1ef27abebf22e5becbada9d5b129c84567ec3c61d2776db3b23369b724ee",
+        "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+        "input_sha256": "16cef85912c516ecddfdcf7475cc80bdcfd2e3f9394c5387c77e484c27e53509",
+        "weights_sha256": "13a12a9a0dbf1930f2660d9f2e47be49d5bf09d241dc511462ca1bb3a287d181",
+        "receipt_sha256": "573594000d4da610dc2adeea384e0e7c8d93275a2dbec8e33dd8f851ed47d7c4",
+        "rtl_execution": false,
+        "performance_measurement": false
+      }
+    },
+    "vanilla_xs_block0": {
+      "host": {
+        "status": "passed",
+        "stage_count": 12,
+        "output_kind": "vanilla_block_0",
+        "output_count": 75264,
+        "all_elements_close": true,
+        "max_abs_error": 5.4836273193359375e-06,
+        "elf_sha256": "fec525bc9289298e995121d6b8364d1f9370a71038c293744845a3c82d72f9e8",
+        "receipt_sha256": "d30b933f74b6151790a340002a880fa1ede4bad0e9c3d60e1881864d4d1a8b33"
+      }
+    },
+    "hierarchical_s_stem": {
+      "host": {
+        "status": "passed",
+        "stage_count": 8,
+        "output_kind": "hierarchical_stem",
+        "output_count": 200704,
+        "all_elements_close": true,
+        "max_abs_error": 0.00017213821411132812,
+        "elf_sha256": "a071aa466c37e728e8e83523c7175e90da971a00cdfd1ec761eaa697030cd1e3",
+        "receipt_sha256": "ac0f11e436547cc2aff1f1c2f135cb6cc4ec2db18cd8f4ce400daa04f418df90"
+      }
+    }
+  },
+  "full_model_device_execution_established": false
+}

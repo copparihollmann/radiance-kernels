@@ -91,6 +91,9 @@ def run(target: Path, timeout: int, input_path: Path | None = None,
     manifest = json.loads((target / "manifest.json").read_text())
     image_manifest = Path(manifest["source_image_manifest"])
     image = json.loads(image_manifest.read_text())
+    output_kind = manifest.get("output_kind", "logits")
+    output_count = manifest.get("output_count", image["num_classes"])
+    output_offset = manifest.get("output_offset", manifest["logits_offset"])
     data = image_manifest.parent / "image.bin"
     if sha256(data) != manifest["image_sha256"]:
         raise ValueError("image differs from generated sources")
@@ -141,19 +144,21 @@ extern "C" void sf_trace(uint32_t index, const float* values, uint32_t count) {
     environment["SPECTFORMER_IMAGE"] = str(data.resolve())
     runtime_golden = None
     if input_path is not None:
-        from reference import load_input, logits
+        from reference import load_input
+        from run_reusable import upstream_output
         pixels = load_input(input_path, image["image_size"])
-        if image["format"] == "spectformer.hierarchical.fp32.v1":
-            from hierarchical_prepare import reference_logits
-            runtime_golden = reference_logits(image, pixels).reshape(-1)
-        else:
-            runtime_golden = logits(image, pixels).reshape(-1)
+        runtime_golden = upstream_output(image, pixels, output_kind)
         input_bytes = native / "input.bin"
         input_bytes.write_bytes(pixels.tobytes())
         entry = image["entries"]["input.image"]
         environment["SPECTFORMER_RUNTIME_INPUT"] = str(input_bytes)
         environment["SPECTFORMER_INPUT_OFFSET"] = str(entry["offset_bytes"])
         environment["SPECTFORMER_INPUT_SIZE"] = str(entry["size_bytes"])
+    elif output_kind != "logits":
+        from run_reusable import upstream_output
+        pixels = np.fromfile(image_manifest.parent / "input.bin", dtype="<f4")
+        pixels = pixels.reshape(1, 3, image["image_size"], image["image_size"])
+        runtime_golden = upstream_output(image, pixels, output_kind)
     run_suffix = f"-{input_path.stem}" if input_path else ""
     arena_dump = native / f"arena{run_suffix}.bin"
     arena_dump.unlink(missing_ok=True)
@@ -176,9 +181,9 @@ extern "C" void sf_trace(uint32_t index, const float* values, uint32_t count) {
     run_log.write_text(output)
     comparison = None
     if arena_dump.is_file() and arena_dump.stat().st_size == manifest["arena_bytes"]:
-        count = image["num_classes"]
+        count = output_count
         with arena_dump.open("rb") as stream:
-            stream.seek(manifest["logits_offset"])
+            stream.seek(output_offset)
             actual = np.frombuffer(stream.read(count * 4), dtype="<f4").copy()
         golden = runtime_golden
         if golden is None:
@@ -196,7 +201,8 @@ extern "C" void sf_trace(uint32_t index, const float* values, uint32_t count) {
                           actual, golden, rtol=manifest["logit_rtol"],
                           atol=manifest["logit_atol"])),
                       "max_abs_error": float(np.max(np.abs(difference))) if finite else None,
-                      "top1_agrees": bool(np.argmax(actual) == np.argmax(golden)) if finite else False,
+                      "top1_agrees": (bool(np.argmax(actual) == np.argmax(golden))
+                                      if finite and output_kind == "logits" else None),
                       "logits_sha256": hashlib.sha256(actual.tobytes()).hexdigest()}
     passed = (exit_code == 0 and "tohost=0" in output and
               comparison is not None and comparison["all_close"])
@@ -210,6 +216,7 @@ extern "C" void sf_trace(uint32_t index, const float* values, uint32_t count) {
         passed = block_comparison["status"] == "passed"
     match = re.search(r"max_abs_error=([0-9.eE+-]+)", output)
     record = {"model": manifest["model"], "status": "passed" if passed else "failed",
+              "output_kind": output_kind, "output_count": output_count,
               "host_generated_source_execution": True,
               "device_execution": False, "performance_measurement": False,
               "weight_provenance": image["weight_provenance"],
@@ -217,9 +224,11 @@ extern "C" void sf_trace(uint32_t index, const float* values, uint32_t count) {
               "stage_count": manifest["stages"], "image_sha256": sha256(data),
               "input_path": str(input_path.resolve()) if input_path else None,
               "radiance_elf_sha256": manifest.get("radiance_elf_sha256"),
-              "logit_comparison": comparison,
+              "output_comparison": comparison,
+              "logit_comparison": comparison if output_kind == "logits" else None,
               "block_comparison": block_comparison,
-              "max_abs_logit_error": float(match.group(1)) if match else None,
+              "max_abs_logit_error": (float(match.group(1))
+                                      if match and output_kind == "logits" else None),
               "native_binary_sha256": sha256(binary),
               "log_sha256": sha256(run_log), "exit_code": exit_code,
               "output": output[-1000:]}
