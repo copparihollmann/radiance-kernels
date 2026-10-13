@@ -213,6 +213,10 @@ embedded checkpoint bytes using `--receipt /path/to/tinyllama.soc.elf.json`
 instead of `--image`. Keep that receipt beside its `.elf` file. The packer
 checks the donor ELF, each recorded load segment, and each embedded image hash
 before creating the HBM ELF; it needs no second copy of the weight files.
+`build_firesim_targets.py` applies the packer to selected models in a portable
+handoff directory, checks that the declared hash range covers their highest
+checkpoint addresses, verifies each output, and writes `target-bundle.json`.
+Its hash arguments must come from the target bitstream configuration.
 
 This 4 GiB layout is an example, not a verified configuration for the XB10
 images. The repository's documented standard `RadianceHBMConfig` hashes only
