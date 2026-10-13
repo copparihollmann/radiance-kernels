@@ -123,15 +123,27 @@ def export(args: argparse.Namespace) -> Path:
         if padded:
             stream.write(bytes(padded))
             offset += padded
+    # Keep the combined image for the original self-checking ELF, but also
+    # export independently loadable segments for reusable inference ELFs.
+    input_entry = entries["input.image"]
+    golden_entry = entries["output.logits"]
+    with path.open("rb") as stream:
+        weights = stream.read(input_entry["offset_bytes"])
+        pixels = stream.read(input_entry["size_bytes"])
+        stream.seek(golden_entry["offset_bytes"])
+        logits = stream.read(golden_entry["size_bytes"])
+    (args.out / "weights.bin").write_bytes(weights)
+    (args.out / "input.bin").write_bytes(pixels)
+    (args.out / "golden.bin").write_bytes(logits)
     if BASE_ADDRESS + offset >= 0x7EE00000:
         raise ValueError("weight image overlaps Muon warp stacks")
     manifest = {
-        "format": "spectformer.vanilla.fp32.v1", "upstream_source": str(args.upstream_source),
+        "format": "spectformer.vanilla.fp32.v1", "upstream_source": str(args.upstream_source.resolve()),
         "upstream_revision": UPSTREAM_REVISION,
         "upstream_source_sha256": sha256(args.upstream_source),
-        "checkpoint": str(args.checkpoint) if args.checkpoint else None,
+        "checkpoint": str(args.checkpoint.resolve()) if args.checkpoint else None,
         "checkpoint_sha256": checkpoint_digest,
-        "weight_provenance": "pretrained_checkpoint" if args.checkpoint else "upstream_random_initialization",
+        "weight_provenance": "trained_checkpoint" if args.checkpoint else "upstream_random_initialization",
         "input_provenance": str(args.input_npy) if args.input_npy else "torch.linspace(-1,1)",
         "input_npy_sha256": sha256(args.input_npy) if args.input_npy else None,
         "seed": args.seed, "image_size": args.image_size, "patch_size": 16,
@@ -140,6 +152,10 @@ def export(args: argparse.Namespace) -> Path:
         "heads": 6, "num_classes": args.num_classes,
         "base_address": BASE_ADDRESS, "image_size_bytes": offset,
         "image_sha256": sha256(path), "entries": entries,
+        "weights_sha256": sha256(args.out / "weights.bin"),
+        "weights_size_bytes": len(weights),
+        "input_sha256": sha256(args.out / "input.bin"),
+        "golden_sha256": sha256(args.out / "golden.bin"),
         "reference": "upstream SpectFormer.eval() FP32 CPU",
     }
     result = args.out / "manifest.json"

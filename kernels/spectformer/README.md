@@ -1,127 +1,113 @@
-# SpectFormer
+# SpectFormer inference
 
-This directory builds the **vanilla SpectFormer-XS and SpectFormer-S inference graphs** from the
-[original implementation](https://github.com/badripatro/SpectFormers/blob/b6cf487a0ea71eeb252d5ba0fc7410b3f5dbd256/vanilla_architecture/spectformer.py)
-as one Radiance executable per configuration. Both use a 224×224 RGB input,
-16×16 patches, width 384, four spectral blocks, and a 1,000-class head.
-XS has eight attention blocks and 128 scheduled stages; S has fifteen
-attention blocks and 198 stages. `compile.py` schedules them in source order.
-Buffers carry each block's output into the next block; the two residual paths
-in an attention block and the single MLP residual in a spectral block follow
-the upstream `forward` methods. The generated executable compares **every**
-logit with the upstream PyTorch result and writes a pass/fail `tohost` code.
+This directory maps the pinned [SpectFormers source](https://github.com/badripatro/SpectFormers/tree/b6cf487a0ea71eeb252d5ba0fc7410b3f5dbd256) into connected Radiance inference programs. It covers vanilla XS/S and hierarchical S/B/L at 224×224 resolution with 1,000 output logits. Each variant builds a Radiance ELF and a SoC ELF through `kernels/common.mk`. A reusable ELF reads a new normalized FP32 RGB image from GMEM without recompilation and writes its logits to a fixed output buffer.
 
-## What runs where
+The mapping follows the upstream `eval()` methods. It preserves the graph's branches and residuals rather than treating a flattened operator list as the model. All arithmetic currently runs on Muon FP32. Complex spectral weights are pairs of FP32 values; no complex ISA instruction or RTL change is needed.
 
-| Component | Radiance mapping | Upstream operation |
-| --- | --- | --- |
-| Patch embedding | FP32 patch projection and position addition | `PatchEmbed.proj`, `pos_embed` |
-| Spectral block, four repetitions | FP32 LayerNorm, row DFT, column DFT, learned complex multiply, inverse transforms, LayerNorm, two linear layers, exact GELU, residual | `SpectralGatingNetwork` and `Mlp` |
-| Attention block, eight (XS) or fifteen (S) repetitions | FP32 LayerNorm, QKV linear, six-head noncausal softmax attention, output linear, residual, LayerNorm, MLP, residual | `Block_attention` |
-| Head | FP32 LayerNorm, token mean, classifier linear | `forward_features`, `head` |
+| Family | Variants | Connected graph | Stages |
+| --- | --- | --- | ---: |
+| Vanilla | XS, S | Patch projection and position embedding → four spectral blocks → eight or fifteen attention blocks → token mean → classifier | 128, 198 |
+| Hierarchical | S, B, L | Convolutional stem → four stages with downsampling; spectral mixing in stages 1–2 and attention in stages 3–4 → class attention → classifier and dense auxiliary head | 233, 305, 403 |
 
-The spectral path stores real and imaginary components as interleaved FP32
-values. `spectral.hpp` computes separable real 2D DFTs with orthonormal
-scaling; it does not depend on a complex instruction or a modified RTL. This
-direct DFT was chosen to establish graph correctness. It is substantially
-slower than a mixed-radix FFT and is **not** a performance mapping.
+The hierarchical inference path keeps the upstream class token construction and dense auxiliary head: class logits are combined with half the per-class maximum over auxiliary token logits. Training-only token mixing is absent from upstream `eval()`. The spectral transform uses a separable 2D transform with a 7×M factorization for the 14, 28 and 56 point axes. This improves the scalar mapping but is still a correctness-first implementation, not a performance-tuned FFT. The classifier, convolutions, attention, normalization, GELU, and residual operations are also scalar FP32 kernels. `compile.py` and `hierarchical_compile.py` state the stage order and intermediate buffers explicitly.
 
-`prepare.py` imports the pinned upstream source, evaluates its `eval()` graph,
-and writes the parameters, a fixed input, and the upstream logits to a
-hash-checked GMEM image. It transposes only PyTorch `Linear.weight` matrices
-into the layout consumed by the existing Radiance `model_chain::linear` code.
-`compile.py` emits `kernel.radiance.elf` and `kernel.soc.elf` through the
-repository's `kernels/common.mk` build. `run_native.py` checks the **same
-generated stage C++** on the host, and `run_cyclotron.py` runs the Radiance ELF
-in the functional ISA simulator. A completed Cyclotron run leaves the FP32
-output vector at `cyclotron-logits.bin` in its build directory.
+## Files and data flow
+
+| File | Role |
+| --- | --- |
+| `prepare.py`, `hierarchical_prepare.py` | Import pinned upstream source, optionally load a strict checkpoint, export aligned weights, one input, and upstream logits. Record shapes, addresses, and hashes. |
+| `compile.py`, `hierarchical_compile.py` | Generate the connected C++ schedule and build Radiance and SoC ELFs. |
+| `spectral.hpp`, `hierarchical_ops.hpp` | FP32 operations called by the generated schedules. |
+| `reference.py` | Run upstream PyTorch on a new input to make an independent logit reference. |
+| `run_reusable.py` | Load separate weights and input into Cyclotron, run an ELF, dump logits, and compare with upstream. `--no-reference` dumps inference logits without importing PyTorch. |
+| `run_native.py`, `trace_blocks.py` | Execute generated stage C++ on the host and compare final logits and optional block outputs with hooks on the upstream graph. |
+| `train_checkpoint.py` | Make a small, reproducible trained-weight functional fixture for vanilla XS or hierarchical S. |
+
+The exporter writes `image.bin` for the original self-checking mode, plus `weights.bin`, `input.bin`, and `golden.bin` for runtime input mode. `manifest.json` records addresses and SHA-256 values. Runtime device inference does not embed golden logits into the ELF; `run_reusable.py` checks the dumped output afterward. The host check uses the same generated stage code. It checks graph scheduling and arithmetic but does not establish that a full-size device run has completed.
 
 ## Reproduce
 
-The upstream Python source needs PyTorch and `timm` (tested with `timm==0.9.16`).
-The SpectFormer source file must have SHA-256
-`611aee409308e898d23fcbb1c75de3a0c5fafc205df74c6250e49bfe2ac53250`.
-Point `LLVM_MUON` at the installed Muon toolchain (this task uses
-`/scratch/agustin/projects/chipyard/radiance-kernels-firesim/llvm/llvm-muon`).
-From the repository root, keep downloads and generated files in the task's
-`$TMPDIR`:
+Use Python with PyTorch, torchvision, timm, NumPy, and Pillow. This work was checked with PyTorch 2.10 and timm 1.0.27. Keep downloaded source, checkpoints, and generated output outside the repository, for example under the task's `$TMPDIR`.
 
 ```sh
 mkdir -p "$TMPDIR/spectformer"
-curl -L --fail -o "$TMPDIR/spectformer/spectformer.py" \
+curl -L --fail -o "$TMPDIR/spectformer/vanilla.py" \
   https://raw.githubusercontent.com/badripatro/SpectFormers/b6cf487a0ea71eeb252d5ba0fc7410b3f5dbd256/vanilla_architecture/spectformer.py
+curl -L --fail -o "$TMPDIR/spectformer/hierarchical.py" \
+  https://raw.githubusercontent.com/badripatro/SpectFormers/b6cf487a0ea71eeb252d5ba0fc7410b3f5dbd256/hierarchical_architecture/spectformer.py
+```
+
+The exporters reject source files whose hashes differ from `611aee409308e898d23fcbb1c75de3a0c5fafc205df74c6250e49bfe2ac53250` (vanilla) or `38f0097924ecb270d6b7b1e90daf2423c1ffc6c6cea70c570e11f89bb73e68c6` (hierarchical). Set `LLVM_MUON` to your Muon toolchain before building. From the repository root, a full-size vanilla XS build and host check are:
+
+```sh
 python kernels/spectformer/prepare.py \
-  --upstream-source "$TMPDIR/spectformer/spectformer.py" \
+  --upstream-source "$TMPDIR/spectformer/vanilla.py" \
   --out "$TMPDIR/spectformer/xs"
 python kernels/spectformer/compile.py \
   --image-manifest "$TMPDIR/spectformer/xs/manifest.json" \
-  --out "$TMPDIR/spectformer/xs-build" --build
+  --out "$TMPDIR/spectformer/xs-build" --runtime-input --build
 python kernels/spectformer/run_native.py \
-  --target "$TMPDIR/spectformer/xs-build"
-python kernels/spectformer/run_cyclotron.py \
-  --target "$TMPDIR/spectformer/xs-build" \
-  --timeout 1800 --sim-cycles 10000000000
-python -m unittest kernels/spectformer/test_spectral.py
+  --target "$TMPDIR/spectformer/xs-build" --trace-blocks
 ```
 
-Use `prepare.py --checkpoint /path/to/checkpoint` to bind a trained checkpoint;
-the exporter loads its `model` state dictionary with strict shape checking and
-records the checkpoint hash. A 384-wide SpectFormer-S checkpoint follows the
-same vanilla graph with `--depth 19`. Without `--checkpoint`, the weights come from the **real
-upstream model's deterministic random initialization**. Passing this fixture
-establishes execution and numerical agreement, not ImageNet accuracy.
-`prepare.py --input-npy /path/to/image.npy` accepts a finite FP32 NCHW tensor
-of shape `[1,3,224,224]` and produces a new upstream reference for that input.
-Image decoding and ImageNet normalization happen before this interface.
+For vanilla S, add `--depth 19` to `prepare.py`. The hierarchical variants use:
 
-The reduced device control uses
-`prepare.py --image-size 32 --embed-dim 24 --depth 5 --num-classes 10`
-with the same seed (`1827`) and the corresponding `compile.py`/simulator
-commands. It includes all operation types and one attention block, while the
-full XS build includes all 12 source blocks at their original dimensions.
+```sh
+python kernels/spectformer/hierarchical_prepare.py \
+  --upstream-source "$TMPDIR/spectformer/hierarchical.py" \
+  --variant h-s --out "$TMPDIR/spectformer/h-s"
+python kernels/spectformer/hierarchical_compile.py \
+  --image-manifest "$TMPDIR/spectformer/h-s/manifest.json" \
+  --out "$TMPDIR/spectformer/h-s-build" --build
+python kernels/spectformer/run_native.py \
+  --target "$TMPDIR/spectformer/h-s-build" --trace-blocks
+```
+
+Replace `h-s` with `h-b` or `h-l` for the other variants. `--checkpoint` on either exporter loads an exact state dictionary, and `--input-npy` on vanilla or `--input` on hierarchical supplies the exported image. A later input can be supplied to `run_native.py --input image.npy` without regenerating the program. The NPY interface is finite FP32 NCHW `[1,3,224,224]`; `reference.py` also accepts RGB image files and applies bicubic resize to 256, center crop to 224, and ImageNet normalization.
+
+For device inference, point `--cyclotron-root` at a built Cyclotron checkout:
+
+```sh
+python kernels/spectformer/run_reusable.py \
+  --target "$TMPDIR/spectformer/xs-build" \
+  --input /path/to/normalized-image.npy \
+  --out "$TMPDIR/spectformer/xs-device-run" \
+  --cyclotron-root /path/to/cyclotron --timeout 1800
+```
+
+The runner writes `logits.bin`, the reference vector, Cyclotron log, and a JSON receipt with input, weight, ELF, simulator, and output hashes. `--no-reference` runs inference and dumps logits without PyTorch; its receipt says `reference_checked: false`.
+
+The trained fixtures below came from the [scikit-learn 1.6.1 handwritten digits data](https://github.com/scikit-learn/scikit-learn/blob/1.6.1/sklearn/datasets/data/digits.csv.gz), SHA-256 `09f66e6debdee2cd2b5ae59e0d6abbb73fc2b0e0185d2e1957e9ebb51e23aa22`. `train_checkpoint.py` takes four examples from each of ten digit classes, resizes them to 224×224, and makes 20 AdamW steps on the full upstream model. Digits 0–9 occupy output indices 0–9 in the original 1,000-logit head. Two separate images are held out for inference checks. This is a trained-weight test of checkpoint loading and inference, with no ImageNet accuracy claim. Each training receipt records the source and dataset hashes, selected indices, seed, optimizer settings, and checkpoint hash. Checkpoint hashes: `2ca40d05343b340fbb3c4fc8ec83ea1d0c5bd3a20c4066f4dbae767e50db9ee5` (XS) and `3a8d80d44d4a280cf20e8db2048b5a526371186fc0c5ded7729b4d57604dd28e` (hierarchical S).
+
+```sh
+curl -L --fail -o "$TMPDIR/spectformer/digits.csv.gz" \
+  https://raw.githubusercontent.com/scikit-learn/scikit-learn/1.6.1/sklearn/datasets/data/digits.csv.gz
+python kernels/spectformer/train_checkpoint.py --variant xs \
+  --upstream-source "$TMPDIR/spectformer/vanilla.py" \
+  --data-root "$TMPDIR/spectformer/digits.csv.gz" \
+  --out "$TMPDIR/spectformer/xs-trained"
+python kernels/spectformer/train_checkpoint.py --variant h-s \
+  --upstream-source "$TMPDIR/spectformer/hierarchical.py" \
+  --data-root "$TMPDIR/spectformer/digits.csv.gz" \
+  --out "$TMPDIR/spectformer/h-s-trained"
+```
+
+Pass the resulting `checkpoint.pth` to the matching exporter. The exporter checks every checkpoint tensor against the source model; `run_native.py --input` or `run_reusable.py --input` then takes either held-out NPY file.
 
 ## Checks completed
 
-| Check | Scope | Result |
-| --- | --- | --- |
-| C++ spectral transform vs NumPy `rfft2`/`irfft2` | 14×14, 28×28, 56×56 grids | Passed at `rtol=atol=3e-5` |
-| Cyclotron Radiance ELF vs upstream logits | 32×32, width 24, depth 5, 10 logits | [Passed](evaluation/reduced-cyclotron.json), `tohost=0`; 430,772 functional ISA cycles |
-| Cyclotron full-depth graph vs upstream logits | 32×32, width 24, depth 12, 10 logits | [Passed](evaluation/depth12-cyclotron.json), `tohost=0`; maximum absolute logit error `8.43e-4` |
-| Cyclotron full-depth S graph vs upstream logits | 32×32, width 24, depth 19, 10 logits | [Passed](evaluation/depth19-cyclotron.json), `tohost=0`; maximum absolute logit error `1.22e-3` |
-| Generated stage C++ vs upstream logits | 224×224, width 384, depth 12, 1,000 logits | [Passed](evaluation/xs-native.json); maximum absolute logit error `8.94e-7` |
-| Generated stage C++ vs upstream logits | 224×224, width 384, depth 19, 1,000 logits | [Passed](evaluation/s-native.json); maximum absolute logit error `8.05e-7` |
-| Full-size Radiance/SoC ELF builds | 224×224, width 384, depth 12/19 | [XS](evaluation/xs-build.json) and [S](evaluation/s-build.json) passed; 128/198 stages and disjoint, aligned buffers |
-| MX arithmetic model, source-derived attention projection tile | 16×16×32 partial tile from block 4 | [Result](evaluation/xs-mx-probe.json); separate quantized-path experiment |
+The [connected-model evaluation receipt](evaluation/connected-models.json) records build hashes, maximum errors, output hashes where captured, and source receipt hashes. The tolerance is `abs(actual - reference) <= 0.005 * abs(reference) + 0.001` for every logit or checked block element. A passing comparison also requires finite outputs. Reported error magnitudes are measured errors, not the tolerance.
 
-The Cyclotron cycle counts above are functional simulator instruction counts,
-not device latency or throughput. An [attempt at the full 224×224 XS ELF](evaluation/xs-cyclotron-timeout.json)
-hit its 30-minute wall-clock timeout before reaching `tohost`, so it provides
-no full-size device correctness result. That attempt used the earlier ELF with
-a tighter `0.003 * abs(reference) + 0.0003` check; the current built ELF uses
-the tolerance below and has only been checked on the host. MX Spike execution
-is also a separate gate; the host check and `mx_golden` result must not be
-presented as either of those. The MX probe exports real block-4 activation
-and weight values from upstream PyTorch, quantizes one partial projection tile
-to MX-FP8 with per-row/per-column e8m0 scales bounded for the model's
-accumulator range, and evaluates the repository's arithmetic model. Its
-maximum error against the FP32 **partial tile** is `6.47e-3`; it is not a
-complete attention projection. The complete
-Radiance executable currently uses FP32 Muon linear stages throughout; it
-does not yet schedule projections on MX-Gemmini.
+| Check | Result |
+| --- | --- |
+| Full-size ELF builds | Vanilla XS/S and hierarchical S/B/L built: 128/198/233/305/403 stages. |
+| Full-size generated C++ vs upstream PyTorch | All five variants pass on the host; maximum absolute logit error is at most `6.11e-5` on random-weight fixtures. |
+| Trained-weight held-out inputs | Vanilla XS: `1.67e-6`, `2.62e-6` maximum logit error. Hierarchical S: `5.01e-6`, `3.34e-6`. Each pair used one unchanged ELF and checkpoint with two distinct inputs. |
+| Intermediate graph checks | Every upstream block output matched: 12/12 XS, 16/16 hierarchical S, 22/22 B, and 30/30 L. A deliberately altered hierarchical trace was rejected. |
+| Spectral transform vs NumPy | 14, 28, and 56 point transforms pass `rtol=atol=3e-5` in `test_spectral.py`. |
+| Reusable device control | A reduced 32×32, width-24, five-block vanilla ELF ran two images with one unchanged ELF and weight image in Cyclotron. Both passed all-logit upstream checks; maximum errors were `3.12e-4` and `5.24e-4`. |
+| Full-size device run | The optimized 224×224 vanilla XS ELF timed out after 600 seconds before producing `tohost` or logits. No full-size variant has a completed device inference result yet. |
 
-The device checks compare each FP32 logit using `abs(error) <= 0.005 *
-abs(reference) + 0.001`. `run_cyclotron.py` also dumps the actual logit vector
-and records its maximum absolute error, RMS error, and top-1 agreement. This
-allows numerical drift to be reported independently of the pass/fail code.
-The 12-block reduced graph initially failed a tighter `0.003 *
-abs(reference) + 0.0003` check at logit 0: its measured maximum absolute
-error was `8.43e-4`, and its top-1 class agreed. The stated tolerance and
-measured error are part of the result, not an exact-match claim.
+Earlier reduced [depth-12](evaluation/depth12-cyclotron.json) and [depth-19](evaluation/depth19-cyclotron.json) Cyclotron controls pass with the original small width and image size. The new two-input control verifies runtime input loading and output dumping. Cyclotron's functional cycle count is an ISA simulation count, not measured latency, throughput, utilization, or PPA. The timeout is a wall-clock limit, not evidence of device correctness failure. The complete programs do not use MX-Gemmini yet; the [MX arithmetic probe](evaluation/xs-mx-probe.json) is a partial tile experiment, not MX Spike execution.
 
-## Scope
-
-This is the original repository's **vanilla** architecture, not its separate
-hierarchical SpectFormer implementation. Hierarchical models add a convolutional
-stem, spatial downsampling, depthwise-convolution FFN, and class attention;
-their checkpoints cannot be sent through this graph. The current executable
-also handles one image at a time. No RTL was changed.
+The next execution step is to make one full-size 224×224 program complete in a practical device simulator and compare dumped logits with the pinned upstream reference, then repeat across variants and trained checkpoints. Scalar convolutions and dense projections, especially at 56×56, are likely cost centers; stage-level simulator progress and tile mappings should be measured before changing arithmetic or claiming performance. MX-Gemmini projections and a Spike check are separate integration steps. No RTL, FPGA bitstream, or hardware performance result is part of this directory.
