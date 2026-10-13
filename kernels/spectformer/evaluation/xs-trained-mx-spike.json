@@ -1,0 +1,26 @@
+{
+  "scope": "source_derived_spectformer_projection_16x16x32_partial_tile",
+  "status": "passed",
+  "spike_execution": true,
+  "radiance_device_execution": false,
+  "full_model_execution": false,
+  "performance_measurement": false,
+  "elements_compared": 256,
+  "bit_exact_vs_mx_golden": true,
+  "upstream_source_sha256": "611aee409308e898d23fcbb1c75de3a0c5fafc205df74c6250e49bfe2ac53250",
+  "checkpoint_sha256": "2ca40d05343b340fbb3c4fc8ec83ea1d0c5bd3a20c4066f4dbae767e50db9ee5",
+  "tile_result_sha256": "d53eb58ce486937991d4f78c5a12ccd94a1615596b346f17b443c77d53f121f5",
+  "tile_data_sha256": {
+    "A.bin": "c27ffa9a14fb85ad234c804608fe2c5fc57939e7d3cd98fc3c6b7f2b5ecb96b8",
+    "B.bin": "741ad65a455f2cfd8e1646ee7b08cdc944ae139c446af845868f33690b5bd4c7",
+    "SA.bin": "7020373caed49533ac20d462ab47a36daf11e920c649a07b12358ed338399684",
+    "SB.bin": "e01cadf794de2b1a3b8647b65c90ad3ad46c145db2ab39e96fff25eb4a8f2a6d",
+    "C.bin": "d686933c20ec987ddf3ef5824e239cd47a093f572135e21aebc5f2972605c18c"
+  },
+  "spike_sha256": "abfa04fbb26e9b36995e3f4b22c816d4af5d4c45609832ddd3e6db893da067a7",
+  "gemmini_library_sha256": "93e83499c1901dae9ccf065aa20ce8cf1f0760ce56833cb0d3558c847336f746",
+  "binary_sha256": "ef840675a8f03dfc99553776a456b696cea82f0395202a9fb9262be51dd746ae",
+  "log_sha256": "5bfa514ca2e173a83926a6125edea2046f3d9ab5922628c578a4f4950a825dad",
+  "exit_code": 0,
+  "output": "spectformer_mx_spike errors=0 elements=256 first=3c49 expected=3c49\nGemmini extension configured with:\n    dim = 16\n"
+}

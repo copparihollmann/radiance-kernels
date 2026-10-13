@@ -22,6 +22,7 @@ The hierarchical inference path keeps the upstream class token construction and 
 | `run_reusable.py` | Load separate weights and input into Cyclotron, run an ELF, dump logits, and compare with upstream. `--no-reference` dumps inference logits without importing PyTorch. |
 | `run_native.py`, `trace_blocks.py` | Execute generated stage C++ on the host and compare final logits and optional block outputs with hooks on the upstream graph. |
 | `train_checkpoint.py` | Make a small, reproducible trained-weight functional fixture for vanilla XS or hierarchical S. |
+| `probe_mx.py`, `probe_mx_spike.py` | Extract a source-derived attention projection tile, run the MX arithmetic model, and compare its BF16 output bit for bit with an MX-enabled Spike execution. |
 
 The exporter writes `image.bin` for the original self-checking mode, plus `weights.bin`, `input.bin`, and `golden.bin` for runtime input mode. `manifest.json` records addresses and SHA-256 values. Runtime device inference does not embed golden logits into the ELF; `run_reusable.py` checks the dumped output afterward. The host check uses the same generated stage code. It checks graph scheduling and arithmetic but does not establish that a full-size device run has completed.
 
@@ -111,5 +112,21 @@ The [connected-model evaluation receipt](evaluation/connected-models.json) recor
 The [full-size prefix receipt](evaluation/full-size-prefixes.json) separates intermediate device checks from complete inference. With the trained XS checkpoint, a one-stage patch embedding ELF completed in Cyclotron and matched all 75,264 upstream tensor elements (maximum absolute error `5.60e-6`, 42,985,699 functional cycles). The same generated source also passed host checks through XS block 0 (12 stages), and the hierarchical S stem (eight stages); their device prefix runs are separate checks. Build these prefixes with `compile.py --runtime-input --stop-after-patch` or `--stop-after-block 0`, and `hierarchical_compile.py --stop-after-stem`. Run each with `run_reusable.py` and compare its `output.bin` with the upstream forward-hook tensor. A prefix pass does not establish final logits or full-model device execution.
 
 Earlier reduced [depth-12](evaluation/depth12-cyclotron.json) and [depth-19](evaluation/depth19-cyclotron.json) Cyclotron controls pass with the original small width and image size. The new two-input control verifies runtime input loading and output dumping. Cyclotron's functional cycle count is an ISA simulation count, not measured latency, throughput, utilization, or PPA. The timeout is a wall-clock limit, not evidence of device correctness failure. The complete programs do not use MX-Gemmini yet; the [MX arithmetic probe](evaluation/xs-mx-probe.json) is a partial tile experiment, not MX Spike execution.
+
+An additional [trained XS tile check](evaluation/xs-trained-mx-spike.json) executed a source-derived 16×16×32 attention projection tile in **MX-enabled Spike**. All 256 BF16 results matched `mx_golden` bit for bit. A [one-bit negative control](evaluation/xs-trained-mx-spike-negative.json) produced one mismatch and a nonzero exit. The [FP8 tile receipt](evaluation/xs-trained-mx-probe.json) reports maximum absolute error `0.00504` against its FP32 *partial projection*; exact agreement between two MX models does not establish FP32 model equivalence. `probe_mx.py` reads the input tensor from the export, so a trained checkpoint and held-out input can be used together. Reproduce the Spike check after that probe with:
+
+```sh
+python kernels/spectformer/probe_mx.py \
+  --image-manifest "$TMPDIR/spectformer/xs/manifest.json" \
+  --out "$TMPDIR/spectformer/xs-mx-tile"
+python kernels/spectformer/probe_mx_spike.py \
+  --tile "$TMPDIR/spectformer/xs-mx-tile" \
+  --out "$TMPDIR/spectformer/xs-mx-spike" \
+  --gemmini-source /path/to/mx-enabled/gemmini-rocc-tests \
+  --spike /path/to/mx-enabled/spike \
+  --gemmini-library-dir /path/to/mx-enabled/libgemmini \
+  --gcc /path/to/riscv64-unknown-linux-gnu-gcc \
+  --pk /path/to/pk
+```
 
 The next execution step is to make one full-size 224×224 program complete in a practical device simulator and compare dumped logits with the pinned upstream reference, then repeat across variants and trained checkpoints. Scalar convolutions and dense projections, especially at 56×56, are likely cost centers; stage-level simulator progress and tile mappings should be measured before changing arithmetic or claiming performance. MX-Gemmini projections and a Spike check are separate integration steps. No RTL, FPGA bitstream, or hardware performance result is part of this directory.

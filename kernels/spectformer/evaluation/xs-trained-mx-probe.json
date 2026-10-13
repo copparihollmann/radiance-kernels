@@ -1,0 +1,23 @@
+{
+  "scope": "spectformer_block4_attention_projection_16x16x32_partial_tile",
+  "model": "spectformer_vanilla",
+  "upstream_source_sha256": "611aee409308e898d23fcbb1c75de3a0c5fafc205df74c6250e49bfe2ac53250",
+  "image_sha256": "3f541e6914102f7087a1e741f92010dc0e5d7bb28a8c085e1dc01fbded74e42d",
+  "checkpoint_sha256": "2ca40d05343b340fbb3c4fc8ec83ea1d0c5bd3a20c4066f4dbae767e50db9ee5",
+  "weight_provenance": "trained_checkpoint",
+  "format": "mx_fp8_e4m3_e8m0_bounded_per_row_column_scales_bf16_output",
+  "operand_sha256": {
+    "A.bin": "c27ffa9a14fb85ad234c804608fe2c5fc57939e7d3cd98fc3c6b7f2b5ecb96b8",
+    "B.bin": "741ad65a455f2cfd8e1646ee7b08cdc944ae139c446af845868f33690b5bd4c7",
+    "SA.bin": "7020373caed49533ac20d462ab47a36daf11e920c649a07b12358ed338399684",
+    "SB.bin": "e01cadf794de2b1a3b8647b65c90ad3ad46c145db2ab39e96fff25eb4a8f2a6d"
+  },
+  "model_output_sha256": "d686933c20ec987ddf3ef5824e239cd47a093f572135e21aebc5f2972605c18c",
+  "mx_model_sha256": "155d74d7be11cb951cac180af2515322e03c234a9f99600ec59e7b84d7e0b065",
+  "max_abs_error_vs_fp32_partial_projection": 0.005044668912887573,
+  "rms_error_vs_fp32_partial_projection": 0.0016178862424567342,
+  "max_abs_error_vs_ideal_fp8_matmul": 0.0038595199584960938,
+  "spike_execution": false,
+  "radiance_device_execution": false,
+  "performance_measurement": false
+}

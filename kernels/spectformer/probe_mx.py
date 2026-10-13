@@ -54,7 +54,15 @@ def run(manifest_path: Path, out: Path) -> dict:
     hook = model.blocks[4].attn.proj.register_forward_pre_hook(
         lambda _module, inputs: activation.append(inputs[0].detach().cpu().numpy()))
     size = manifest["image_size"]
-    image = torch.linspace(-1.0, 1.0, 3 * size * size, dtype=torch.float32).reshape(1, 3, size, size)
+    input_entry = manifest["entries"]["input.image"]
+    image_path = manifest_path.parent / "image.bin"
+    with image_path.open("rb") as stream:
+        stream.seek(input_entry["offset_bytes"])
+        input_bytes = stream.read(input_entry["size_bytes"])
+    if hashlib.sha256(input_bytes).hexdigest() != input_entry["sha256"]:
+        raise ValueError("exported input differs from the pinned image manifest")
+    image = torch.from_numpy(np.frombuffer(input_bytes, dtype="<f4").copy().reshape(
+        1, 3, size, size))
     with torch.no_grad():
         logits = model(image).detach().cpu().numpy().astype("<f4")
     hook.remove()
