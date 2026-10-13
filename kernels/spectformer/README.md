@@ -109,7 +109,7 @@ The [connected-model evaluation receipt](evaluation/connected-models.json) recor
 | Reusable device control | A reduced 32×32, width-24, five-block vanilla ELF ran two images with one unchanged ELF and weight image in Cyclotron. Both passed all-logit upstream checks; maximum errors were `3.12e-4` and `5.24e-4`. |
 | Full-size device run | The optimized 224×224 vanilla XS ELF timed out after 600 seconds before producing `tohost` or logits. No full-size variant has a completed device inference result yet. |
 
-The [full-size prefix receipt](evaluation/full-size-prefixes.json) separates intermediate device checks from complete inference. With the trained XS checkpoint, a one-stage patch embedding ELF completed in Cyclotron and matched all 75,264 upstream tensor elements (maximum absolute error `5.60e-6`, 42,985,699 functional cycles). The same generated source also passed host checks through XS block 0 (12 stages), and the hierarchical S stem (eight stages); their device prefix runs are separate checks. Build these prefixes with `compile.py --runtime-input --stop-after-patch` or `--stop-after-block 0`, and `hierarchical_compile.py --stop-after-stem`. Run each with `run_reusable.py` and compare its `output.bin` with the upstream forward-hook tensor. A prefix pass does not establish final logits or full-model device execution.
+The [full-size prefix receipt](evaluation/full-size-prefixes.json) separates intermediate device checks from complete inference. With the trained XS checkpoint, a one-stage patch embedding ELF completed in Cyclotron and matched all 75,264 upstream tensor elements (maximum absolute error `5.60e-6`, 42,985,699 functional cycles). The hierarchical S stem also matched all 200,704 elements (maximum error `1.73e-4`, 408,283,353 functional cycles). The 12-stage XS block 0 completed, but its output **failed** the upstream comparison (maximum error `0.783`). The matching generated C++ program passed on the host, so this is an unresolved device-path discrepancy. Build these prefixes with `compile.py --runtime-input --stop-after-patch` or `--stop-after-block 0`, and `hierarchical_compile.py --stop-after-stem` or `--stop-after-block 1.0`. Run each with `run_reusable.py` and compare its `output.bin` with the upstream forward-hook tensor. A prefix pass does not establish final logits or full-model device execution.
 
 Earlier reduced [depth-12](evaluation/depth12-cyclotron.json) and [depth-19](evaluation/depth19-cyclotron.json) Cyclotron controls pass with the original small width and image size. The new two-input control verifies runtime input loading and output dumping. Cyclotron's functional cycle count is an ISA simulation count, not measured latency, throughput, utilization, or PPA. The timeout is a wall-clock limit, not evidence of device correctness failure. The complete programs do not use MX-Gemmini yet; the [MX arithmetic probe](evaluation/xs-mx-probe.json) is a partial tile experiment, not MX Spike execution.
 
@@ -130,3 +130,16 @@ python kernels/spectformer/probe_mx_spike.py \
 ```
 
 The next execution step is to make one full-size 224×224 program complete in a practical device simulator and compare dumped logits with the pinned upstream reference, then repeat across variants and trained checkpoints. Scalar convolutions and dense projections, especially at 56×56, are likely cost centers; stage-level simulator progress and tile mappings should be measured before changing arithmetic or claiming performance. MX-Gemmini projections and a Spike check are separate integration steps. No RTL, FPGA bitstream, or hardware performance result is part of this directory.
+
+## FPGA handoff artifacts
+
+`package_handoff.py` copies a built runtime-input ELF, its separate weight and input images, an upstream output vector, and a completed Cyclotron receipt when available. It validates the hashes and writes a per-case `load-map.json` with the exact GPU addresses and output readback location. For example:
+
+```sh
+python kernels/spectformer/package_handoff.py --out "$TMPDIR/spectformer/fpga-handoff" \
+  --case vanilla-xs-patch "$TMPDIR/spectformer/xs-trained-patch-probe" \
+  "$TMPDIR/spectformer/xs-trained-export" \
+  "$TMPDIR/spectformer/xs-trained-patch-device/result.json"
+```
+
+These are **handoff inputs**, not ready-to-submit FireSim queue jobs. The current fused SoC ELF only waits for the GPU; it neither loads the separate weight/input images nor checks the output. The existing U250 queue flow used self-contained ELFs. An FPGA run therefore needs a verified preload path or a new self-contained host/ELF, plus full output readback. The package records this explicitly and marks any missing full-model simulator result as unverified.

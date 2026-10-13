@@ -34,17 +34,29 @@ def align64(value: int) -> int:
 
 def generate(image_manifest: Path, out: Path, runtime_input: bool = True,
              logit_rtol: float = 5e-3, logit_atol: float = 1e-3,
-             stop_after_stem: bool = False) -> Path:
+             stop_after_stem: bool = False,
+             stop_after_block: str | None = None) -> Path:
     image = json.loads(image_manifest.read_text())
     if image["format"] != "spectformer.hierarchical.fp32.v1":
         raise ValueError("wrong image format")
-    if stop_after_stem and not runtime_input:
+    if (stop_after_stem or stop_after_block is not None) and not runtime_input:
         raise ValueError("a prefix build requires runtime input and an external reference")
+    if stop_after_stem and stop_after_block is not None:
+        raise ValueError("choose one prefix endpoint")
     if not (math.isfinite(logit_rtol) and math.isfinite(logit_atol) and
             logit_rtol >= 0 and logit_atol >= 0):
         raise ValueError("invalid tolerance")
     variant = image["variant"]
     dims, heads, ratios, depths, stem = SPECS[variant]
+    block_endpoint = None
+    if stop_after_block is not None:
+        parts = stop_after_block.split(".")
+        if len(parts) != 2 or not all(part.isdecimal() for part in parts):
+            raise ValueError("block endpoint must be STAGE.INDEX, such as 1.0")
+        stage_number, block_number = map(int, parts)
+        if not 1 <= stage_number <= 4 or not 0 <= block_number < depths[stage_number - 1]:
+            raise ValueError("block endpoint is outside the upstream graph")
+        block_endpoint = (stage_number, block_number)
     if image["image_size"] != 224 or image["num_classes"] != 1000:
         raise ValueError("hierarchical compiler supports canonical 224/1000 only")
     source_image = image_manifest.parent / "image.bin"
@@ -252,9 +264,22 @@ def generate(image_manifest: Path, out: Path, runtime_input: bool = True,
             raise AssertionError("hierarchical stem no longer ends at stage eight")
         stages = stages[:8]
         trace_points = []
-    output_offset = offsets["tokens"] if stop_after_stem else offsets["logits"]
-    output_count = 56 * 56 * dims[0] if stop_after_stem else 1000
-    output_kind = "hierarchical_stem" if stop_after_stem else "logits"
+    elif block_endpoint is not None:
+        stage_number, block_number = block_endpoint
+        endpoint = f"block{stage_number}.{block_number}.mlp_residual"
+        last_index = next(i for i, stage in enumerate(stages)
+                          if stage["name"] == endpoint)
+        stages = stages[:last_index + 1]
+        trace_points = [point for point in trace_points
+                        if point["stage_index"] <= last_index]
+    prefix = stop_after_stem or block_endpoint is not None
+    output_offset = offsets["tokens"] if prefix else offsets["logits"]
+    output_count = (56 * 56 * dims[0] if stop_after_stem else
+                    shapes[block_endpoint[0] - 1][0] ** 2 * dims[block_endpoint[0] - 1]
+                    if block_endpoint is not None else 1000)
+    output_kind = ("hierarchical_stem" if stop_after_stem else
+                   f"hierarchical_block_{block_endpoint[0]}_{block_endpoint[1]}"
+                   if block_endpoint is not None else "logits")
 
     out.mkdir(parents=True, exist_ok=True)
     def float_array(name: str, values: np.ndarray) -> str:
@@ -394,6 +419,7 @@ VERIFY_BLOCK
         "arena_bytes": arena_bytes, "logits_offset": offsets["logits"],
         "output_offset": output_offset, "output_count": output_count,
         "output_kind": output_kind, "stop_after_stem": stop_after_stem,
+        "stop_after_block": stop_after_block,
         "weight_provenance": image["weight_provenance"],
         "device_elf_built": False, "device_execution": False,
         "performance_measurement": False,
@@ -412,10 +438,13 @@ def main() -> None:
                         help="embed the exported golden in the device pass/fail check")
     parser.add_argument("--stop-after-stem", action="store_true",
                         help="device probe of the full-size convolutional stem output")
+    parser.add_argument("--stop-after-block",
+                        help="device probe through hierarchical block STAGE.INDEX")
     args = parser.parse_args()
     target = generate(args.image_manifest, args.out,
                       runtime_input=not args.fixture_check,
-                      stop_after_stem=args.stop_after_stem)
+                      stop_after_stem=args.stop_after_stem,
+                      stop_after_block=args.stop_after_block)
     if args.build:
         build_device(target)
     print(target)

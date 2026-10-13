@@ -45,6 +45,23 @@
         "max_abs_error": 5.4836273193359375e-06,
         "elf_sha256": "fec525bc9289298e995121d6b8364d1f9370a71038c293744845a3c82d72f9e8",
         "receipt_sha256": "d30b933f74b6151790a340002a880fa1ede4bad0e9c3d60e1881864d4d1a8b33"
+      },
+      "cyclotron": {
+        "status": "failed",
+        "output_kind": "vanilla_block_0",
+        "output_count": 75264,
+        "all_elements_close": false,
+        "max_abs_error": 0.7825630605220795,
+        "rms_error": 0.188638103385942,
+        "output_sha256": "773cc858b08619fcecb9ccfe3b5eadd4b944695e9aadb799155d91655547dd4d",
+        "functional_cycles": 273383612,
+        "elf_sha256": "fec525bc9289298e995121d6b8364d1f9370a71038c293744845a3c82d72f9e8",
+        "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+        "input_sha256": "16cef85912c516ecddfdcf7475cc80bdcfd2e3f9394c5387c77e484c27e53509",
+        "weights_sha256": "13a12a9a0dbf1930f2660d9f2e47be49d5bf09d241dc511462ca1bb3a287d181",
+        "receipt_sha256": "162589e8a0c1c099a04d0d319851bb74d0953b1c75c3ddb54a73aa2added88e3",
+        "rtl_execution": false,
+        "performance_measurement": false
       }
     },
     "hierarchical_s_stem": {
@@ -57,6 +74,23 @@
         "max_abs_error": 0.00017213821411132812,
         "elf_sha256": "a071aa466c37e728e8e83523c7175e90da971a00cdfd1ec761eaa697030cd1e3",
         "receipt_sha256": "ac0f11e436547cc2aff1f1c2f135cb6cc4ec2db18cd8f4ce400daa04f418df90"
+      },
+      "cyclotron": {
+        "status": "passed",
+        "output_kind": "hierarchical_stem",
+        "output_count": 200704,
+        "all_elements_close": true,
+        "max_abs_error": 0.00017333030700683594,
+        "rms_error": 2.7104038064242503e-05,
+        "output_sha256": "e6765062cf7dd4b532ae7ed2545a3183af416f49dc7d7cf0884481536a7181dc",
+        "functional_cycles": 408283353,
+        "elf_sha256": "a071aa466c37e728e8e83523c7175e90da971a00cdfd1ec761eaa697030cd1e3",
+        "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+        "input_sha256": "16cef85912c516ecddfdcf7475cc80bdcfd2e3f9394c5387c77e484c27e53509",
+        "weights_sha256": "98d086ed2dba7865c758131acc35da08fc4a2de1f0644a796397a724ea027bf7",
+        "receipt_sha256": "5f5b733aab7185c8f4afb5ec0e76a4c03940bfd769092623d5a379754d853e42",
+        "rtl_execution": false,
+        "performance_measurement": false
       }
     }
   },

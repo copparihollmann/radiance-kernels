@@ -40,6 +40,17 @@ def upstream_output(image: dict, pixels: np.ndarray, kind: str) -> np.ndarray:
         from hierarchical_prepare import make_model
         model = make_model(image)
         module = model.patch_embed1
+    elif kind.startswith("hierarchical_block_"):
+        from hierarchical_prepare import make_model
+        model = make_model(image)
+        parts = kind.removeprefix("hierarchical_block_").split("_")
+        if len(parts) != 2 or not all(part.isdecimal() for part in parts):
+            raise ValueError("invalid hierarchical block output kind")
+        stage, index = map(int, parts)
+        blocks = getattr(model, f"block{stage}", None)
+        if blocks is None or not 0 <= index < len(blocks):
+            raise ValueError("block index is outside the upstream graph")
+        module = blocks[index]
     else:
         raise ValueError(f"unsupported output kind: {kind}")
     captured = []
