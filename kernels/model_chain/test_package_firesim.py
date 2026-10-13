@@ -78,14 +78,18 @@ class PackageFireSimTest(unittest.TestCase):
             self.image.read_bytes()).hexdigest()
         self.manifest.write_text(json.dumps(image_manifest))
         result = package_hashed(self.elf, [self.manifest], self.output,
-                                0x4000, 32, 4)
+                                0x40000, 32, 4)
         self.assertEqual(result["load_method"],
                          "direct LoadMem, physically hashed GPU region")
         self.assertEqual(verify_package(
             self.output.with_suffix(".elf.json"))["hashed_images_present"], 1)
         _, _, segments = read_elf(self.output)
-        self.assertEqual(sum(seg[0] == 1 for seg in segments), 2)
-        address_hash = AddressHash(0, 0x4000, 32, 4)
+        loaded_gpu_bytes = sum(seg[5] for seg in segments
+                               if seg[0] == 1 and seg[3] >= 0x100000000)
+        self.assertLess(loaded_gpu_bytes, 0x40000)
+        self.assertEqual(loaded_gpu_bytes, sum(
+            x["size_bytes"] for x in result["hash_layout"]["load_regions"]))
+        address_hash = AddressHash(0, 0x40000, 32, 4)
         with self.output.open("rb") as source:
             physical_base = result["hash_layout"]["file_offset"]
             for gpu_address, data in ((0x1000, self.image.read_bytes()),

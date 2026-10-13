@@ -191,7 +191,9 @@ python3 kernels/model_chain/prepare_hbm.py \
 
 For a target that directly loads a hashed GPU DRAM region, pass the **exact**
 RTL hash size, unit, and slice count. The hash-aware mode scatters both device
-program bytes and checkpoint bytes into one physical hash region. Verification
+program bytes and checkpoint bytes into the physical hash layout. It emits
+load segments only for occupied physical pages, so FireSim need not write the
+empty gaps in the hash range. Verification
 reconstructs each logical source region from the output ELF and compares its
 SHA-256 with the original. If the bitstream confirms a 4 GiB GPU hash range
 with 32-byte units and four slices, the packaging command is:

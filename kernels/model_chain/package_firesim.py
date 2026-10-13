@@ -134,15 +134,40 @@ def check_placement(existing, entries):
 
 
 def hash_folds(size, unit, slices):
-    if (size <= 0 or unit <= 0 or slices < 2
+    if (size <= 0 or size > (1 << 32) or unit <= 0 or slices < 2
+            or slices > 256
             or any(value & (value - 1) for value in (size, unit, slices))
-            or size % (unit * slices)):
-        raise ValueError("hash size, unit, and slices must be compatible powers of two")
+            or size % (unit * slices) or size // slices < ALIGN):
+        raise ValueError("hash size, unit, and slices must fit the GPU address space and be compatible powers of two")
     bits = slices.bit_length() - 1
     folds = bytearray(size // (unit * slices))
     for group in range(1, len(folds)):
         folds[group] = (group & (slices - 1)) ^ folds[group >> bits]
     return folds
+
+
+def occupied_hash_ranges(logical_ranges, size, unit, slices):
+    """Page-aligned physical spans that contain bytes from logical GPU ranges."""
+    group_bytes = unit * slices
+    slice_size = size // slices
+    ranges = []
+    for logical_start, length in logical_ranges:
+        if logical_start < 0 or logical_start + length > size:
+            raise ValueError("logical GPU range exceeds hash size")
+        first = logical_start // group_bytes
+        end = (logical_start + length + group_bytes - 1) // group_bytes
+        for lane in range(slices):
+            start = lane * slice_size + (first * unit // ALIGN) * ALIGN
+            stop = lane * slice_size + align(end * unit)
+            if start < stop:
+                ranges.append((start, min(stop, (lane + 1) * slice_size)))
+    merged = []
+    for start, stop in sorted(ranges):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], stop))
+        else:
+            merged.append((start, stop))
+    return merged
 
 
 def write_at(fd, data, offset):
@@ -294,6 +319,12 @@ def package_hashed(elf, image_manifests, output, hash_size, unit, slices,
          "size_bytes": size,
          "sha256": digest_region(elf, offset, size)}
         for offset, address, size in hashed_source]
+    load_ranges = occupied_hash_ranges(
+        [(address - GPU_HOST_ALIAS, size)
+         for _, address, size in hashed_source] +
+        [(address - GPU_HOST_ALIAS, size)
+         for address, size, _, _, _ in lower],
+        hash_size, unit, slices)
     try:
         with elf.open("rb") as source, partial.open("wb+") as target:
             shutil.copyfileobj(source, target, 8 * 1024 * 1024)
@@ -314,8 +345,10 @@ def package_hashed(elf, image_manifests, output, hash_size, unit, slices,
                                       "cpu_address": address,
                                       "size_bytes": size,
                                       "layout": "hashed"})
-            kept.append((PT_LOAD, 6, region_offset, GPU_HOST_ALIAS,
-                         GPU_HOST_ALIAS, hash_size, hash_size, ALIGN))
+            for first, end in load_ranges:
+                kept.append((PT_LOAD, 6, region_offset + first,
+                             GPU_HOST_ALIAS + first, GPU_HOST_ALIAS + first,
+                             end - first, end - first, ALIGN))
             target.seek(region_offset + hash_size)
             phoff = align(target.tell())
             target.write(b"\0" * (phoff - target.tell()))
@@ -339,7 +372,13 @@ def package_hashed(elf, image_manifests, output, hash_size, unit, slices,
               "source_gpu_segments": source_gpu_segments,
               "hash_layout": {"gpu_base": 0, "cpu_base": GPU_HOST_ALIAS,
                               "size": hash_size, "unit": unit,
-                              "slices": slices, "file_offset": region_offset},
+                              "slices": slices, "file_offset": region_offset,
+                              "load_regions": [
+                                  {"physical_offset": first,
+                                   "file_offset": region_offset + first,
+                                   "cpu_address": GPU_HOST_ALIAS + first,
+                                   "size_bytes": end - first}
+                                  for first, end in load_ranges]},
               "load_method": "direct LoadMem, physically hashed GPU region",
               "validation": "ELF structure and source image hashes; target execution pending"}
     output.with_suffix(output.suffix + ".json").write_text(
@@ -418,11 +457,29 @@ def verify_package(manifest_path):
     _, _, phdrs = read_elf(output)
     if "hash_layout" in result:
         layout = result["hash_layout"]
-        expected = (PT_LOAD, layout["file_offset"], layout["cpu_base"],
-                    layout["size"])
-        if not any((kind, offset, vaddr, size) == expected
-                   for kind, _, offset, vaddr, _, size, _, _ in phdrs):
-            raise ValueError(f"{output}: missing hashed GPU load region")
+        regions = layout.get("load_regions", [
+            {"physical_offset": 0, "file_offset": layout["file_offset"],
+             "cpu_address": layout["cpu_base"], "size_bytes": layout["size"]}])
+        for region in regions:
+            expected = (PT_LOAD, region["file_offset"],
+                        region["cpu_address"], region["size_bytes"])
+            if not any((kind, offset, vaddr, size) == expected
+                       for kind, _, offset, vaddr, _, size, _, _ in phdrs):
+                raise ValueError(f"{output}: missing hashed GPU load region {expected}")
+        if "load_regions" in layout:
+            source_ranges = [(item["gpu_address"], item["size_bytes"])
+                             for item in result.get("source_gpu_segments", [])]
+            image_ranges = [(item["gpu_address"], item["size_bytes"])
+                            for item in result["images"]
+                            if item.get("layout") == "hashed"]
+            required = occupied_hash_ranges(source_ranges + image_ranges,
+                                            layout["size"], layout["unit"],
+                                            layout["slices"])
+            recorded = [(item["physical_offset"],
+                         item["physical_offset"] + item["size_bytes"])
+                        for item in regions]
+            if required != recorded:
+                raise ValueError(f"{output}: hashed load regions omit required bytes")
         folds = hash_folds(layout["size"], layout["unit"], layout["slices"])
         for item in result.get("source_gpu_segments", []):
             actual = digest_hashed_image(output, item["cpu_address"],
