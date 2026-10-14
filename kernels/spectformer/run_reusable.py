@@ -184,6 +184,8 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
         "weights_sha256": sha256(weights), "elf_sha256": sha256(elf),
         "simulator_sha256": sha256(simulator),
         "config_sha256": sha256(config), "log_sha256": sha256(log),
+        "output_sha256": (sha256(dump) if dump.is_file() and
+                          dump.stat().st_size == output_count * 4 else None),
         "output_comparison": comparison,
         "logit_comparison": comparison if output_kind == "logits" else None,
         "reference_checked": check_reference,
