@@ -1,0 +1,35 @@
+{
+  "model": "spectformer_hierarchical",
+  "status": "passed",
+  "output_kind": "logits",
+  "output_count": 1000,
+  "host_generated_source_execution": true,
+  "device_execution": false,
+  "performance_measurement": false,
+  "weight_provenance": "trained_checkpoint",
+  "input_provenance": "../.tmp/spectformer/hs-trained/heldout-0.npy",
+  "stage_count": 233,
+  "image_sha256": "a20bc76b0ef792bf2493aef6afeaf3405bf67617a5e61dd98c8acf23bb2cfd78",
+  "input_path": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/spectformer/hs-trained/heldout-0.npy",
+  "radiance_elf_sha256": "dd44acd06e4d550161da39497ab1337bf417d2b04036a6f99d93dc8ee0071dc4",
+  "output_comparison": {
+    "all_finite": true,
+    "all_close": true,
+    "max_abs_error": 4.291534423828125e-06,
+    "top1_agrees": true,
+    "logits_sha256": "e993992dc53bf0e15dfc8780e8be08b7c80657a9af9cc287479d3f32795da312"
+  },
+  "logit_comparison": {
+    "all_finite": true,
+    "all_close": true,
+    "max_abs_error": 4.291534423828125e-06,
+    "top1_agrees": true,
+    "logits_sha256": "e993992dc53bf0e15dfc8780e8be08b7c80657a9af9cc287479d3f32795da312"
+  },
+  "block_comparison": null,
+  "max_abs_logit_error": 0.0,
+  "native_binary_sha256": "f1e62977a54eb13babd55e47f70c55a75634c5167cc991a691b4ae3112f6e6f6",
+  "log_sha256": "5db1cf2fad3e0bce0f4cb98e470b6e3b846f848df8d6cdd1098bb73a94a5147c",
+  "exit_code": 0,
+  "output": "tohost=0 max_abs_error=0\n"
+}

@@ -1,0 +1,113 @@
+{
+  "model": "spectformer_vanilla",
+  "status": "passed",
+  "output_kind": "logits",
+  "output_count": 1000,
+  "host_generated_source_execution": true,
+  "device_execution": false,
+  "performance_measurement": false,
+  "weight_provenance": "trained_checkpoint",
+  "input_provenance": "../.tmp/spectformer/xs-trained/heldout-0.npy",
+  "stage_count": 128,
+  "image_sha256": "3f541e6914102f7087a1e741f92010dc0e5d7bb28a8c085e1dc01fbded74e42d",
+  "input_path": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/spectformer/xs-trained/heldout-0.npy",
+  "radiance_elf_sha256": "63c8585d5a8f86641c9df5a93b4f4809eca147b3575a66f6bcd8332d86ca1937",
+  "output_comparison": {
+    "all_finite": true,
+    "all_close": true,
+    "max_abs_error": 2.384185791015625e-06,
+    "top1_agrees": true,
+    "logits_sha256": "acb91cba99e836140a789c4609399606cbd47608024cb36a5349a32ba16d0522"
+  },
+  "logit_comparison": {
+    "all_finite": true,
+    "all_close": true,
+    "max_abs_error": 2.384185791015625e-06,
+    "top1_agrees": true,
+    "logits_sha256": "acb91cba99e836140a789c4609399606cbd47608024cb36a5349a32ba16d0522"
+  },
+  "block_comparison": {
+    "status": "passed",
+    "checked_blocks": 12,
+    "blocks": [
+      {
+        "name": "blocks.0",
+        "all_close": true,
+        "max_abs_error": 5.7220458984375e-06,
+        "actual_sha256": "46d1f90ad9862d75cb3ffeb4da9cd5a8edb23e1dc30c7f6bd2b0a2c2f13b8b4c"
+      },
+      {
+        "name": "blocks.1",
+        "all_close": true,
+        "max_abs_error": 5.602836608886719e-06,
+        "actual_sha256": "db313f15f504006c4fb17dab82f9590f8ef78db10d01a961386f5a09c59d94b1"
+      },
+      {
+        "name": "blocks.2",
+        "all_close": true,
+        "max_abs_error": 5.245208740234375e-06,
+        "actual_sha256": "235bcce45ef1b081604a058190b37e5370f009e827662f57ce4ff0cf925f74df"
+      },
+      {
+        "name": "blocks.3",
+        "all_close": true,
+        "max_abs_error": 5.7220458984375e-06,
+        "actual_sha256": "7aa44bdae54c5e78fe6c7c7e42d9cd8fcb204c4fba084b16510bbd52812709b1"
+      },
+      {
+        "name": "blocks.4",
+        "all_close": true,
+        "max_abs_error": 6.198883056640625e-06,
+        "actual_sha256": "c9613b8cf7471632d2dfd1e60a7db8d746e70972c0f1c534dd7bdab180b4b258"
+      },
+      {
+        "name": "blocks.5",
+        "all_close": true,
+        "max_abs_error": 6.318092346191406e-06,
+        "actual_sha256": "8862ca41ee26100cb3279878d6df0f349da484f793e46da5290c793aaa32c40e"
+      },
+      {
+        "name": "blocks.6",
+        "all_close": true,
+        "max_abs_error": 6.198883056640625e-06,
+        "actual_sha256": "122eeae72307b484823782ce271312b9f7333f2b3315a635ee4ba591f8e9eb7c"
+      },
+      {
+        "name": "blocks.7",
+        "all_close": true,
+        "max_abs_error": 6.198883056640625e-06,
+        "actual_sha256": "8efb58402d796e1866a0add63f2d21eafc6e1cee99eb82c8996ac20fe944e6c2"
+      },
+      {
+        "name": "blocks.8",
+        "all_close": true,
+        "max_abs_error": 7.152557373046875e-06,
+        "actual_sha256": "01f57c083e4c6e84f402164ad377f2309af87b5aba41b13f2b36cd85c39e7944"
+      },
+      {
+        "name": "blocks.9",
+        "all_close": true,
+        "max_abs_error": 7.152557373046875e-06,
+        "actual_sha256": "3368711ea2512b54fab7a3cc0e2215dd5d16b288294f2eeb41949516228c9b56"
+      },
+      {
+        "name": "blocks.10",
+        "all_close": true,
+        "max_abs_error": 7.152557373046875e-06,
+        "actual_sha256": "3e4482a53a2061e674ca4a2e69e9f479e1354527e8b1f3c5b9a542835b10cbea"
+      },
+      {
+        "name": "blocks.11",
+        "all_close": true,
+        "max_abs_error": 7.62939453125e-06,
+        "actual_sha256": "841dd659b33351e44ab1e9215511a0324e957a51a582dadbf89610667c84e23f"
+      }
+    ],
+    "upstream_source_sha256": "611aee409308e898d23fcbb1c75de3a0c5fafc205df74c6250e49bfe2ac53250"
+  },
+  "max_abs_logit_error": 0.0,
+  "native_binary_sha256": "ac78c3a79e68e0e084a36bdbf8f5c76aea04964c34240b369e8cd1799c5bdc79",
+  "log_sha256": "5db1cf2fad3e0bce0f4cb98e470b6e3b846f848df8d6cdd1098bb73a94a5147c",
+  "exit_code": 0,
+  "output": "tohost=0 max_abs_error=0\n"
+}

@@ -1,0 +1,35 @@
+{
+  "model": "spectformer_vanilla",
+  "status": "passed",
+  "output_kind": "logits",
+  "output_count": 1000,
+  "host_generated_source_execution": true,
+  "device_execution": false,
+  "performance_measurement": false,
+  "weight_provenance": "trained_checkpoint",
+  "input_provenance": "../.tmp/spectformer/xs-trained/heldout-0.npy",
+  "stage_count": 128,
+  "image_sha256": "3f541e6914102f7087a1e741f92010dc0e5d7bb28a8c085e1dc01fbded74e42d",
+  "input_path": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/spectformer/xs-trained/heldout-0.npy",
+  "radiance_elf_sha256": "63c8585d5a8f86641c9df5a93b4f4809eca147b3575a66f6bcd8332d86ca1937",
+  "output_comparison": {
+    "all_finite": true,
+    "all_close": true,
+    "max_abs_error": 2.384185791015625e-06,
+    "top1_agrees": true,
+    "logits_sha256": "acb91cba99e836140a789c4609399606cbd47608024cb36a5349a32ba16d0522"
+  },
+  "logit_comparison": {
+    "all_finite": true,
+    "all_close": true,
+    "max_abs_error": 2.384185791015625e-06,
+    "top1_agrees": true,
+    "logits_sha256": "acb91cba99e836140a789c4609399606cbd47608024cb36a5349a32ba16d0522"
+  },
+  "block_comparison": null,
+  "max_abs_logit_error": 0.0,
+  "native_binary_sha256": "d87beaf4799ecfbca06049a5fc7d88ee95534c55b4b6c91751536470f553ebb7",
+  "log_sha256": "5db1cf2fad3e0bce0f4cb98e470b6e3b846f848df8d6cdd1098bb73a94a5147c",
+  "exit_code": 0,
+  "output": "tohost=0 max_abs_error=0\n"
+}
