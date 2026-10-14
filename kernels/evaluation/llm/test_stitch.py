@@ -472,6 +472,32 @@ class ModelStitchTest(unittest.TestCase):
         self.assertTrue(np.array_equal(generated[greedy.outputs[-1]],
                                        fed[forced.outputs[-1]]))
 
+    def test_qwen3_last_prefill_logit_preserves_decode_dependencies(self):
+        model = "qwen3_0_6b"
+        spec = reduced_spec(model_specs()[model])
+        common = {"prefill": 3, "decode_steps": 2,
+                  "specs": {model: spec}, "generation": "greedy"}
+        full = build(model, **common)
+        last = build(model, prefill_logits="last", **common)
+        vocab = spec["vocab_size"]
+        self.assertEqual(full.tensors["prefill.lm_head"]["shape"], [1, 3, vocab])
+        self.assertEqual(last.tensors["prefill.lm_head"]["shape"], [1, 1, vocab])
+        self.assertEqual(last.tensors["prefill.last_hidden"]["shape"],
+                         [1, 1, spec["hidden_size"]])
+        self.assertEqual(len(last.stages), len(full.stages) + 1)
+        self.assertEqual(last.execution_schedule["prefill_logits_policy"], "last")
+        self.assertEqual(full.execution_schedule["decode_loop"],
+                         last.execution_schedule["decode_loop"])
+        self.assertEqual(last.tensors["decode0.token_ids"]["shape"], [1, 1])
+        full_macs = next(s["attrs"]["macs"] for s in full.stages
+                         if s["id"] == "prefill.lm_head")
+        last_macs = next(s["attrs"]["macs"] for s in last.stages
+                         if s["id"] == "prefill.lm_head")
+        self.assertEqual(full_macs, 3 * last_macs)
+        with self.assertRaisesRegex(ValueError, "greedy Qwen3"):
+            build(model, prefill_logits="last", prefill=3,
+                  generation="teacher_forced", specs={model: spec})
+
 
 if __name__ == "__main__":
     unittest.main()

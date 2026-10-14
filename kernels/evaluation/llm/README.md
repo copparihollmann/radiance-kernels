@@ -288,6 +288,17 @@ placement costs. These two shapes need a capacity check before device runs;
 projecting only the last prefill token's logits is one candidate software
 change, subject to an output-equivalence check.
 
+The [last-logit graph profile](profiles/qwen3-prefill-last-logit.json) adds an
+explicit `prefill.last_hidden` selection before Qwen3's tied LM head for
+greedy generation. Decoder and KV dependencies stay the same. For a batch-1,
+1,024-token prefill, it reduces that FP32 logit tensor from 622,329,856 to
+607,744 bytes and the prefill LM-head work from 159.3 billion to 155.6
+million MACs. A reduced NumPy control projects only the selected hidden row
+and matches the last row of the full logits exactly, including the selected
+token. This is a static graph and arithmetic check; the optimized graph
+still needs reference execution and a compiled device check before these
+savings can be used in a Radiance result.
+
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The
 [model source table](inputs/sources.csv) pins five official
@@ -319,8 +330,8 @@ Qwen3-MoE uses the config's expert count, top-k, sparse step, and explicit
 dense-FFN exceptions according to its [decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py);
 the pinned model has an MoE FFN in every layer. OLMo, Qwen3-MoE, and Mistral
 now have ordered software schedules and reduced reference controls below.
-Nemotron has an ordered hybrid software schedule below; its reduced reference
-and device stages remain open.
+Nemotron has an ordered hybrid software schedule and a connected reduced
+Mamba mixer check below; full checkpoint and network execution remain open.
 All candidates need full checkpoint, input, and device checks before
 model-level performance comparisons.
 

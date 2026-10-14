@@ -210,7 +210,8 @@ class Graph:
 
 def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
                   tokens: int, past: int, caches: dict[int, tuple[str, str]],
-                  token_ids: str | None = None) -> tuple[str, dict]:
+                  token_ids: str | None = None,
+                  prefill_logits: str = "all") -> tuple[str, dict]:
     if spec["family"] == "olmo3":
         return _olmo3_pass(graph, spec, phase, batch, tokens, past, caches, token_ids)
     if spec["family"] == "qwen3_moe":
@@ -247,7 +248,7 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
             out_width *= width
         return graph.add(name, "linear", (source,), shape, "gemm_mxgemmini",
                          {"parameter": parameter, "weight_shape": [in_width, out_width],
-                          "macs": batch * tokens * in_width * out_width})
+                          "macs": batch * shape[1] * in_width * out_width})
 
     for layer in range(spec["num_hidden_layers"]):
         base = f"{phase}.layer{layer:02d}"
@@ -321,19 +322,24 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
         hidden = graph.add(f"{base}.ffn_residual", "add",
                            (hidden_after_attn, down), (batch, tokens, h), "vecadd")
     hidden = norm(f"{phase}.final_norm", hidden, "final_norm")
+    output_tokens = tokens
+    if phase == "prefill" and prefill_logits == "last":
+        hidden = graph.add(f"{phase}.last_hidden", "select_last_token", (hidden,),
+                           (batch, 1, h), attrs={"axis": 1, "index": tokens - 1})
+        output_tokens = 1
     if spec.get("tied_lm_head"):
         logits = graph.add(f"{phase}.lm_head", "linear", (hidden,),
-                           (batch, tokens, spec["vocab_size"]), "gemm_mxgemmini",
+                           (batch, output_tokens, spec["vocab_size"]), "gemm_mxgemmini",
                            {"parameter": "embed_tokens",
                             "weight_shape": [spec["vocab_size"], h],
                             "weight_transposed": True,
-                            "macs": batch * tokens * h * spec["vocab_size"]})
+                            "macs": batch * output_tokens * h * spec["vocab_size"]})
     else:
         logits = linear(f"{phase}.lm_head", hidden,
-                        (batch, tokens, spec["vocab_size"]), "lm_head")
+                        (batch, output_tokens, spec["vocab_size"]), "lm_head")
     if family == "gemma2":
         logits = graph.add(f"{phase}.logit_softcap", "softcap", (logits,),
-                           (batch, tokens, spec["vocab_size"]), "logit_softcap",
+                           (batch, output_tokens, spec["vocab_size"]), "logit_softcap",
                            {"cap": spec["final_logit_softcap"]})
     return logits, next_caches
 
@@ -698,7 +704,8 @@ def _nemotron_pass(graph: Graph, spec: dict, phase: str, batch: int,
 
 
 def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
-                  decode_steps: int, generation: str = "teacher_forced") -> Graph:
+                  decode_steps: int, generation: str = "teacher_forced",
+                  prefill_logits: str = "all") -> Graph:
     if min(batch, prefill) <= 0 or decode_steps < 0:
         raise ValueError("batch and prefill must be positive; decode_steps must be nonnegative")
     if spec["num_attention_heads"] % spec["num_key_value_heads"]:
@@ -707,9 +714,15 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
         raise ValueError("rotary head dimension must be even")
     if generation not in ("teacher_forced", "greedy"):
         raise ValueError("generation must be teacher_forced or greedy")
+    if prefill_logits not in ("all", "last"):
+        raise ValueError("prefill logits must be all or last")
+    if prefill_logits == "last" and (generation != "greedy"
+                                     or spec["family"] != "qwen3"):
+        raise ValueError("last prefill logit is currently validated for greedy Qwen3")
     graph = Graph(model, spec)
     graph.generation = generation
-    logits, caches = _decoder_pass(graph, spec, "prefill", batch, prefill, 0, {})
+    logits, caches = _decoder_pass(graph, spec, "prefill", batch, prefill, 0, {},
+                                   prefill_logits=prefill_logits)
     graph.outputs.append(logits)
     if spec["family"] in {"qwen3", "olmo3", "qwen3_moe", "mistral",
                           "nemotron_h"}:
@@ -726,6 +739,8 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
                 if spec["family"] == "nemotron_h" else
                 "append each layer's rotated K and projected V before its attention"),
         }
+        if prefill_logits == "last":
+            graph.execution_schedule["prefill_logits_policy"] = "last"
         if spec["family"] == "nemotron_h":
             graph.execution_schedule["layer_kinds"] = spec["layer_kinds"]
             graph.execution_schedule["pinned_attention_cache_handoff"] = (
@@ -1169,12 +1184,14 @@ def smolvla_graph(model: str, spec: dict, batch: int) -> Graph:
 
 def build(model: str, batch: int = 1, prefill: int = 16,
           decode_steps: int = 1, specs: dict | None = None,
-          generation: str = "teacher_forced") -> Graph:
+          generation: str = "teacher_forced",
+          prefill_logits: str = "all") -> Graph:
     specs = model_specs() if specs is None else specs
     spec = specs[model]
     if spec["family"] == "smolvla":
         return smolvla_graph(model, spec, batch)
-    return decoder_graph(model, spec, batch, prefill, decode_steps, generation)
+    return decoder_graph(model, spec, batch, prefill, decode_steps,
+                         generation, prefill_logits)
 
 
 def main() -> None:
@@ -1185,12 +1202,15 @@ def main() -> None:
     parser.add_argument("--decode-steps", type=int, default=1)
     parser.add_argument("--generation", choices=("teacher_forced", "greedy"),
                         default="teacher_forced")
+    parser.add_argument("--prefill-logits", choices=("all", "last"),
+                        default="all", help="greedy Qwen3 may project only the last prefill token")
     parser.add_argument("--compact", action="store_true",
                         help="write one-line JSON for retained graph artifacts")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     report = build(args.model, args.batch, args.prefill, args.decode_steps,
-                   generation=args.generation).report()
+                   generation=args.generation,
+                   prefill_logits=args.prefill_logits).report()
     output = (json.dumps(report, separators=(",", ":")) if args.compact else
               json.dumps(report, indent=2)) + "\n"
     if args.out:
