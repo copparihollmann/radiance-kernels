@@ -1,10 +1,12 @@
 """Reject incomplete or contradictory model-chain FireSim reports."""
 
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path
 import tempfile
+import tracemalloc
 import unittest
 
 from collect_firesim_result import check_source, collect, parse_uart, parse_uart_batch2
@@ -123,6 +125,19 @@ class CollectFiresimResultTest(unittest.TestCase):
             with self.subTest(uart=uart):
                 self.assertEqual(parse_uart_batch2(uart)["status"], "failed")
 
+    def test_two_cluster_parser_streams_large_uart(self):
+        first, *rest = VALID_BATCH_UART.splitlines(keepends=True)
+        filler = (f"boot diagnostic {index:08d} extra text\n"
+                  for index in range(100_000))
+        tracemalloc.start()
+        try:
+            result = parse_uart_batch2(itertools.chain((first,), filler, rest))
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(result["status"], "passed")
+        self.assertLess(peak, 4 * 1024 * 1024)
+
     def test_deepseek_two_cluster_source_scope(self):
         path = (Path(__file__).resolve().parent /
                 "evaluation/deepseek-2g-hbm-build.json")
@@ -139,6 +154,8 @@ class CollectFiresimResultTest(unittest.TestCase):
 
     def test_duplicate_and_partial_reports_are_rejected(self):
         for log in (VALID_UART + "PASS\n",
+                    VALID_UART + "model_chain_hbm: launch clusters=2\n",
+                    VALID_UART + "cluster_status=1:0x600d0000\n",
                     VALID_UART.replace("kernel_cycles64=20\n", ""),
                     VALID_UART + "model_status=600d0000\n",
                     VALID_UART.replace("kernel_cycles64=20", "kernel_cycles64=21"),

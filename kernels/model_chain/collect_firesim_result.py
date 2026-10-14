@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
@@ -50,8 +51,15 @@ def parse_uart(log) -> dict:
     positions = {}
     markers = {"model_chain_hbm: launch cluster 0": 0, "PASS": 0,
                "FAIL": 0}
+    contradictory_launch = False
+    unexpected_cluster_report = False
     for index, raw in enumerate(stream):
         line = raw.strip()
+        if (line.startswith("model_chain_hbm: launch") and
+                line != "model_chain_hbm: launch cluster 0"):
+            contradictory_launch = True
+        if line.startswith(("cluster_status=", "cluster=")):
+            unexpected_cluster_report = True
         if line in markers:
             markers[line] += 1
             positions.setdefault(line, index)
@@ -64,6 +72,10 @@ def parse_uart(log) -> dict:
     problems = []
     if markers["model_chain_hbm: launch cluster 0"] != 1:
         problems.append("expected one model-chain launch marker")
+    if contradictory_launch:
+        problems.append("contradictory launch marker")
+    if unexpected_cluster_report:
+        problems.append("unexpected cluster report in one-SM log")
     for key in FIELDS:
         if counts[key] != 1:
             problems.append(f"expected one {key} field")
@@ -108,69 +120,90 @@ def parse_uart(log) -> dict:
 
 def parse_uart_batch2(log) -> dict:
     """Accept exactly two ordered cluster reports from the HBM batch host."""
-    lines = list(log.splitlines() if isinstance(log, str) else log)
-    launch = [index for index, raw in enumerate(lines)
-              if raw.strip() == "model_chain_hbm: launch clusters=2"]
-    passes = [index for index, raw in enumerate(lines) if raw.strip() == "PASS"]
-    fails = [index for index, raw in enumerate(lines) if raw.strip() == "FAIL"]
-    problems = []
-    if len(launch) != 1 or len(passes) != 1 or fails:
-        problems.append("expected one two-cluster launch and PASS with no FAIL")
-    if any(raw.strip().startswith("model_chain_hbm: launch") and
-           raw.strip() != "model_chain_hbm: launch clusters=2"
-           for raw in lines):
-        problems.append("contradictory launch marker")
-    fields = {}
-    claimed = []
-    cursor = launch[0] if launch else -1
-    for cluster in (0, 1):
-        expected = [f"cluster_status={cluster}:", f"cluster={cluster}",
-                    "gpu_start_cycle64=", "gpu_end_cycle64=", "kernel_cycles64="]
-        record = {}
-        for position, prefix in enumerate(expected):
-            matches = [(index, raw.strip()[len(prefix):])
-                       for index, raw in enumerate(lines)
-                       if raw.strip().startswith(prefix)]
-            if position >= 2:
-                matches = [(index, value) for index, value in matches
-                           if index > cursor and
-                           (cluster == 1 or not any(
-                               lines[prior].strip() == "cluster=1"
-                               for prior in range(cursor + 1, index)))]
-            if len(matches) != 1 or matches[0][0] <= cursor:
-                problems.append(f"cluster {cluster}: missing, repeated, or unordered {prefix}")
-                break
-            cursor, value = matches[0]
-            claimed.append(cursor)
-            if position == 0:
-                if not re.fullmatch(r"(?:0x)?[0-9a-fA-F]{8}", value):
-                    problems.append(f"cluster {cluster}: malformed status")
-                else:
-                    record["model_status"] = int(value, 16)
-            elif position >= 2:
-                key = prefix[:-1]
-                if not re.fullmatch(r"[0-9]+", value) or int(value) >= 1 << 64:
-                    problems.append(f"cluster {cluster}: malformed {key}")
-                else:
-                    record[key] = int(value)
-        if len(record) == 4:
-            if record["model_status"] != PASS_STATUS:
-                problems.append(f"cluster {cluster}: device status is not PASS")
-            if record["gpu_end_cycle64"] <= record["gpu_start_cycle64"]:
-                problems.append(f"cluster {cluster}: end does not follow start")
-            elif record["kernel_cycles64"] != (record["gpu_end_cycle64"] -
-                                                record["gpu_start_cycle64"]):
-                problems.append(f"cluster {cluster}: cycles differ from end minus start")
-            fields[cluster] = record
+    stream = io.StringIO(log) if isinstance(log, str) else log
+    expected = [item for cluster in (0, 1)
+                for item in ((cluster, f"cluster_status={cluster}:", "model_status"),
+                             (cluster, f"cluster={cluster}", "cluster"),
+                             (cluster, "gpu_start_cycle64=", "gpu_start_cycle64"),
+                             (cluster, "gpu_end_cycle64=", "gpu_end_cycle64"),
+                             (cluster, "kernel_cycles64=", "kernel_cycles64"))]
     report_prefixes = ("cluster_status=", "cluster=", "model_status=",
                        "gpu_start_cycle64=", "gpu_end_cycle64=",
                        "kernel_cycles64=")
-    reported = [index for index, raw in enumerate(lines)
-                if raw.strip().startswith(report_prefixes)]
-    if sorted(claimed) != reported:
-        problems.append("extra or duplicate cluster report field")
-    if passes and cursor >= passes[0]:
-        problems.append("PASS precedes a cluster report")
+    problems = []
+    seen_problems = set()
+
+    def problem(message):
+        if message not in seen_problems:
+            seen_problems.add(message)
+            problems.append(message)
+
+    launch_count = pass_count = fail_count = report_count = stage = 0
+    launch_index = pass_index = first_report_index = last_report_index = None
+    fields = {0: {}, 1: {}}
+    for index, raw in enumerate(stream):
+        line = raw.strip()
+        if line == "model_chain_hbm: launch clusters=2":
+            launch_count += 1
+            if launch_index is None:
+                launch_index = index
+        elif line.startswith("model_chain_hbm: launch"):
+            problem("contradictory launch marker")
+        if line == "PASS":
+            pass_count += 1
+            if pass_index is None:
+                pass_index = index
+        elif line == "FAIL":
+            fail_count += 1
+        if not line.startswith(report_prefixes):
+            continue
+        report_count += 1
+        if first_report_index is None:
+            first_report_index = index
+        last_report_index = index
+        if stage >= len(expected):
+            problem("extra or duplicate cluster report field")
+            continue
+        cluster, prefix, key = expected[stage]
+        if not line.startswith(prefix):
+            problem("missing, repeated, or unordered cluster report field")
+            continue
+        value = line[len(prefix):]
+        stage += 1
+        if key == "cluster":
+            if value:
+                problem(f"cluster {cluster}: malformed cluster marker")
+        elif key == "model_status":
+            if not re.fullmatch(r"(?:0x)?[0-9a-fA-F]{8}", value):
+                problem(f"cluster {cluster}: malformed status")
+            else:
+                fields[cluster][key] = int(value, 16)
+        elif not re.fullmatch(r"[0-9]+", value) or int(value) >= 1 << 64:
+            problem(f"cluster {cluster}: malformed {key}")
+        else:
+            fields[cluster][key] = int(value)
+    if launch_count != 1 or pass_count != 1 or fail_count:
+        problems.append("expected one two-cluster launch and PASS with no FAIL")
+    if stage != len(expected):
+        problem("incomplete cluster report")
+    if report_count != len(expected):
+        problem("extra or duplicate cluster report field")
+    if (launch_index is not None and first_report_index is not None and
+            first_report_index <= launch_index):
+        problem("cluster report precedes launch")
+    if (pass_index is not None and last_report_index is not None and
+            pass_index <= last_report_index):
+        problem("PASS precedes a cluster report")
+    for cluster, record in fields.items():
+        if len(record) != 4:
+            continue
+        if record["model_status"] != PASS_STATUS:
+            problem(f"cluster {cluster}: device status is not PASS")
+        if record["gpu_end_cycle64"] <= record["gpu_start_cycle64"]:
+            problem(f"cluster {cluster}: end does not follow start")
+        elif record["kernel_cycles64"] != (record["gpu_end_cycle64"] -
+                                           record["gpu_start_cycle64"]):
+            problem(f"cluster {cluster}: cycles differ from end minus start")
     return {"status": "passed" if not problems else "failed",
             "problems": problems, "fields": fields}
 

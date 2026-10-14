@@ -919,6 +919,8 @@ Its [controls](test_collect_firesim_result.py) use synthetic UART text; no
 full-model FPGA result is recorded here yet.
 The collector accepts one-SM and two-SM reports only. A four-SM result needs
 its own source manifest and UART protocol before it can be accepted.
+Both accepted report formats are parsed from the UART stream without loading
+the whole log into memory.
 
 For the 2 GiB GPU map in the public HBM configuration, SmolVLA's FP32 image
 fits if its two weight segments and exact input image are moved below the warp
