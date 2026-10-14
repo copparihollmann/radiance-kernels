@@ -1,0 +1,35 @@
+{
+  "schema": "radiance.nemotron-pinned-prefill.v1",
+  "status": "passed",
+  "scope": "one reduced Mamba2 prefill block, same synthetic FP32 weights",
+  "prefill_tokens": 3,
+  "modeling_sha256": "ea982af0b805f181573f919ecb001d5bbc0153459923cf4b2f1ccae194e415a4",
+  "configuration_sha256": "07fa66e5b3da7e6a71c1a263e3dd68da11c8afa9178b47c49510ba628746fcff",
+  "standard_graph_max_abs_by_stage": {
+    "in_proj": 2.384185791015625e-07,
+    "conv1d": 1.1920928955078125e-07,
+    "gate": 1.1920928955078125e-07,
+    "scan": 0.1336168646812439,
+    "norm": 0.2107541561126709,
+    "out_proj": 0.08236238360404968
+  },
+  "alternating_group_max_abs_by_stage": {
+    "in_proj": 2.384185791015625e-07,
+    "conv1d": 1.1920928955078125e-07,
+    "gate": 1.1920928955078125e-07,
+    "scan": 1.1920928955078125e-07,
+    "norm": 5.960464477539062e-07,
+    "out_proj": 2.980232238769531e-07
+  },
+  "pinned_cpu_prefill_group_order": "alternating: 0,1,0,1",
+  "graph_and_pinned_decode_group_order": "contiguous: 0,0,1,1",
+  "adapter": "in-memory CPU rmsnorm_fn shim; no pinned source file edited",
+  "source_sha256": "7bae07e0a1d673255824399f568ab3e9738caba8dc05707a1227ea3ea97cc278",
+  "graph_reference_sha256": "5d9737c694315f5337c53ba5c413a84b00f364ae2a28151c65ae1588c2a4c0e2",
+  "transformers_version": "5.3.0",
+  "torch_version": "2.9.1+cpu",
+  "peak_rss_kib": 1283552,
+  "checkpoint_weights": false,
+  "full_network_equivalence": false,
+  "device_execution": false
+}

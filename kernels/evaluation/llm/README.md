@@ -557,6 +557,49 @@ pinned implementation. Reproduce with
 kernels/evaluation/llm/nemotron-source-audit.json`; the script fetches only
 the pinned 79 KB modeling file into memory.
 
+The pinned CPU fallback also differs from the graph's Mamba head-group
+mapping during prefill. In the pinned source, `B.repeat` and `C.repeat`
+assign two groups to four heads as `0,1,0,1`; its cached decode branch uses
+`expand` and assigns `0,0,1,1`. The graph uses the contiguous mapping for
+both phases, as does the installed Transformers 5.3 reference above.
+[`verify_nemotron_pinned_prefill.py`](verify_nemotron_pinned_prefill.py)
+executes one reduced block with the exact revision-pinned modeling and config
+files and the same synthetic FP32 weights. A small in-memory CPU normalization
+shim substitutes for its missing Mamba Triton dependency; the pinned source
+bytes are checked by SHA-256 and left unedited. Its projection, convolution,
+and gate agree with the graph before the scan diverges:
+
+| Prefill | Standard graph vs pinned scan, max abs | Standard graph vs pinned mixer output, max abs | Alternating-group control vs pinned scan/output, max abs |
+| --- | ---: | ---: | ---: |
+| [3 tokens](nemotron-pinned-prefill3.json) | `0.134` | `0.0824` | `1.19e-7` / `2.98e-7` |
+| [128 tokens](nemotron-pinned-prefill128.json) | `0.484` | `0.292` | `1.79e-7` / `4.77e-7` |
+
+Only changing the reference scan's head-group index to the pinned prefill
+order removes the difference. This is evidence of a source-level prefill
+inconsistency, not an executed checkpoint or a reason to relabel the graph
+as pinned-source equivalent. Before using this checkpoint for model-level
+claims, the prefill group layout and attention cache handoff need a reviewed
+target implementation and same-weight end-to-end checks.
+
+To reproduce, download the pinned
+[modeling file](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/modeling_nemotron_h.py)
+and [configuration file](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/configuration_nemotron_h.py)
+into the task's `$TMPDIR`, then run:
+
+```sh
+curl -fLsS -o "$TMPDIR/modeling_nemotron_h.py" \
+  'https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/resolve/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/modeling_nemotron_h.py'
+curl -fLsS -o "$TMPDIR/configuration_nemotron_h.py" \
+  'https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/resolve/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/configuration_nemotron_h.py'
+ulimit -v 6291456
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  python3 kernels/evaluation/llm/verify_nemotron_pinned_prefill.py \
+    --modeling "$TMPDIR/modeling_nemotron_h.py" \
+    --configuration "$TMPDIR/configuration_nemotron_h.py" --prefill 128
+```
+
+The 128-token CPU check peaked at about 1.3 GiB RAM and wrote no build tree.
+
 The installed Transformers 5.3.0 is also not a drop-in numerical reference
 for this checkpoint. [`check_nemotron_config.py`](check_nemotron_config.py)
 passes the pinned config to its `NemotronHConfig.from_dict`; the
