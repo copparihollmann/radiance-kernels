@@ -433,6 +433,40 @@ output agrees with the seeded Transformers CPU fallback within `4.11e-6`
 maximum absolute error over seven tokens, including two cached decode calls.
 This is a mixer-level check at reduced width; it does not resolve the pinned
 network or attention-cache discrepancy.
+
+[`nemotron_graph_reference.py`](nemotron_graph_reference.py) now executes the
+named stages of the ordered hybrid graph in NumPy, including separate
+convolution and SSM state outputs. The [42-block reduced control](nemotron-reduced-hybrid-chain.json)
+uses synthetic FP32 weights and a three-token prefill followed by two decode
+steps. It checks 1,320 teacher-forced stages and 1,322 greedy stages. The
+greedy graph matches all 1,322 ordered stage IDs, operations, tensor edges,
+and outputs of the pinned graph; its generated tokens are `[52, 52]`. Both
+teacher-forced and greedy cached outputs match a five-token causal pass
+exactly. Removing the first Mamba convolution state changes its next output
+by `0.104`; bypassing the first attention layer's K/V cache changes its
+attention output by `2.03`. The control peaked at about 43 MiB RSS.
+
+An [independent mixer comparison](nemotron-graph-mixer-reference.json) binds
+the new graph executor's first Mamba layer to the same random weights as the
+installed Transformers 5.3.0 CPU fallback. Its largest mixer-output error is
+`3.73e-7`; its final convolution and SSM states differ by at most `2.38e-7`
+and `2.98e-8`. This check peaked at about 357 MiB RSS. The full graph uses
+reduced widths and an eight-token scan chunk, so its exact five-token
+self-consistency does not settle the known chunk-boundary difference in the
+upstream fallback. The 42-block network has not been compared with the
+pinned checkpoint or run as a connected Radiance ELF. The pinned source's
+attention-cache handoff and config-parser issues still need a reviewed
+reference adapter before full-model equivalence can be claimed.
+
+Reproduce these controls with task-local `TMPDIR` and a Python environment
+containing Transformers 5.3.0 and PyTorch 2.9.1:
+
+```sh
+python3 kernels/evaluation/llm/check_nemotron_graph_chain.py \
+  --out "$TMPDIR/nemotron-reduced-hybrid-chain.json"
+"$TRANSFORMERS_PYTHON" kernels/evaluation/llm/verify_nemotron_graph_reduced.py \
+  --out "$TMPDIR/nemotron-graph-mixer-reference.json"
+```
 Regenerate with:
 
 ```sh

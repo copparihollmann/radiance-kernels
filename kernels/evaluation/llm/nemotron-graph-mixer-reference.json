@@ -1,0 +1,33 @@
+{
+  "schema": "radiance.nemotron-graph-mixer-reference.v1",
+  "status": "passed",
+  "scope": "one reduced random-weight Mamba layer, three-token prefill and two cached decode calls",
+  "pinned_model": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+  "pinned_config_sha256": "fde9241f66cd414458df444a80eb535f53aef2b4b240a91f092e651fa6f27219",
+  "graph_stage_count": 57,
+  "input_token_ids": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "max_abs_error_by_check": {
+    "prefill.projection": 2.384185791015625e-07,
+    "prefill.mixer_output": 3.725290298461914e-07,
+    "decode0.projection": 2.384185791015625e-07,
+    "decode0.mixer_output": 2.980232238769531e-07,
+    "decode1.projection": 1.1920928955078125e-07,
+    "decode1.mixer_output": 1.7881393432617188e-07,
+    "final_conv_state": 2.384185791015625e-07,
+    "final_ssm_state": 2.9802322387695312e-08
+  },
+  "transformers_version": "5.3.0",
+  "torch_version": "2.9.1+cpu",
+  "transformers_modeling_source_sha256": "5bcd6c29a15e31e080e2ef5c64f68457c54b7d2db67421e0ea8b2220ea598bda",
+  "graph_reference_source_sha256": "5d9737c694315f5337c53ba5c413a84b00f364ae2a28151c65ae1588c2a4c0e2",
+  "peak_rss_kib": 365936,
+  "device_execution": false,
+  "checkpoint_weights": false,
+  "full_network_equivalence": false
+}
