@@ -1,0 +1,32 @@
+{
+  "model": "spectformer_hierarchical",
+  "status": "passed",
+  "scope": "logits",
+  "output_count": 1000,
+  "run_result_sha256": "73c6fdf8b90300357eebc380501602843aa1143fec969ad4d72251e80cb7a211",
+  "build_manifest_sha256": "086b2b5e72db34b0f15ed29624945f059558fee64ec82e18410f115fc59fb85e",
+  "image_manifest_sha256": "63764c3695e503b67ac12c3703c4d7983274a932d3bd5b4a5b69a92b7ada86c7",
+  "input_sha256": "16cef85912c516ecddfdcf7475cc80bdcfd2e3f9394c5387c77e484c27e53509",
+  "checkpoint_sha256": "3a8d80d44d4a280cf20e8db2048b5a526371186fc0c5ded7729b4d57604dd28e",
+  "weights_sha256": "98d086ed2dba7865c758131acc35da08fc4a2de1f0644a796397a724ea027bf7",
+  "elf_sha256": "1d974c79123f1629264baa35be77199f2461cc790e7eb1d628512357e0aa4c1c",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "output_sha256": "b07b08969bb8087bae257f1b194404e2aa22423dcec8e2ed3a6c2ba04df2ba50",
+  "reference_sha256": "738f90c373beb5caaeadf1cfcd7383c6f8e08a81bbf6a598a1355409a54500d8",
+  "reference_environment": {
+    "torch": "2.9.1+cpu",
+    "timm": "0.9.16",
+    "numpy": "2.2.6"
+  },
+  "all_finite": true,
+  "max_abs_error": 5.7220458984375e-06,
+  "rms_error": 7.870593914358149e-07,
+  "out_of_tolerance": 0,
+  "rtol": 0.005,
+  "atol": 0.001,
+  "top1_agrees": true,
+  "cycles_functional": 3714237968,
+  "reference_checked": true,
+  "rtl_execution": false,
+  "performance_measurement": false
+}
