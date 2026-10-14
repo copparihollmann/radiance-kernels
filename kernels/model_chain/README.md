@@ -274,6 +274,23 @@ ELF file offsets. It avoids a sparse 2 GiB file and leaves each segment's
 physical load address unchanged. The October 11
 XB10 bitstream's exact HWDB and FPGA execution remain to be checked.
 
+`export_decoder_int8_untied.py` provides a full-depth alternative for
+TinyLlama and DeepSeek when the GPU region is 2 GiB. It keeps norms and biases
+FP32 and packs the untied embedding and all linear weights with the existing
+per-channel INT8 kernels. At GPU base `0x14000000`, the TinyLlama image is
+1,102,157,824 bytes and ends at `0x55b19800`; the DeepSeek image is
+1,781,318,656 bytes and ends at `0x7e2cc400`. Both leave the device program
+and reserved warp stacks clear. The exporter verifies pinned checkpoint hashes
+and writes a manifest for `compile_decoder.py`.
+
+These are lossy checkpoint conversions. On the fixed greedy fixtures, the
+generated host C++ passed 1,133/1,133 TinyLlama stages and 1,691/1,691
+DeepSeek stages against their respective INT8 references. Both produced the
+same two tokens as the upstream checkpoint fixtures; their logits differ. The
+Radiance and nightly HBM source ELFs compile and the 2 GiB compact-hash
+FireSim packages pass local reconstruction checks. Hardware correctness and
+performance remain unmeasured for these builds.
+
 ### Full-depth checkpoint builds
 
 `export_decoder_fp16.py` stores linear and embedding weights as IEEE FP16,
