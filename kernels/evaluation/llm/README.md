@@ -417,9 +417,17 @@ renormalized scores, token grouping, packed gate/up expert weights, SwiGLU,
 expert down projections, and weighted recombination. The graph records the
 ordered cache and token dependencies across decode steps. Of its stages,
 1,733 lack a named device primitive; the rest are starting points, not
-connected implementations. The reduced router control above validates only
-that FFN operation. The full decoder graph has not been numerically executed
-or compiled for Radiance, and it does not include checkpoint weights.
+connected implementations. The reduced router control above validates one
+FFN operation. A separate [reduced stitched-decoder check](qwen3-moe-reduced-reference.json)
+executes every stage of a two-layer graph with the same random weights as
+Transformers 5.3.0: 153 stages for a three-token prefill and two cached decode
+tokens, with all phase logits within `1.49e-7` and identical per-layer expert
+choices. A 155-stage greedy graph selects the same two next tokens `[63, 9]`
+and keeps logits within `1.49e-7`. Omitting top-k score renormalization moves
+the final logits by `0.0130`. Run
+`python3 kernels/evaluation/llm/verify_qwen3_moe_reduced.py` to reproduce it.
+The full-dimension, 48-layer graph has not been numerically executed or
+compiled for Radiance, and it does not include checkpoint weights.
 Regenerate the graph with:
 
 ```sh
