@@ -687,6 +687,15 @@ records the calibrated native FP32 tolerance and its
 matches the pinned stage dependencies. The short executed prompt does not
 cross the pinned 4,096-token local window, and the weights and widths are
 synthetic reduced controls.
+
+The [same-fixture upstream check](olmo3-device-fixture-upstream.json) binds
+all 355 generated device parameter declarations to Transformers 5.3.0. It
+compares upstream CPU with the stitched NumPy reference that the separate
+Cyclotron run checks stage by stage. All 96 layer outputs and the three
+prefill/decode logit tensors pass `rtol=1e-3, atol=1e-4`; both paths select
+`[23, 45]`. This validates the 32-layer local/full order with the executed
+short prompt, not the 4,096-token window boundary.
+
 Forcing all four mapped layers to full attention changes the final logits by
 `0.227` in both NumPy paths, so the test detects a lost local mask. The separately calculated
 YaRN inverse frequencies are also checked against upstream. Reproduce with

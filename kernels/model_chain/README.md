@@ -264,6 +264,18 @@ three-token prompt; it is not a full OLMo-3-7B checkpoint run, a 4,097-token
 window-crossing execution, RTL timing, or an FPGA result. The Cyclotron cycle
 count is a functional ISA count rather than hardware latency.
 
+The [same-fixture upstream check](../evaluation/llm/olmo3-device-fixture-upstream.json)
+binds Transformers 5.3.0 to all 355 FP32 parameter declarations in this
+exact generated source. It compares upstream CPU outputs with the stitched
+NumPy reference used by the separate Cyclotron stage checks. Across the
+32-layer, three-prefill/two-greedy schedule, all 96 layer outputs and three
+logit tensors pass `rtol=1e-3, atol=1e-4`; the maximum layer-output and
+logit errors are `3.15e-5` and `5.01e-6`. Both paths select `[23, 45]`, and
+their YaRN inverse frequencies differ by at most `5.82e-11`. The check
+verifies the generated source and ELF hashes against the passing Cyclotron
+receipt. It does not read device logits directly, rerun the device, or cross
+the pinned local-window boundary. Peak RAM was about 363 MiB.
+
 Reproduce the small device control with task-local `TMPDIR` and the Muon and
 Cyclotron paths set for your machine:
 
@@ -307,6 +319,9 @@ python3 kernels/model_chain/verify_functional.py \
   --config "$TMPDIR/olmo3-full-depth-reduced/cyclotron-config.toml" \
   --source-config kernels/evaluation/llm/inputs/olmo3-7b.json \
   --out "$TMPDIR/olmo3-full-depth-reduced/olmo3_7b/verification.json"
+python3 kernels/evaluation/llm/verify_olmo3_device_fixture.py \
+  --build-dir "$TMPDIR/olmo3-full-depth-reduced/olmo3_7b" \
+  --out "$TMPDIR/olmo3-device-fixture-upstream.json"
 ```
 
 ## Nemotron hybrid decoder control
