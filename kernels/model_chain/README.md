@@ -287,8 +287,16 @@ first prefill row instead changes the logits by `0.598` at maximum. The
 build and verification receipts for both paths are under `evaluation/`. The
 4,047-cycle difference is a Cyclotron functional cycle difference, not a
 hardware latency or utilization measurement. These builds use reduced
-synthetic FP32 weights; the full-width checkpoint version of this optimized
-ELF remains to be built and checked.
+synthetic FP32 weights. The [full-width checkpoint last-token build](evaluation/qwen3-prefill-last-full-fp16-build.json)
+also compiles: it binds the same pinned FP16 image and three input IDs as the
+full-logit build, executes 28 layers, and has 1,608 ordered stages including
+the final-token selection. Its checkpoint-backed NumPy reference selects the
+same two greedy IDs `[16, 8]`; FP16 storage conversion preserves each top
+token, with at most `8.83e-6` final-logit error. The Muon and SoC ELFs built,
+and the layout check found 3,219 disjoint cache-line-padded buffers. A
+full-width Cyclotron run has been started but has no completed result yet.
+The build receipt records `device_execution=false`; numerical device
+equivalence at full width remains open.
 
 Reproduce the reduced comparison with `TMPDIR` and the Muon toolchain set
 for your machine:
@@ -341,6 +349,13 @@ python3 kernels/model_chain/compile_decoder.py \
   --device-check-all-stages --checkpoint-dir "$CHECKPOINT" \
   --weight-image "$WEIGHTS/qwen3_0_6b/weights-image.json" \
   --out-root "$BUILD_MULTI" --build
+RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+  --model qwen3_0_6b --layers 28 --prefill 3 --decode-steps 2 \
+  --generation greedy --prefill-logits last --token-ids 5 6 7 \
+  --stages-per-object 20 --device-check-all-stages \
+  --checkpoint-dir "$CHECKPOINT" \
+  --weight-image "$WEIGHTS/qwen3_0_6b/weights-image.json" \
+  --out-root "$BUILD_LAST" --build
 python3 kernels/evaluation/llm/verify_qwen3_checkpoint.py \
   --checkpoint-dir "$CHECKPOINT" --input-token 5 \
   --out "$BUILD/qwen3-checkpoint-reference.json"
