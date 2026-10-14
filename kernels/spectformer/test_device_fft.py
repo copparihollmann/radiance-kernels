@@ -24,6 +24,14 @@ def aligned(value):
 
 class DeviceFftTest(unittest.TestCase):
     def test_row_fft_matches_reference(self):
+        self.check_grid(14, 14, 3)
+
+    def test_larger_row_ffts_match_reference(self):
+        for grid in ((28, 28, 2), (56, 56, 1)):
+            with self.subTest(grid=grid):
+                self.check_grid(*grid)
+
+    def check_grid(self, height, width, channels):
         cyclotron_root = Path(os.environ.get(
             "CYCLOTRON_ROOT", "/scratch/agustin/projects/chipyard/generators/radiance/cyclotron"))
         simulator = cyclotron_root / "target/release/cyclotron"
@@ -35,7 +43,6 @@ class DeviceFftTest(unittest.TestCase):
             if not needed.exists():
                 self.skipTest(f"device test dependency missing: {needed}")
 
-        height, width, channels = 14, 14, 3
         rng = np.random.default_rng(8421)
         values = rng.normal(size=(height, width, channels)).astype("<f4")
         expected = np.fft.rfft(values, axis=1, norm="ortho").astype("<c8")
