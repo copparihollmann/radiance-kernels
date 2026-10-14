@@ -32,12 +32,15 @@ def verify(target: Path, input_path: Path, out: Path,
         raise ValueError("run did not complete successfully")
     image_path = Path(build["source_image_manifest"])
     image = json.loads(image_path.read_text())
+    if run["model"] != build["model"] or run["image_size"] != image["image_size"]:
+        raise ValueError("run model scope differs from the build or export")
     pixels = load_input(input_path, image["image_size"])
     input_digest = hashlib.sha256(pixels.tobytes()).hexdigest()
+    weights_path = image_path.parent / "weights.bin"
     checks = (
         ("input", input_digest, run["input_sha256"]),
-        ("weights", sha256(image_path.parent / "weights.bin"),
-         build["weights_sha256"]),
+        ("weights", sha256(weights_path), build["weights_sha256"]),
+        ("export weights", image["weights_sha256"], build["weights_sha256"]),
         ("run weights", run["weights_sha256"], build["weights_sha256"]),
         ("checkpoint", run["checkpoint_sha256"], image["checkpoint_sha256"]),
         ("ELF", sha256(target / "kernel.radiance.elf"), build["radiance_elf_sha256"]),
@@ -51,9 +54,14 @@ def verify(target: Path, input_path: Path, out: Path,
         if actual != recorded:
             raise ValueError(f"{label} hash differs from the run receipt")
     log = (out / "cyclotron.log").read_text()
+    preload_weights = (f"preloaded {weights_path.stat().st_size} bytes of weights "
+                       f"@0x{image['base_address']:x}")
+    preload_input = (f"preloaded {pixels.nbytes} bytes of weights "
+                     f"@0x{build['input_address']:x}")
     if ("isa-test passed with tohost=0" not in log or
-            f"simulation finished after {run['cycles_functional']} cycles" not in log):
-        raise ValueError("run log does not show the recorded completion")
+            f"simulation finished after {run['cycles_functional']} cycles" not in log or
+            preload_weights not in log or preload_input not in log):
+        raise ValueError("run log does not match completion or preload addresses")
 
     kind = build.get("output_kind", "logits")
     count = build.get("output_count", image["num_classes"])
