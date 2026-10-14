@@ -340,8 +340,9 @@ Qwen3-MoE uses the config's expert count, top-k, sparse step, and explicit
 dense-FFN exceptions according to its [decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py);
 the pinned model has an MoE FFN in every layer. OLMo, Qwen3-MoE, and Mistral
 now have ordered software schedules and reduced reference controls below.
-Nemotron has an ordered hybrid software schedule and a connected reduced
-Mamba mixer check below; full checkpoint and network execution remain open.
+Nemotron has an ordered hybrid software schedule, a reduced upstream Mamba
+mixer check, and a connected reduced-width 42-block Radiance execution below.
+Its full checkpoint execution remains open.
 All candidates need full checkpoint, input, and device checks before
 model-level performance comparisons.
 
@@ -375,10 +376,10 @@ buffers. The KV term represents an intended cached-attention mapping. In the
 pinned `NemotronHBlock.forward`, the attention mixer is called without the
 hybrid cache argument, despite the mixer's own cache-update path. A reference
 run must settle this handoff before we claim that the pinned code performs
-cached attention across decode steps. A runnable Nemotron graph still needs
-the Mamba convolution and selective scan, attention, MLP-only stages, their
-ordered state handoff, and an upstream numerical check before any Radiance
-performance claim.
+cached attention across decode steps. The connected reduced-width decoder
+below tests the Mamba and attention state handoffs in Radiance. The pinned
+attention-cache behavior still needs an upstream network-level check before
+a performance claim.
 
 Regenerate with `python3 kernels/evaluation/llm/profile_nemotron_state.py
 --out kernels/evaluation/llm/nemotron-state-profiles.json`.
@@ -399,15 +400,17 @@ standalone primitives for 660 stages; 662 still lack a named device stage.
 The [depthwise convolution primitive](../../mamba_depthwise_conv/README.md)
 handles the causal four-tap filter and carries its raw-sample cache through
 prefill and decode on a reduced fixture. The graph now binds its 63 convolution
-stages to that primitive; the paired state output still needs buffer binding.
+stages to that primitive; the connected decoder below binds their paired
+state outputs to the following decode calls.
 The [selective scan primitive](../../mamba_selective_scan/README.md) covers
 time-step preparation, the post-convolution recurrence, and final-state
 carry on a small FP32 fixture.
 Its [Cyclotron check](../../mamba_selective_scan/evaluation/cyclotron.json)
 compares all 224 output and 128 final-state values with an independent NumPy
-golden. The graph now gives the 63 scan stages that primitive's name. It still
-needs projection slicing, gate and norm, multi-output convolution and scan
-binding, and pinned-weight validation before network execution.
+golden. The graph gives the 63 scan stages that primitive's name. The
+connected reduced decoder below implements projection slicing, gate and norm,
+and separate convolution and scan state outputs; pinned-weight validation
+remains open.
 The [reduced upstream mixer check](../../mamba_selective_scan/evaluation/transformers-reduced-cyclotron.json)
 also extracts seven tokens of intermediate scan inputs from Transformers 5.3,
 checks NumPy against its cached CPU fallback, and passes the resulting device
@@ -422,11 +425,9 @@ two callbacks in one ELF, passing the 48-channel convolution output directly
 to the scan on device. Its [Cyclotron receipt](../../mamba_conv_scan/evaluation/transformers-reduced-cyclotron.json)
 checks both outputs and both carried states across prefill and decode on two
 Muon cores; all four hashes match the separate checks. It remains a reduced,
-random-weight pair. Those graph stage names do not make the 42-block network
-a connected executable. The pinned source's
-attention cache handoff remains the main reference discrepancy, and this
-full graph has neither a pinned-checkpoint numerical comparison nor a
-connected Radiance ELF.
+random-weight pair. The connected 42-block execution below adds the remaining
+network stages. The pinned source's attention cache handoff remains a
+reference discrepancy; no pinned-checkpoint numerical comparison is available.
 The [reduced full mixer](../../mamba_mixer/README.md) adds input projection,
 gated RMSNorm, and output projection around that connected pair. Its final
 output agrees with the seeded Transformers CPU fallback within `4.11e-6`
@@ -453,10 +454,21 @@ installed Transformers 5.3.0 CPU fallback. Its largest mixer-output error is
 and `2.98e-8`. This check peaked at about 357 MiB RSS. The full graph uses
 reduced widths and an eight-token scan chunk, so its exact five-token
 self-consistency does not settle the known chunk-boundary difference in the
-upstream fallback. The 42-block network has not been compared with the
-pinned checkpoint or run as a connected Radiance ELF. The pinned source's
-attention-cache handoff and config-parser issues still need a reviewed
-reference adapter before full-model equivalence can be claimed.
+upstream fallback. The 42-block network has not been compared with the pinned
+checkpoint. The pinned source's attention-cache handoff and config-parser
+issues still need a reviewed reference adapter before full-model equivalence
+can be claimed.
+
+The [connected reduced-width build](../../model_chain/evaluation/nemotron-full-depth-reduced-build.json)
+runs all 42 blocks in a single Radiance ELF. It passed 1,322 native stage
+checks and [all 1,322 Cyclotron checks](../../model_chain/evaluation/nemotron-full-depth-reduced-functional.json)
+with `tohost=0`. The one-layer Mamba check and full-depth verifier are in the
+[connected-kernel record](../../model_chain/README.md#nemotron-hybrid-decoder-control).
+These use deterministic synthetic FP32 weights, a three-token prompt, and
+reduced widths; the pinned graph uses a 128-token prefill and original model
+dimensions. The 3,629,544 Cyclotron cycles are functional ISA cycles, not
+timed hardware performance. The kernel path does not validate the pinned
+checkpoint or settle the upstream attention-cache behavior.
 
 Reproduce these controls with task-local `TMPDIR` and a Python environment
 containing Transformers 5.3.0 and PyTorch 2.9.1:

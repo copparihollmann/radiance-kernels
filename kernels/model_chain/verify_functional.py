@@ -76,6 +76,7 @@ def verify(result_path: Path, simulator: Path, config: Path,
                       ("moe_ops_sha256", "pipeline_moe.hpp"),
                       ("last_token_ops_sha256", "pipeline_select_last.hpp"),
                       ("olmo_ops_sha256", "pipeline_olmo.hpp"),
+                      ("nemotron_ops_sha256", "pipeline_nemotron.hpp"),
                       ("tied_embedding_ops_sha256", "pipeline_tied.hpp"),
                       ("fp32_tied_ops_sha256", "pipeline_fp32_tied.hpp"),
                       ("packed_ops_sha256", "pipeline_packed.hpp")):
@@ -89,6 +90,8 @@ def verify(result_path: Path, simulator: Path, config: Path,
                        "last_token_graph_reference.py"),
                       ("numpy_olmo_graph_reference_sha256",
                        "olmo_graph_reference.py"),
+                      ("numpy_nemotron_graph_reference_sha256",
+                       "nemotron_graph_reference.py"),
                       ("graph_builder_sha256", "stitch.py")):
         if result.get(key):
             same(ROOT / "kernels/evaluation/llm" / name, result[key], name)
@@ -109,6 +112,11 @@ def verify(result_path: Path, simulator: Path, config: Path,
                     ("olmo_ops_sha256", "numpy_olmo_graph_reference_sha256",
                      "graph_builder_sha256"))):
             raise ValueError("OLMo 3 receipt lacks schedule or operation sources")
+    if result["model"] == "nemotron3_nano_4b" and any(
+            not result.get(key) for key in
+            ("nemotron_ops_sha256", "numpy_nemotron_graph_reference_sha256",
+             "graph_builder_sha256")):
+        raise ValueError("Nemotron H receipt lacks schedule or operation sources")
     same(ROOT / "kernels/evaluation/llm/pr1-models.json",
          result["model_specs_sha256"], "model specs")
     if source_config is not None:

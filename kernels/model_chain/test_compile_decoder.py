@@ -146,6 +146,41 @@ class DecoderCompilerTest(unittest.TestCase):
                 source.write_text(original)
             self.assertIn("errors=0", verify_native(target))
 
+    def test_nemotron_mamba_state_reaches_decode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = generate("nemotron3_nano_4b", 1, 3, 2, "greedy",
+                              Path(temporary), device_check_all_stages=True,
+                              stages_per_object=20, token_ids=[1, 2, 3])
+            manifest = json.loads((target / "manifest.json").read_text())
+            self.assertEqual(manifest["stages"], 59)
+            self.assertEqual(manifest["native_verified_integer_stages"], 2)
+            self.assertIn("errors=0", verify_native(target))
+            source = target / "native.cpp"
+            original = source.read_text()
+            needle = ("mamba_depthwise_conv(v_decode0_layer00_conv_input, "
+                      "v_prefill_layer00_conv_state,")
+            self.assertEqual(original.count(needle), 1)
+            try:
+                source.write_text(original.replace(needle,
+                    "mamba_depthwise_conv(v_decode0_layer00_conv_input, nullptr,"))
+                with self.assertRaises(subprocess.CalledProcessError):
+                    verify_native(target)
+            finally:
+                source.write_text(original)
+            self.assertIn("errors=0", verify_native(target))
+            ssm = ("v_decode0_layer00_dt, v_prefill_layer00_ssm_state, "
+                   "v_parameter_backbone_layers_0_mixer_A_log")
+            self.assertEqual(original.count(ssm), 2)
+            try:
+                source.write_text(original.replace(ssm,
+                    "v_decode0_layer00_dt, nullptr, "
+                    "v_parameter_backbone_layers_0_mixer_A_log"))
+                with self.assertRaises(subprocess.CalledProcessError):
+                    verify_native(target)
+            finally:
+                source.write_text(original)
+            self.assertIn("errors=0", verify_native(target))
+
     def test_qwen3_moe_sparse_stages_join_prefill_and_greedy_decode(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = generate("qwen3_30b_a3b", 2, 3, 2, "greedy",

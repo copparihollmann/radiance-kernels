@@ -309,6 +309,63 @@ python3 kernels/model_chain/verify_functional.py \
   --out "$TMPDIR/olmo3-full-depth-reduced/olmo3_7b/verification.json"
 ```
 
+## Nemotron hybrid decoder control
+
+`compile_decoder.py` now connects the pinned Nemotron-3-Nano-4B block order
+in a single Radiance executable. The 42 blocks comprise 21 Mamba2, four
+attention, and 17 MLP-only blocks. Mamba stages carry both the four-sample
+convolution history and the selective-scan state from prefill into each
+greedy decode call; attention stages carry K/V history separately. Projection
+slices, causal depthwise convolution, scan, gated normalization, and squared
+ReLU are compiled with the other decoder operations. The prefill LM head reads
+the last token's hidden state.
+
+The [one-layer build](evaluation/nemotron-one-layer-build.json) starts with a
+Mamba block. Its [Cyclotron check](evaluation/nemotron-one-layer-functional.json)
+passed all 59 stages, including two token-selection stages, with `tohost=0`
+after 150,601 functional ISA cycles. The
+[full-depth reduced build](evaluation/nemotron-full-depth-reduced-build.json)
+passed all 1,322 native checks with `8.59e-6` maximum absolute error under
+`rtol=1e-4, atol=1e-5`. Its
+[Cyclotron check](evaluation/nemotron-full-depth-reduced-functional.json)
+passed all 1,322 stages with `tohost=0` after 3,629,544 functional ISA cycles.
+The [one-layer](evaluation/nemotron-one-layer-verification.json) and
+[full-depth](evaluation/nemotron-full-depth-reduced-verification.json)
+verifiers record the ELF, source, reference, simulator, configuration, and
+log hashes. Regression controls separately remove the prior convolution and
+SSM states from the first decode call; both fail native stage checks.
+
+This is a connected correctness control using synthetic FP32 weights and
+reduced tensor widths. It uses a three-token prompt, an eight-token scan
+chunk, and two greedy decode steps. It does not use the pinned checkpoint or
+original dimensions. The pinned upstream network has an unresolved attention
+cache handoff and config-parser discrepancy, so these checks do not establish
+full-network equivalence to its published implementation. Cyclotron counts
+functional ISA cycles; no RTL timing, utilization, power, or FPGA result is
+inferred. The full-depth task-local build occupied about 25 MiB and peaked at
+283 MiB RSS with one Muon build job.
+
+Reproduce with task-local `TMPDIR` and the Muon and Cyclotron paths set:
+
+```sh
+RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+  --model nemotron3_nano_4b --layers 42 --prefill 3 --decode-steps 2 \
+  --generation greedy --token-ids 1 2 3 --device-check-all-stages \
+  --stages-per-object 20 --out-root "$TMPDIR/nemotron-full-depth-reduced" \
+  --verify-native --build
+python3 kernels/model_chain/run_functional.py --models nemotron3_nano_4b \
+  --generated-root "$TMPDIR/nemotron-full-depth-reduced" \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 100000000 --timeout 1200 \
+  --out "$TMPDIR/nemotron-full-depth-reduced/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$TMPDIR/nemotron-full-depth-reduced/nemotron3_nano_4b/functional-result.json" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --config "$TMPDIR/nemotron-full-depth-reduced/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/nemotron3-nano-4b.json \
+  --out "$TMPDIR/nemotron-full-depth-reduced/nemotron3_nano_4b/verification.json"
+```
+
 ## Mistral held-out decoder control
 
 The held-out [Mistral-7B-v0.3 graph](../evaluation/llm/mistral-7b-v03-graph.json)

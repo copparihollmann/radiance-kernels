@@ -16,7 +16,8 @@ from split_decoder_weights import (image_segments, verify_image,
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
-          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03", "olmo3_7b")
+          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03", "olmo3_7b",
+          "nemotron3_nano_4b")
 DEFAULT_MODELS = MODELS[:4]
 
 
@@ -102,7 +103,7 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
     used_headers = {header for source in device_sources
                     for header in ("pipeline_tied.hpp", "pipeline_fp32_tied.hpp",
                    "pipeline_moe.hpp", "pipeline_select_last.hpp",
-                   "pipeline_olmo.hpp")
+                   "pipeline_olmo.hpp", "pipeline_nemotron.hpp")
                     if f'#include "{header}"' in source.read_text()}
     result = {
         "model": model,
@@ -137,6 +138,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
             if "pipeline_select_last.hpp" in used_headers else None),
         "olmo_ops_sha256": (sha256(HERE / "pipeline_olmo.hpp")
                              if "pipeline_olmo.hpp" in used_headers else None),
+        "nemotron_ops_sha256": (sha256(HERE / "pipeline_nemotron.hpp")
+                                  if "pipeline_nemotron.hpp" in used_headers else None),
         "quantized_ops_sha256": (sha256(HERE / "pipeline_int8.hpp")
                                  if manifest.get("checkpoint_weight_format") in
                                  ("int8_scaled", "int8_fp16_tied") else None),
@@ -160,8 +163,12 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "numpy_olmo_graph_reference_sha256": (
             sha256(ROOT / "kernels/evaluation/llm/olmo_graph_reference.py")
             if model == "olmo3_7b" else None),
+        "numpy_nemotron_graph_reference_sha256": (
+            sha256(ROOT / "kernels/evaluation/llm/nemotron_graph_reference.py")
+            if model == "nemotron3_nano_4b" else None),
         "graph_builder_sha256": (sha256(ROOT / "kernels/evaluation/llm/stitch.py")
-                                  if model in ("qwen3_30b_a3b", "olmo3_7b")
+                                  if model in ("qwen3_30b_a3b", "olmo3_7b",
+                                               "nemotron3_nano_4b")
                                   else None),
         "model_specs_sha256": manifest["source_spec_sha256"],
         "source_config_sha256": manifest.get("source_config_sha256"),

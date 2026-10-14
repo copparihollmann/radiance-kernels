@@ -29,6 +29,7 @@ import stitch  # noqa: E402
 import moe_graph_reference  # noqa: E402
 import last_token_graph_reference  # noqa: E402
 import olmo_graph_reference  # noqa: E402
+import nemotron_graph_reference  # noqa: E402
 from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
                         SafeTensorWeights, TiedFP16INT8GemmaWeights,
                         TiedINT8INT4GemmaWeights, TiedINT5INT6GemmaWeights)
@@ -37,7 +38,8 @@ from split_decoder_weights import image_segments, verify_image  # noqa: E402
 
 
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
-          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03", "olmo3_7b")
+          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03", "olmo3_7b",
+          "nemotron3_nano_4b")
 
 
 def symbol(name: str) -> str:
@@ -85,7 +87,7 @@ def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
                 if attrs.get("tied_lm_head") else
                 np.stack([reference.parameter(f"{attrs['parameter']}.{i}", (width,))
                           for i in range(vocab)]))
-    elif op == "rmsnorm":
+    elif op in ("rmsnorm", "mamba_gated_rmsnorm"):
         width = stage["shape"][-1]
         data = reference.parameter(attrs["parameter"], (width,)) + 1.0
     elif op == "linear":
@@ -102,6 +104,33 @@ def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
     else:
         return None
     return symbol("parameter." + attrs["parameter"]), data.astype(np.float32)
+
+
+def extra_param_data(stage: dict) -> list[tuple[str, np.ndarray]]:
+    attrs = stage["attrs"]
+    if stage["op"] == "mamba_depthwise_conv":
+        items = attrs["parameters"].items()
+    elif stage["op"] == "mamba_selective_scan":
+        heads = attrs["state_shape"][1]
+        items = ((name, (heads,)) for name in attrs["parameters"])
+    else:
+        return []
+    return [(symbol("parameter." + name),
+             reference.parameter(name, tuple(shape))) for name, shape in items]
+
+
+def extra_param_symbols(stage: dict, graph: stitch.Graph) -> list[str]:
+    if stage["op"] == "mamba_depthwise_conv":
+        names = stage["attrs"]["parameters"]
+    elif stage["op"] == "mamba_selective_scan":
+        names = stage["attrs"]["parameters"]
+    elif stage["op"] == "mamba_scan_state":
+        paired = next(s for s in graph.stages
+                      if s["id"] == stage["attrs"]["paired_scan"])
+        names = paired["attrs"]["parameters"]
+    else:
+        return []
+    return [symbol("parameter." + name) for name in names]
 
 
 def emit_stage(index: int, stage: dict, graph: stitch.Graph,
@@ -128,7 +157,7 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
             body = f"embedding_i8({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['scale'])}, tid, tpb)"
         else:
             method = "embedding_f16" if parameter_dtype == "fp16" else "embedding"
-            body = f"{method}({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['scale'])}, tid, tpb)"
+            body = f"{method}({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs.get('scale', 1.0))}, tid, tpb)"
     elif op == "rmsnorm":
         body = f"rmsnorm({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['epsilon'])}, tid, tpb)"
     elif op == "linear":
@@ -217,6 +246,49 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
         body = f"moe_expert_down({ins[0]}, {ins[1]}, {parameter}, {out}, {count // (shape[-2] * shape[-1])}, {shape[-2]}, {intermediate}, {shape[-1]}, tid, tpb)"
     elif op == "expert_weighted_reduce":
         body = f"moe_expert_reduce({ins[0]}, {ins[1]}, {out}, {count // shape[-1]}, {attrs['selected_experts']}, {shape[-1]}, tid, tpb)"
+    elif op == "mamba_projection_slice":
+        spec = graph.spec
+        inner = spec["mamba_num_heads"] * spec["mamba_head_dim"]
+        conv = inner + 2 * spec["n_groups"] * spec["ssm_state_size"]
+        start = {"gate": 0, "conv_input": inner, "dt": inner + conv}[attrs["part"]]
+        in_width = graph.tensors[stage["reads"][0]]["shape"][-1]
+        body = f"mamba_slice({ins[0]}, {out}, {batch}, {shape[1]}, {in_width}, {start}, {shape[-1]}, tid, tpb)"
+    elif op == "mamba_depthwise_conv":
+        params = attrs["parameters"]
+        weight = symbol("parameter." + next(k for k in params if k.endswith(".weight")))
+        bias = symbol("parameter." + next(k for k in params if k.endswith(".bias")))
+        old = ins[1] if len(ins) == 2 else "nullptr"
+        body = f"mamba_depthwise_conv({ins[0]}, {old}, {weight}, {bias}, {out}, {batch}, {shape[1]}, {shape[2]}, {attrs['kernel_width']}, tid, tpb)"
+    elif op == "mamba_conv_state":
+        old = ins[1] if len(ins) == 3 else "nullptr"
+        tokens = graph.tensors[stage["reads"][0]]["shape"][1]
+        body = f"mamba_conv_state({ins[0]}, {old}, {out}, {batch}, {tokens}, {shape[1]}, {shape[2]}, tid, tpb)"
+    elif op == "mamba_channel_slice":
+        spec = graph.spec
+        inner = spec["mamba_num_heads"] * spec["mamba_head_dim"]
+        grouped = spec["n_groups"] * spec["ssm_state_size"]
+        start = {"x": 0, "B": inner, "C": inner + grouped}[attrs["part"]]
+        in_width = graph.tensors[stage["reads"][0]]["shape"][-1]
+        body = f"mamba_slice({ins[0]}, {out}, {batch}, {shape[1]}, {in_width}, {start}, {count // (batch * shape[1])}, tid, tpb)"
+    elif op in ("mamba_selective_scan", "mamba_scan_state"):
+        scan = (stage if op == "mamba_selective_scan" else
+                next(s for s in graph.stages if s["id"] == attrs["paired_scan"]))
+        a_name, d_name, bias_name = scan["attrs"]["parameters"]
+        x_shape = graph.tensors[stage["reads"][0]]["shape"]
+        b_shape = graph.tensors[stage["reads"][1]]["shape"]
+        old = (ins[4] if len(ins) == (5 if op == "mamba_selective_scan" else 6)
+               else "nullptr")
+        result = out if op == "mamba_selective_scan" else "nullptr"
+        final = out if op == "mamba_scan_state" else "nullptr"
+        body = (f"mamba_scan({ins[0]}, {ins[1]}, {ins[2]}, {ins[3]}, {old}, "
+                f"{symbol('parameter.' + a_name)}, {symbol('parameter.' + d_name)}, "
+                f"{symbol('parameter.' + bias_name)}, {result}, {final}, "
+                f"{batch}, {x_shape[1]}, {x_shape[2]}, {x_shape[3]}, "
+                f"{b_shape[2]}, {b_shape[3]}, 0.0f, 3.402823466e38f, tid, tpb)")
+    elif op == "mamba_gated_rmsnorm":
+        body = f"mamba_gated_norm({ins[0]}, {ins[1]}, {parameter}, {out}, {batch * shape[1]}, {shape[-1]}, {attrs['group_size']}, {literal(attrs['epsilon'])}, tid, tpb)"
+    elif op == "relu_squared":
+        body = f"relu_squared({ins[0]}, {out}, {count}, tid, tpb)"
     else:
         raise ValueError(f"unsupported operation {op} at {stage['id']}")
     return (f"static void stage_{index}(void* context, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
@@ -268,6 +340,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("Qwen3 MoE checkpoint weight-image export is not implemented")
     if external and model == "olmo3_7b":
         raise ValueError("OLMo 3 checkpoint weight-image export is not implemented")
+    if external and model == "nemotron3_nano_4b":
+        raise ValueError("Nemotron H checkpoint weight-image export is not implemented")
     if external and control_sliding_window is not None:
         raise ValueError("the control sliding window requires synthetic weights")
     if stage_limit is not None and not external:
@@ -277,7 +351,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("checkpoint builds require a pinned model, sharded objects, "
                          "and all-stage checks for one-cluster runs")
     specs = stitch.model_specs()
-    spec = dict(specs[model]) if external else reference.reduced_spec(specs[model])
+    spec = (dict(specs[model]) if external else
+            nemotron_graph_reference.control_spec(specs[model], layers)
+            if model == "nemotron3_nano_4b" else reference.reduced_spec(specs[model]))
     if model == "qwen3_30b_a3b" and not external:
         spec.update(num_experts=16, num_experts_per_tok=8,
                     moe_intermediate_size=16)
@@ -297,6 +373,11 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             raise ValueError("OLMo 3 layer-type sequence is shorter than requested depth")
         if control_sliding_window is not None:
             spec["sliding_window"] = control_sliding_window
+    if model == "nemotron3_nano_4b":
+        spec["layer_kinds"] = spec["layer_kinds"][:layers]
+        if (len(spec["layer_kinds"]) != layers or spec["conv_kernel"] != 4
+                or spec["ssm_state_size"] > 128):
+            raise ValueError("unsupported Nemotron H layer or state dimensions")
     graph = stitch.build(model, prefill=prefill, decode_steps=decode,
                          specs={model: spec}, generation=generation,
                          prefill_logits=prefill_logits)
@@ -382,6 +463,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                 graph, inputs, retain=tuple(stage["writes"] for stage in graph.stages))
         if model == "olmo3_7b":
             return olmo_graph_reference.execute(graph, inputs, weights=weights)
+        if model == "nemotron3_nano_4b":
+            return nemotron_graph_reference.execute(graph, inputs, weights=weights)
         if prefill_logits == "last":
             return last_token_graph_reference.execute(
                 graph, inputs, weights=weights,
@@ -426,8 +509,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         params = {}
         for stage in graph.stages:
             item = param_data(stage)
-            if item is not None:
-                name, data = item
+            items = [item] if item is not None else []
+            items.extend(extra_param_data(stage))
+            for name, data in items:
                 if name in params:
                     if not np.array_equal(params[name], data):
                         raise ValueError(f"inconsistent parameter {name}")
@@ -494,6 +578,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     uses_select_last = any(stage["op"] == "select_last_token"
                            for stage in graph.stages)
     uses_olmo = model == "olmo3_7b"
+    uses_nemotron = model == "nemotron3_nano_4b"
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage),
@@ -524,6 +609,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                                 ["scale_gpu_address"], "fp32")
                     else:
                         symbols[param] = "float"
+                for name in extra_param_symbols(stage, graph):
+                    symbols[name] = "float"
                 if stage["op"] == "rope":
                     symbols["v_rope_cos"] = "float"
                     symbols["v_rope_sin"] = "float"
@@ -542,6 +629,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                       + ("#include \"pipeline_select_last.hpp\"\n"
                          if uses_select_last else "")
                       + ("#include \"pipeline_olmo.hpp\"\n" if uses_olmo else "")
+                      + ("#include \"pipeline_nemotron.hpp\"\n" if uses_nemotron else "")
                       + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
                       + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
                       + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -685,6 +773,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
            + ("#include \"pipeline_select_last.hpp\"\n"
               if uses_select_last else "")
+           + ("#include \"pipeline_nemotron.hpp\"\n" if uses_nemotron else "")
            + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
            + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
            + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -723,6 +812,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
               + ("#include \"pipeline_select_last.hpp\"\n"
                  if uses_select_last else "")
               + ("#include \"pipeline_olmo.hpp\"\n" if uses_olmo else "")
+              + ("#include \"pipeline_nemotron.hpp\"\n" if uses_nemotron else "")
               + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
               + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
               + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -757,6 +847,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
         + (f" {HERE / 'pipeline_select_last.hpp'}" if uses_select_last else "")
         + (f" {HERE / 'pipeline_olmo.hpp'}" if uses_olmo else "")
+        + (f" {HERE / 'pipeline_nemotron.hpp'}" if uses_nemotron else "")
         + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
         + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
         + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
@@ -768,6 +859,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
            + (f" {HERE / 'pipeline_select_last.hpp'}" if uses_select_last else "")
            + (f" {HERE / 'pipeline_olmo.hpp'}" if uses_olmo else "")
+           + (f" {HERE / 'pipeline_nemotron.hpp'}" if uses_nemotron else "")
            + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
            + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
            + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")

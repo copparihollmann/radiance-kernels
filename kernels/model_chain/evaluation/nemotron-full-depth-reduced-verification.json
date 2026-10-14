@@ -1,0 +1,17 @@
+{
+  "schema": "radiance.connected-functional-verification.v1",
+  "status": "passed",
+  "model": "nemotron3_nano_4b",
+  "layers": 42,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "checked_stages": 1322,
+  "cycles_functional": 3629544,
+  "weight_image_checked": false,
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "result_sha256": "c23ed3b4ac6453df39ac237e63944e16d203f956fffcf81255c2579cf03e25ce",
+  "manifest_sha256": "9b86432480c2ec9a1f2ff99dda71f0ad740fdc6d3eccff789e0ccddce2cb225c",
+  "elf_sha256": "75ba8ffd4ff35070106d5357af9bd6e34360798425476d0386d3a92826a033b0",
+  "log_sha256": "e4948c75d40f68f62fa284fffbfee0a1dc8502e7db3e9cb3ad00cbc6d8cefaac"
+}
