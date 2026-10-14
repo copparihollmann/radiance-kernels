@@ -483,6 +483,49 @@ and the explicitly calibrated `2e-5` absolute tolerance used for the passing
 build. Widths, weights, and scan chunk size remain reduced; this is still not
 the pinned checkpoint or hardware performance.
 
+The [full hybrid reference check](verify_nemotron_network_reduced.py) also
+compares the reduced 42-block graph with a same-weight Transformers 5.3.0
+model forward. It instantiates Mamba, dense MLP, and attention modules in the
+pinned order, retains their states across the two fixed decode calls, and
+checks each block's pre-norm, mixer output, and residual. It also checks the
+final norm and logits from both the component path and the library's model
+forward. The installed library maps this model's `-` block to a MoE slot; the
+check temporarily maps that slot to its dense `NemotronHMLP` class, then
+restores the registry. This is an explicit compatibility adapter, not an
+execution of the pinned remote model code or its checkpoint.
+
+| Same-weight CPU case | Compared values | Maximum absolute error | Values outside `1e-4` relative + `2e-5` absolute | Values outside `1e-3` relative + `2e-4` absolute |
+| --- | ---: | ---: | ---: | ---: |
+| [3-token prefill](nemotron-network-short-reference.json) | 20,864 | `1.18e-5` | 0 | 0 |
+| [128-token prefill](nemotron-network-context128-reference.json) | 532,864 | `1.83e-4` | 368 | 0 |
+| [Causal mask removed](nemotron-network-noncausal-control.json) | 532,864 | `2.56` | 372,126 | 355,957 |
+| [Mamba state dropped](nemotron-network-no-mamba-control.json) | 532,864 | `13.14` | 8,556 | 8,185 |
+
+The 128-token final logits differ by at most `6.00e-6`; the larger raw
+differences appear in internal late-prefill values. The deliberate faults
+show that this fixture detects future-token attention and a missing Mamba
+decode state. The comparison uses seeded FP32 weights and reduced widths;
+its 390 checked tensors are block boundary and final tensors, while the
+connected Cyclotron result above checks all 1,322 graph stages against the
+separate NumPy oracle. Neither check establishes full pinned-checkpoint
+equivalence or hardware performance.
+
+Reproduce the four CPU cases in an environment with Transformers 5.3.0 and
+PyTorch 2.9.1, using a task-local `TMPDIR`:
+
+```sh
+python3 kernels/evaluation/llm/verify_nemotron_network_reduced.py \
+  --layers 42 --prefill 3 --out "$TMPDIR/nemotron-network-short.json"
+python3 kernels/evaluation/llm/verify_nemotron_network_reduced.py \
+  --layers 42 --prefill 128 --out "$TMPDIR/nemotron-network-context128.json"
+python3 kernels/evaluation/llm/verify_nemotron_network_reduced.py \
+  --layers 42 --prefill 128 --fault noncausal_attention \
+  --out "$TMPDIR/nemotron-network-noncausal.json"  # expected to fail
+python3 kernels/evaluation/llm/verify_nemotron_network_reduced.py \
+  --layers 42 --prefill 128 --fault drop_mamba_state \
+  --out "$TMPDIR/nemotron-network-no-mamba.json"  # expected to fail
+```
+
 Reproduce these controls with task-local `TMPDIR` and a Python environment
 containing Transformers 5.3.0 and PyTorch 2.9.1:
 

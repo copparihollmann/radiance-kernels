@@ -1,0 +1,194 @@
+{
+  "schema": "radiance.nemotron-reduced-network-reference.v1",
+  "status": "passed",
+  "scope": "same-weight reduced hybrid network with cached decode",
+  "control_fault": "none",
+  "pinned_model": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+  "pinned_config_source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/resolve/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/config.json",
+  "pinned_config_sha256": "fde9241f66cd414458df444a80eb535f53aef2b4b240a91f092e651fa6f27219",
+  "layers": 42,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "layer_kinds": [
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "full_attention",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "full_attention",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "full_attention",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mamba2",
+    "full_attention",
+    "mlp_only",
+    "mamba2",
+    "mamba2",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mlp_only",
+    "mamba2",
+    "mlp_only"
+  ],
+  "graph_stages": 1320,
+  "input_token_ids": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "parameter_fixture_sha256": "648d9a2ccd87736ae280ed5b42efd46c4b5416015998a3bc22f91f6c73e8f0f0",
+  "checked_tensor_outputs": 390,
+  "checked_tensor_values": 20864,
+  "max_abs_error": 1.1801719665527344e-05,
+  "largest_differences": [
+    {
+      "stage": "decode0.layer34.residual",
+      "max_abs_error": 1.1801719665527344e-05
+    },
+    {
+      "stage": "decode0.layer35.residual",
+      "max_abs_error": 1.1771917343139648e-05
+    },
+    {
+      "stage": "decode0.layer33.residual",
+      "max_abs_error": 1.0848045349121094e-05
+    },
+    {
+      "stage": "decode0.layer36.residual",
+      "max_abs_error": 1.043081283569336e-05
+    },
+    {
+      "stage": "decode0.layer37.residual",
+      "max_abs_error": 1.0132789611816406e-05
+    },
+    {
+      "stage": "decode0.layer31.residual",
+      "max_abs_error": 9.834766387939453e-06
+    },
+    {
+      "stage": "decode0.layer32.residual",
+      "max_abs_error": 9.655952453613281e-06
+    },
+    {
+      "stage": "decode0.layer41.residual",
+      "max_abs_error": 9.179115295410156e-06
+    },
+    {
+      "stage": "decode0.layer40.residual",
+      "max_abs_error": 9.059906005859375e-06
+    },
+    {
+      "stage": "decode0.layer30.residual",
+      "max_abs_error": 8.404254913330078e-06
+    },
+    {
+      "stage": "decode0.layer39.residual",
+      "max_abs_error": 8.016824722290039e-06
+    },
+    {
+      "stage": "decode1.layer39.residual",
+      "max_abs_error": 7.987022399902344e-06
+    },
+    {
+      "stage": "decode0.layer38.residual",
+      "max_abs_error": 7.927417755126953e-06
+    },
+    {
+      "stage": "decode1.layer38.residual",
+      "max_abs_error": 7.867813110351562e-06
+    },
+    {
+      "stage": "prefill.layer34.residual",
+      "max_abs_error": 7.271766662597656e-06
+    },
+    {
+      "stage": "prefill.layer40.residual",
+      "max_abs_error": 7.241964340209961e-06
+    },
+    {
+      "stage": "prefill.layer33.residual",
+      "max_abs_error": 7.152557373046875e-06
+    },
+    {
+      "stage": "decode0.layer23.residual",
+      "max_abs_error": 7.152557373046875e-06
+    },
+    {
+      "stage": "decode0.layer24.residual",
+      "max_abs_error": 7.152557373046875e-06
+    },
+    {
+      "stage": "decode1.layer40.residual",
+      "max_abs_error": 7.152557373046875e-06
+    }
+  ],
+  "final_logit_max_abs_error": {
+    "prefill.lm_head": 6.556510925292969e-07,
+    "decode0.lm_head": 1.6205012798309326e-06,
+    "decode1.lm_head": 7.748603820800781e-07
+  },
+  "model_forward_final_hidden_max_abs_error": {
+    "prefill.model_forward_final_norm": 2.555549144744873e-06,
+    "decode0.model_forward_final_norm": 3.6954879760742188e-06,
+    "decode1.model_forward_final_norm": 1.9818544387817383e-06
+  },
+  "model_forward_final_logit_max_abs_error": {
+    "prefill.model_forward_lm_head": 6.556510925292969e-07,
+    "decode0.model_forward_lm_head": 1.6205012798309326e-06,
+    "decode1.model_forward_lm_head": 7.748603820800781e-07
+  },
+  "strict_tolerance": {
+    "rtol": 0.0001,
+    "atol": 2e-05,
+    "failing_tensors": 0,
+    "failing_elements": 0,
+    "first_failure_by_tensor": []
+  },
+  "accepted_tolerance": {
+    "rtol": 0.001,
+    "atol": 0.0002,
+    "failing_tensors": 0,
+    "failing_elements": 0,
+    "failures": []
+  },
+  "reference_adapter": "Transformers 5.3.0 NemotronHModel forward with its MoE slot mapped temporarily to NemotronHMLP for the pinned dense MLP blocks; the global registry is restored after construction.",
+  "transformers_version": "5.3.0",
+  "torch_version": "2.9.1+cpu",
+  "transformers_modeling_source_sha256": "5bcd6c29a15e31e080e2ef5c64f68457c54b7d2db67421e0ea8b2220ea598bda",
+  "transformers_config_source_sha256": "0fc818c10506c91bd02df5a605f49cb0704b5498954f46dbde2d63999ae36c3d",
+  "graph_reference_source_sha256": "5d9737c694315f5337c53ba5c413a84b00f364ae2a28151c65ae1588c2a4c0e2",
+  "graph_builder_source_sha256": "e006e13c438b1e1320453a6d9037c196ad838d56242e2483377831f972bb2055",
+  "graph_math_source_sha256": "f19b739769adbe8895bdd6400a63ac8cbc068b3f080639c31313edd23ccc6d3a",
+  "model_specs_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "comparison_source_sha256": "25f24bd1a7667a8b1ad825f4e7bf69adda2cb09a3f3a3d1e6c7e84a7a7c5586e",
+  "peak_rss_kib": 373736,
+  "checkpoint_weights": false,
+  "pinned_upstream_network_equivalence": false,
+  "device_execution": false,
+  "performance_measurement": false
+}

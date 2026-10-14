@@ -376,9 +376,17 @@ uses a separate seeded random-weight fixture. Its 128-token prefill and two
 cached decode calls agree with Transformers 5.3.0's CPU fallback to `2.76e-6`
 maximum mixer-output difference. Final convolution and SSM state differences
 are at most `2.39e-7` and `5.97e-8`. This comparison covers one Mamba mixer,
-not the 42-block network. Both Radiance controls use synthetic FP32 weights,
-reduced widths, and an eight-token scan chunk; the pinned model has different
-widths and a 256-token chunk. These checks do not supply checkpoint fidelity,
+not the 42-block network. A separate
+[same-weight hybrid comparison](../evaluation/llm/nemotron-network-context128-reference.json)
+checks block boundaries and final outputs for the complete reduced 42-block
+order against an adapted Transformers model forward. It checks 532,864 tensor
+values; the maximum absolute difference is `1.83e-4`, and all values pass the
+recorded `rtol=1e-3, atol=2e-4` threshold. The
+[reference README](../evaluation/llm/README.md) records the stricter
+threshold's outliers and two fault controls. Both Radiance controls use
+synthetic FP32 weights, reduced widths, and an eight-token scan chunk; the
+pinned model has different widths and a 256-token chunk. These checks do not
+supply checkpoint fidelity,
 RTL latency, FPGA performance, or a full upstream network comparison.
 
 To reproduce the 128-token build, set `TMPDIR` to a writable task directory,
