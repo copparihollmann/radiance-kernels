@@ -304,9 +304,50 @@ hashes are in [the weight-format trials](evaluation/gemma-2g-weight-format-trial
 `evaluate_gemma_group32.py --checkpoint-dir /path/to/pinned/Gemma/snapshot`
 repeats the group-32 reference check without exporting another image. It used
 about 7.5 GiB of peak RAM in the recorded run.
-Do not use these INT4 conversions to report Gemma inference performance. The
-original full checkpoint build remains available for a GPU memory map large
-enough to hold it; the actual XB10 bitstream map must be checked first.
+Do not use these INT4 conversions to report Gemma inference performance.
+
+`export_gemma_int5_int6.py` provides a stronger compact format: the shared
+embedding/output table uses signed INT5 with one scale per 64 hidden values,
+feed-forward matrices use INT6, attention matrices use INT8, and norms remain
+FP32. The [image](evaluation/gemma-2g-int5-int6-image.json) holds all 26
+layers in 2,019,513,344 bytes across `0x01000000..0x0f435400` and
+`0x14200000..0x7e3c0000`. The [1,496-stage build](evaluation/gemma-2g-int5-int6-build.json)
+compiled and passed device/image/stack placement. Its quantized reference
+generated `[109, 235287]`, the two upstream checkpoint tokens. The
+[generated host C++ run](evaluation/gemma-2g-int5-int6-native.json) passed all
+1,496 stage checks against that reference. The [2 GiB hashed FireSim
+package](evaluation/gemma-2g-int5-int6-package.json) reconstructed and
+SHA-checked both image segments and the device program; the local FESVR
+loader accepted the ELF. These are fixed-fixture correctness checks. Logits
+differ from the original checkpoint, and neither FPGA correctness nor timing
+has been measured. The original full checkpoint build remains available for
+a larger confirmed GPU memory map.
+
+For the fixed Gemma rebuild, set `GEMMA_CHECKPOINT` to the pinned snapshot and
+choose task-local `WEIGHTS`, `BUILD`, and `HBM` directories. The Muon toolchain
+must be available through `LLVM_MUON`:
+
+```sh
+python3 kernels/model_chain/export_gemma_int5_int6.py \
+  --checkpoint-dir "$GEMMA_CHECKPOINT" --out-dir "$WEIGHTS"
+python3 kernels/model_chain/compile_decoder.py \
+  --model gemma_2_2b_it --layers 26 --prefill 2 --decode-steps 2 \
+  --generation greedy --token-ids 2 100 --stages-per-object 20 \
+  --device-check-all-stages --checkpoint-dir "$GEMMA_CHECKPOINT" \
+  --weight-image "$WEIGHTS/gemma_2_2b_it/weights-image.json" \
+  --out-root "$BUILD" --build
+python3 kernels/model_chain/run_checkpoint_native.py \
+  --model gemma_2_2b_it --generated-root "$BUILD" --threads 4 --jobs 2
+python3 kernels/model_chain/prepare_hbm.py \
+  --source "$BUILD/gemma_2_2b_it" --out "$HBM" --build
+python3 kernels/model_chain/package_firesim.py \
+  --elf "$HBM/kernel.soc.elf" \
+  --image "$WEIGHTS/gemma_2_2b_it/weights-image.json" \
+  --hash-size 0x80000000 --hash-unit 32 --hash-slices 4 --compact-hash \
+  --output "$HBM/gemma-int5-int6-2g.soc.elf"
+```
+
+The target bitstream must use this exact memory map before staging the ELF.
 
 ### Full-depth checkpoint builds
 

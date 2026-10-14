@@ -1,0 +1,136 @@
+{
+  "source_elf": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/gemma-int5-int6-hbm/kernel.soc.elf",
+  "source_elf_sha256": "98bbd4d340ff43b2e729f0ebd5d6c0c8dbe589c37a744be2df60e58e5b1bd71a",
+  "firesim_elf": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/gemma-int5-int6-2g.soc.elf",
+  "firesim_elf_sha256": "83fdc22f12cd03a366a6132d32cfa449b9a60a5546991fa8157c2b7262d25d6d",
+  "size_bytes": 2156659528,
+  "images": [
+    {
+      "source": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/gemma-int5-int6/gemma_2_2b_it/weights-low.bin",
+      "source_sha256": "a4b50f163bab5a1c72900922a80aa2d6a27b7255f43d7a437cc4d0ccd81da431",
+      "gpu_address": 16777216,
+      "cpu_address": 4311744512,
+      "size_bytes": 239293440,
+      "layout": "hashed"
+    },
+    {
+      "source": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/gemma-int5-int6/gemma_2_2b_it/weights-high.bin",
+      "source_sha256": "9c34653913ebc0938e12ab0a64ec420ad55a63f40e8433de695d6b71779976c2",
+      "gpu_address": 337641472,
+      "cpu_address": 4632608768,
+      "size_bytes": 1780219904,
+      "layout": "hashed"
+    }
+  ],
+  "source_gpu_segments": [
+    {
+      "gpu_address": 268435456,
+      "cpu_address": 4563402752,
+      "size_bytes": 104,
+      "sha256": "de946e253d1b98e7bf3770d7aabb01a59a4935794951a3091107616cca492509"
+    },
+    {
+      "gpu_address": 268439552,
+      "cpu_address": 4563406848,
+      "size_bytes": 72,
+      "sha256": "834a709ba2534ebe3ee1397fd4f7bd288b2acc1d20a08d6c862dcd99b6f04400"
+    },
+    {
+      "gpu_address": 268443648,
+      "cpu_address": 4563410944,
+      "size_bytes": 2108496,
+      "sha256": "b68a9ba6a8e3b52579d7ebd5d85a663b62b4441d9af73b06690cf30cbf418daa"
+    },
+    {
+      "gpu_address": 270553088,
+      "cpu_address": 4565520384,
+      "size_bytes": 66429880,
+      "sha256": "1c1a2b3e30d23225fac4ed92a76a35f2f896f886e18df3ecb9017fd41bff51aa"
+    }
+  ],
+  "hash_layout": {
+    "gpu_base": 0,
+    "cpu_base": 4294967296,
+    "size": 2147483648,
+    "unit": 32,
+    "slices": 4,
+    "file_offset": 68583424,
+    "compact": true,
+    "load_regions": [
+      {
+        "physical_offset": 4194304,
+        "file_offset": 68583424,
+        "cpu_address": 4299161600,
+        "size_bytes": 59826176
+      },
+      {
+        "physical_offset": 67108864,
+        "file_offset": 128409600,
+        "cpu_address": 4362076160,
+        "size_bytes": 17137664
+      },
+      {
+        "physical_offset": 84410368,
+        "file_offset": 145547264,
+        "cpu_address": 4379377664,
+        "size_bytes": 445054976
+      },
+      {
+        "physical_offset": 541065216,
+        "file_offset": 590602240,
+        "cpu_address": 4836032512,
+        "size_bytes": 59826176
+      },
+      {
+        "physical_offset": 603979776,
+        "file_offset": 650428416,
+        "cpu_address": 4898947072,
+        "size_bytes": 17137664
+      },
+      {
+        "physical_offset": 621281280,
+        "file_offset": 667566080,
+        "cpu_address": 4916248576,
+        "size_bytes": 445054976
+      },
+      {
+        "physical_offset": 1077936128,
+        "file_offset": 1112621056,
+        "cpu_address": 5372903424,
+        "size_bytes": 59826176
+      },
+      {
+        "physical_offset": 1140850688,
+        "file_offset": 1172447232,
+        "cpu_address": 5435817984,
+        "size_bytes": 17137664
+      },
+      {
+        "physical_offset": 1158152192,
+        "file_offset": 1189584896,
+        "cpu_address": 5453119488,
+        "size_bytes": 445054976
+      },
+      {
+        "physical_offset": 1614807040,
+        "file_offset": 1634639872,
+        "cpu_address": 5909774336,
+        "size_bytes": 59826176
+      },
+      {
+        "physical_offset": 1677721600,
+        "file_offset": 1694466048,
+        "cpu_address": 5972688896,
+        "size_bytes": 17137664
+      },
+      {
+        "physical_offset": 1695023104,
+        "file_offset": 1711603712,
+        "cpu_address": 5989990400,
+        "size_bytes": 445054976
+      }
+    ]
+  },
+  "load_method": "direct LoadMem, physically hashed GPU region",
+  "validation": "ELF structure and source image hashes; target execution pending"
+}

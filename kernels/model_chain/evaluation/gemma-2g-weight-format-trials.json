@@ -109,5 +109,5 @@
       "radiance_elf_built": false
     }
   ],
-  "conclusion": "These conversions do not preserve the two upstream greedy tokens. No 2 GiB Gemma FireSim workload is validated."
+  "conclusion": "These INT4 conversions do not preserve the two upstream greedy tokens. The later INT5/INT6 format is recorded separately in gemma-2g-int5-int6-build.json and passes the fixed-token check."
 }

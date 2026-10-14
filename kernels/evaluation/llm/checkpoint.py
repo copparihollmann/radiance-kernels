@@ -8,6 +8,7 @@ original location; no checkpoint data is copied into radiance-kernels.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -310,3 +311,166 @@ class TiedINT8GroupINT4GemmaWeights(TiedINT8INT4GemmaWeights):
             stop = min(start + 32, value.shape[0])
             result[start:stop] = signed[start:stop].astype(np.float32) * scales[group]
         return result
+
+
+def pack_signed_bits(value: np.ndarray, bits: int) -> np.ndarray:
+    """Pack signed row-major values low-bit-first into a byte stream."""
+    if bits not in (5, 6) or value.dtype != np.int8:
+        raise ValueError("packing requires signed INT5 or INT6 values")
+    flat = value.reshape(-1)
+    per_group = 8 // math.gcd(8, bits)
+    bytes_per_group = per_group * bits // 8
+    full_groups = flat.size // per_group
+    output = np.empty((flat.size * bits + 7) // 8, dtype=np.uint8)
+
+    def write_groups(groups: np.ndarray, destination: np.ndarray) -> None:
+        word = np.zeros(len(groups), dtype=np.uint64)
+        for col in range(per_group):
+            word |= ((groups[:, col].astype(np.uint64) & ((1 << bits) - 1))
+                     << (bits * col))
+        bytes_view = destination.reshape(len(groups), bytes_per_group)
+        for byte in range(bytes_per_group):
+            bytes_view[:, byte] = (word >> (8 * byte)).astype(np.uint8)
+
+    groups = flat[:full_groups * per_group].reshape(full_groups, per_group)
+    for start in range(0, full_groups, 1 << 17):
+        stop = min(start + (1 << 17), full_groups)
+        write_groups(groups[start:stop],
+                     output[start * bytes_per_group:stop * bytes_per_group])
+    if flat.size % per_group:
+        tail = np.zeros((1, per_group), dtype=np.int8)
+        tail[0, :flat.size % per_group] = flat[full_groups * per_group:]
+        raw = np.empty(bytes_per_group, dtype=np.uint8)
+        write_groups(tail, raw)
+        output[full_groups * bytes_per_group:] = raw[:len(output) -
+                                                     full_groups * bytes_per_group]
+    return output
+
+
+def unpack_signed_bits(packed: np.ndarray, count: int, bits: int) -> np.ndarray:
+    if bits not in (5, 6) or count < 0 or len(packed) < (count * bits + 7) // 8:
+        raise ValueError("invalid signed packed weight stream")
+    per_group = 8 // math.gcd(8, bits)
+    bytes_per_group = per_group * bits // 8
+    output = np.empty(count, dtype=np.int8)
+    full_groups = count // per_group
+    groups = packed[:full_groups * bytes_per_group].reshape(full_groups,
+                                                            bytes_per_group)
+    values = output[:full_groups * per_group].reshape(full_groups, per_group)
+    for start in range(0, full_groups, 1 << 17):
+        stop = min(start + (1 << 17), full_groups)
+        word = np.zeros(stop - start, dtype=np.uint64)
+        for byte in range(bytes_per_group):
+            word |= groups[start:stop, byte].astype(np.uint64) << (8 * byte)
+        for col in range(per_group):
+            raw = ((word >> (bits * col)) & ((1 << bits) - 1)).astype(np.int8)
+            values[start:stop, col] = np.where(raw >= (1 << (bits - 1)),
+                                               raw - (1 << bits), raw)
+    if count % per_group:
+        tail = np.zeros(bytes_per_group, dtype=np.uint8)
+        remaining = packed[full_groups * bytes_per_group:]
+        tail[:len(remaining)] = remaining
+        word = sum(int(byte) << (8 * index) for index, byte in enumerate(tail))
+        for col in range(count % per_group):
+            raw = (word >> (bits * col)) & ((1 << bits) - 1)
+            output[full_groups * per_group + col] = (
+                raw - (1 << bits) if raw >= (1 << (bits - 1)) else raw)
+    return output
+
+
+def quantize_int5_group64_block(value: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    if value.ndim != 2 or value.shape[1] % 64 or not np.isfinite(value).all():
+        raise ValueError("INT5 embedding needs finite rows divisible by 64")
+    block = value.reshape(value.shape[0], -1, 64)
+    maxima = np.abs(block).max(axis=2)
+    scales = np.where(maxima == 0, 1, maxima / 15).astype("<f4")
+    quantized = np.rint(block / scales[:, :, None]).clip(-15, 15).astype(np.int8)
+    return quantized.reshape(value.shape), scales
+
+
+def quantize_int5_group64_embedding(value: np.ndarray
+                                    ) -> tuple[np.ndarray, np.ndarray, dict]:
+    if value.ndim != 2 or value.shape[1] % 64:
+        raise ValueError("INT5 embedding needs a table with width divisible by 64")
+    rows, width = value.shape
+    output = np.empty((value.size * 5 + 7) // 8, dtype=np.uint8)
+    scales = np.empty((rows, width // 64), dtype="<f4")
+    cursor = 0
+    maximum_error = 0.0
+    changed = 0
+    for start in range(0, rows, 64):
+        block = value[start:start + 64]
+        quantized, part_scales = quantize_int5_group64_block(block)
+        scales[start:start + len(block)] = part_scales
+        raw = pack_signed_bits(quantized, 5)
+        output[cursor:cursor + len(raw)] = raw
+        cursor += len(raw)
+        restored = (quantized.reshape(len(block), -1, 64).astype(np.float32) *
+                    part_scales[:, :, None]).reshape(block.shape)
+        delta = np.abs(restored - block)
+        maximum_error = max(maximum_error, float(delta.max()))
+        changed += int(np.count_nonzero(delta))
+    if cursor != len(output):
+        raise ValueError("INT5 embedding packing did not fill its image")
+    return output, scales.reshape(-1), {
+        "roundtrip_changed_elements": changed,
+        "roundtrip_max_abs_error": maximum_error,
+    }
+
+
+def quantize_int6_per_channel(value: np.ndarray
+                              ) -> tuple[np.ndarray, np.ndarray, dict]:
+    if value.ndim != 2 or not np.isfinite(value).all():
+        raise ValueError("per-column INT6 requires a finite linear matrix")
+    maxima = np.zeros(value.shape[1], dtype=np.float32)
+    for start in range(0, value.shape[0], 64):
+        maxima = np.maximum(maxima,
+                            np.abs(value[start:start + 64]).max(axis=0))
+    scales = np.where(maxima == 0, 1, maxima / 31).astype("<f4")
+    output = np.empty((value.size * 6 + 7) // 8, dtype=np.uint8)
+    cursor = 0
+    maximum_error = 0.0
+    changed = 0
+    for start in range(0, value.shape[0], 64):
+        block = value[start:start + 64]
+        quantized = np.rint(block / scales).clip(-31, 31).astype(np.int8)
+        raw = pack_signed_bits(quantized, 6)
+        output[cursor:cursor + len(raw)] = raw
+        cursor += len(raw)
+        delta = np.abs(quantized.astype(np.float32) * scales - block)
+        maximum_error = max(maximum_error, float(delta.max()))
+        changed += int(np.count_nonzero(delta))
+    if cursor != len(output):
+        raise ValueError("INT6 linear packing did not fill its image")
+    return output, scales, {
+        "roundtrip_changed_elements": changed,
+        "roundtrip_max_abs_error": maximum_error,
+    }
+
+
+class TiedINT5INT6GemmaWeights(QuantizedINT8Weights):
+    """Numerical reference for grouped INT5 embedding and INT6 FFN."""
+
+    def __call__(self, logical: str, shape: tuple[int, ...]) -> np.ndarray:
+        if logical == "lm_head":
+            table = self.source(logical, shape).T
+            result = np.empty(table.shape, dtype=np.float32)
+            for start in range(0, len(table), 64):
+                block = table[start:start + 64]
+                quantized, scales = quantize_int5_group64_block(block)
+                result[start:start + len(block)] = (
+                    quantized.reshape(len(block), -1, 64).astype(np.float32) *
+                    scales[:, :, None]).reshape(block.shape)
+            return result.T
+        if logical.endswith(("gate_proj", "up_proj", "down_proj")):
+            value = self.source(logical, shape)
+            packed, scales, _ = quantize_int6_per_channel(value)
+            signed = unpack_signed_bits(packed, value.size, 6).reshape(value.shape)
+            return signed.astype(np.float32) * scales
+        return super().__call__(logical, shape)
+
+    def embedding_row(self, logical: str, row: int, width: int) -> np.ndarray:
+        value = self.source.embedding_row(logical, row, width)[None, :]
+        quantized, scales = quantize_int5_group64_block(value)
+        return (quantized.reshape(1, -1, 64).astype(np.float32) *
+                scales[:, :, None]).reshape(width)
