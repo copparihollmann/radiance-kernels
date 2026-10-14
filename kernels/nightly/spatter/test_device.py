@@ -25,11 +25,14 @@ def sha256(path):
 
 
 def one_case(case_id, partitions, out, suite, cyclotron_root, toolchain, llvm_muon,
-             timeout):
+             timeout, sim_cycles, collision_policy, max_layout_mib):
     out.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, str(HERE / "gen_data.py"),
-               "--suite", str(suite), "--case", str(case_id)]
-    if suite == SMOKE and case_id == 5:
+               "--suite", str(suite), "--case", str(case_id),
+               "--max-layout-mib", str(max_layout_mib)]
+    if collision_policy:
+        command += ["--collision-policy", collision_policy]
+    elif suite == SMOKE and case_id == 5:
         command += ["--collision-policy", "ordered"]
     subprocess.run(command, cwd=out, check=True)
     data = json.loads((out / "data/spatter.json").read_text())
@@ -90,7 +93,7 @@ kernel.mu.o: spatter_data.h spatter_body.hpp
         raise RuntimeError(f"device build failed: {out / 'build.log'}")
 
     config = (cyclotron_root / "config.toml").read_text()
-    config, count = re.subn(r"(?m)^timeout\s*=\s*\d+", "timeout = 10000000",
+    config, count = re.subn(r"(?m)^timeout\s*=\s*\d+", f"timeout = {sim_cycles}",
                             config, count=1)
     if count != 1:
         raise ValueError("Cyclotron config lacks unique timeout")
@@ -150,13 +153,16 @@ def main():
     parser.add_argument("--partitions", type=int, nargs="+", choices=(1, 2),
                         default=(1, 2))
     parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument("--sim-cycles", type=int, default=10_000_000)
+    parser.add_argument("--collision-policy", choices=("parallel", "ordered"))
+    parser.add_argument("--max-layout-mib", type=int, default=128)
     parser.add_argument("--cyclotron-root", type=Path, required=True)
     parser.add_argument("--toolchain", type=Path, required=True)
     parser.add_argument("--llvm-muon", type=Path, required=True)
     args = parser.parse_args()
     suite = args.suite.resolve()
-    cases = json.loads(suite.read_text())
-    case_ids = args.case if args.case is not None else range(len(cases))
+    case_ids = (args.case if args.case is not None else
+                range(len(json.loads(suite.read_text()))))
     results = []
     for case_id in case_ids:
         for partitions in args.partitions:
@@ -164,7 +170,8 @@ def main():
                               f"case-{case_id}" / str(partitions),
                               suite, args.cyclotron_root.resolve(),
                               args.toolchain.resolve(), args.llvm_muon.resolve(),
-                              args.timeout)
+                              args.timeout, args.sim_cycles,
+                              args.collision_policy, args.max_layout_mib)
             results.append(result)
             print(case_id, partitions, result["status"],
                   result["cycles_functional"], flush=True)

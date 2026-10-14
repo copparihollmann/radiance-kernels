@@ -106,3 +106,39 @@ destination collisions, and reference coverage for those traces are
 documented in [`kernels/spatter`](../../spatter/README.md). This nightly
 mapping does not implement atomics; ordered collisions mean serial
 last-writer semantics, which can differ from concurrent CUDA Scatter.
+
+## LANL xRAGE asteroid cases
+
+The [xRAGE build receipt](evaluation/lanl-xrage-builds.json) adds the two
+original-size cases selected from LANL `datafiles/xrage/asteroid/spatter.json`:
+
+| Source case | Transfer | Pattern length × count | Collision rule |
+| --- | --- | ---: | --- |
+| 5 (array index 4) | Gather | 8,368,968 × 1 | Parallel, with disjoint output ownership |
+| 9 (array index 8) | Scatter | 6,664,304 × 1 | Ordered last writer per destination |
+
+`extract_cases.py` streams those two objects from the pinned 517,377,170-byte
+LANL input into one smaller suite. It verifies the original file's SHA-256
+before writing and uses less than 20 MiB RAM. The suite and all generated
+blobs belong in the current task's `$TMPDIR`; they are not checked into Git.
+From the repository root:
+
+```sh
+python3 kernels/nightly/spatter/extract_cases.py \
+  --source /path/to/lanl/spatter.json \
+  --out "$TMPDIR/xrage5-and-9.json" --case 4 --case 8
+cd kernels/nightly/spatter
+make -j1 SMS="1 2" GEN_ARGS="--suite $TMPDIR/xrage5-and-9.json --case 0 --max-layout-mib 256"
+```
+
+Save both ELFs and `data/spatter.json` before changing `GEN_ARGS` to
+`--case 1 --collision-policy ordered --max-layout-mib 256` for xRAGE9.
+The ordinary Muon/RV64 toolchain variables described above still apply.
+`record_lanl_builds.py` compares both cases' source and complete golden
+hashes with the pinned upstream Spatter serial oracle, checks the one- and
+two-partition Cyclotron device-body results, and verifies all four SoC ELF
+load segments against the 2 GiB, four-slice, 32-byte hash map. The exact
+one- and two-partition outputs passed byte-for-byte. These checks do not
+measure FPGA latency or bandwidth, and no run on the October XB10 images is
+claimed. xRAGE9's ordered serial result should not be compared directly with
+Spatter's CUDA atomic-scatter throughput.

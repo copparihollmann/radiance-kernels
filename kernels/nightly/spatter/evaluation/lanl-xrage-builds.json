@@ -1,0 +1,146 @@
+{
+  "schema": "radiance.nightly.spatter.hbm-builds.v1",
+  "suite": "lanl-xrage-asteroid-patterns-5-and-9",
+  "source_trace_sha256": "7325525ada0dacb6e1206717d242f6721b6d8da77718506fd909444c388f7733",
+  "selected_suite_sha256": "c8735af8c9d70e8a4048644d27418632b5c592291baced1320a447dd56371728",
+  "extraction_receipt_sha256": "059ac5b6a2df5edcc24cdd38c8b15552a4de4fc774540cbb24b1f0b672cba0b1",
+  "upstream_revision": "ec8923711f8dc21eedff7189f12b02eb06845d2f",
+  "upstream_table_sha256": "206ab87a20a6986eb5e383e2dec7c39fbe917b8c10545164d01d636557b0aeca",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "memory_hash": {
+    "gpu_size_bytes": 2147483648,
+    "unit_bytes": 32,
+    "slices": 4,
+    "load_path": "direct LoadMem"
+  },
+  "compiled_cores_per_cluster": 2,
+  "source_sha256": {
+    "kernels/nightly/spatter/kernel.cpp": "f09867119b45c34d8ea8f9b48e1c4766b4b31e23a44cca105081993b51654815",
+    "kernels/nightly/spatter/host.cpp": "6d9d30c4ba0839bb304fa009052e7dffa4c28103ca5f54f4211b7f432fd756e2",
+    "kernels/nightly/spatter/spatter_body.hpp": "6b26b88f9d8bd728d5b18d419e50fb015050d7e3dc56719b646477656b536ccc",
+    "kernels/nightly/spatter/gen_data.py": "98ee9a4e02fd116387ff60a950c826f347aad6a56ea8eb989431ad1d62d48c94",
+    "kernels/nightly/spatter/Makefile": "5ecd49185ce2f7df9a3c6c803e5e7ca67e6ff70a8134037439f0078f4ddc508c",
+    "kernels/nightly/nightly.mk": "cc364f130dabfd465c4bf59905b6eb92aad511bd2973ffae2e4e93274b4d1215",
+    "kernels/spatter/run.py": "a3483b202f3898db3b2bba4676540ec7207d0c80a5a889bb15e95ae1cf252290",
+    "kernels/spatter/plan.py": "ca7fcc1bdceb6d01c49cf1e67c530aad1ffc0f9a6b588bde7e2efa5d9f59d173",
+    "kernels/spatter/spatter_ops.hpp": "3e6ffe70d27f0afbbc4d38ba62c8a5f997d07b76f51a29d7a34a0f4a9688e24b",
+    "soc/scramble_gpu_elf.py": "48bbbb1d431fb2fa2745f00ea7a46767fd1f07af263af34939007ba622816740",
+    "kernels/nightly/spatter/extract_cases.py": "9a693049a41d76f272cad93647643da8715b41480493dca6e04a8afd1d00abad",
+    "kernels/nightly/spatter/record_lanl_builds.py": "1040118632014b81a66beda9bc9a33786c9e393e7bfae08cdd551ebddea9dc72",
+    "kernels/nightly/spatter/test_device.py": "755548e53eb621c2a046b73853a748fab94cd27c86894f015bb72abf372ca682",
+    "lib/libmuonrt.a": "b6a9028656269125c21f24ffa420cb825045094599b9337d9809d0eab8013554"
+  },
+  "local_checks": [
+    "source trace and selected cases match pinned LANL SHA-256",
+    "full source and golden hashes match the pinned Spatter serial oracle",
+    "one- and two-partition device bodies match every golden output byte",
+    "one- and two-SM SoC ELFs fit the declared 2 GiB GPU map"
+  ],
+  "rtl_execution": false,
+  "fpga_execution": false,
+  "performance_measurement": false,
+  "cases": [
+    {
+      "case": 0,
+      "upstream_case": 4,
+      "upstream_run": "xrage5",
+      "kind": "gather",
+      "collision_policy": "parallel",
+      "pattern_length": 8368968,
+      "count": 1,
+      "output_elements": 8368968,
+      "logical_payload_bytes": 133903488,
+      "data_receipt_sha256": "52b1fc52c20d66276566ecf845f9cba383ce055fdba306171762a90908e23b24",
+      "source_sha256": "c3ac72f4c5db80432b650a8944803ff6be1e70b658ad9b9da76ce65ae62ad60a",
+      "golden_sha256": "73f10bcceed81fdc34ec10749c57c29823985d68e556c15f993e9bf2cbefc5dc",
+      "golden_digest": "2260887d7f6bc955",
+      "functional_controls": {
+        "1": {
+          "result_sha256": "0d1807c422324dc8c57dfbfe2cc0b7d81952deb053bc61895f8dfa94ed48ad2d",
+          "output_sha256": "73f10bcceed81fdc34ec10749c57c29823985d68e556c15f993e9bf2cbefc5dc",
+          "elf_sha256": "33a9bc6ca0760499371ee15b39cd59378f1321c8af8b02e4ba04dc0ab9bf3de0",
+          "log_sha256": "f38d3fd2915552b73101fd351bb14ea26a2df75be1ff59a68d97602790b9926d",
+          "cycles_functional": 850082,
+          "exact_output_bytes": 66951744
+        },
+        "2": {
+          "result_sha256": "cf3463d0eddf9e543428945c34cd883f1e1dcd2e8fbeae02a7cbc913ab0c1e31",
+          "output_sha256": "73f10bcceed81fdc34ec10749c57c29823985d68e556c15f993e9bf2cbefc5dc",
+          "elf_sha256": "f2adaff2faa3ac654874775167d0f22202a6dddac6338b2849a5a1e57366edbf",
+          "log_sha256": "1280f6647785376c97b76e14b80e612e13e4f0302b23453b19b2f4af90be4259",
+          "cycles_functional": 850096,
+          "exact_output_bytes": 66951744
+        }
+      },
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 176443152,
+          "sha256": "2c6784bfc705b28390549fa44199ac55df506df002f12a75fbe601cac2f7f481",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 176351608,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 176443152,
+          "sha256": "86a58cf471922ca7a8d2f8c52f899feb06efbc58a6588878c621ca2fd4cdc100",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 176351616,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "case": 1,
+      "upstream_case": 8,
+      "upstream_run": "xrage9-ordered",
+      "kind": "scatter",
+      "collision_policy": "ordered",
+      "pattern_length": 6664304,
+      "count": 1,
+      "output_elements": 2051101,
+      "logical_payload_bytes": 106628864,
+      "data_receipt_sha256": "4269eb6fec304b6f6a2d18945034fbf4711b28d06baceb06a658ef36dacb07ed",
+      "source_sha256": "983cf80341638c8e10c4d4a1e19efa5205e1e773ec0aa1553535c1147a0c21b3",
+      "golden_sha256": "4f03c869ed1f717317d1181f5b16f99c1debb130759fbb52a1801d39365fbaa6",
+      "golden_digest": "215de6e81154b9c5",
+      "functional_controls": {
+        "1": {
+          "result_sha256": "3ccd0d2d83f44abd63c2f68af90941942c970a57a7ac6234d4cf3502a150c1f0",
+          "output_sha256": "4f03c869ed1f717317d1181f5b16f99c1debb130759fbb52a1801d39365fbaa6",
+          "elf_sha256": "9177bae14b8900cc5d7b5983e26de2189ce85372af854a3e27397ca0e8aba64b",
+          "log_sha256": "8bdbb9857245751131835d17895d05bec821a86c2af2013497e070698ebf014a",
+          "cycles_functional": 1527176,
+          "exact_output_bytes": 16408808
+        },
+        "2": {
+          "result_sha256": "4ef829dcb258f5866417dc0c05f0430880337614ebb244f6a030559ad69275ff",
+          "output_sha256": "4f03c869ed1f717317d1181f5b16f99c1debb130759fbb52a1801d39365fbaa6",
+          "elf_sha256": "00cbcf227747c9b1be004e10052c2f1ea5216b200c98688d2074f6fa7095b3df",
+          "log_sha256": "4fd1f48f2d9625ceb26a3ff2929de7df08450d42bce85c333ee821351b852904",
+          "cycles_functional": 1527188,
+          "exact_output_bytes": 16408808
+        }
+      },
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 147738800,
+          "sha256": "07193b405896c2c56be367b025929eff5d684b03cb2d57436f6ff77d02cdc2b4",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 147658792,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 147738800,
+          "sha256": "3829d1554f3eb03d0f8a82b61ac268d3a4bdec9d2bc5bc512a203dd6941b772d",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 147658800,
+          "gpu_region_in_bounds": true
+        }
+      }
+    }
+  ]
+}
