@@ -1,0 +1,132 @@
+{
+  "schema": "radiance.nightly.stream.hbm-builds.v1",
+  "elements": 1000000,
+  "dtype": "fp32",
+  "backend": "nightly HBM SoC ELF build",
+  "memory_hash": {
+    "gpu_size_bytes": 2147483648,
+    "unit_bytes": 32,
+    "slices": 4,
+    "load_path": "direct LoadMem"
+  },
+  "source_sha256": {
+    "kernels/nightly/stream/kernel.cpp": "5306aceed27d5166e7c311267b5645fa807d72a16fb4a0d0f175e73b80c5406c",
+    "kernels/nightly/stream/host.cpp": "9a912eb0616d52bd3b77d2f670795216553c1e98cd804b267eb9215815e27614",
+    "kernels/nightly/stream/stream_ops.hpp": "3f90bd3117eed62a83725c3c60686d94a24e430bdf202148091b98c16a4317db",
+    "kernels/nightly/stream/gen_data.py": "4aaf74117b1cf8e6c267f1ed6751ebabbc732df46e0022b928f1df3f38cc71e8",
+    "kernels/nightly/stream/Makefile": "8c8f2535c6adcdc368796e6a552f423e82c14c62e923ed662675819347cd2633",
+    "kernels/nightly/nightly.mk": "cc364f130dabfd465c4bf59905b6eb92aad511bd2973ffae2e4e93274b4d1215",
+    "kernels/stream/run.py": "eda69a05d0ccbaa9907945422ed90e17845f9890a9342699fd9a57cc5cb0c829",
+    "soc/scramble_gpu_elf.py": "48bbbb1d431fb2fa2745f00ea7a46767fd1f07af263af34939007ba622816740"
+  },
+  "local_checks": [
+    "all eight SoC ELFs linked",
+    "hash metadata section present",
+    "distinct 1-SM and 2-SM ELF hashes",
+    "generated case metadata matches operation and length",
+    "all four million-element golden SHA-256 values match independently computed FP32 STREAM formulas",
+    "every GPU PT_LOAD is inside the declared 2 GiB region with no GPU segment overlap"
+  ],
+  "rtl_execution": false,
+  "fpga_execution": false,
+  "performance_measurement": false,
+  "cases": [
+    {
+      "operation": "copy",
+      "logical_payload_bytes": 8000000,
+      "data_receipt_sha256": "6fce2ae4fc78359c50e3be74b1cae3ebad6286b863a2fb8744c28fcd68a5b6d7",
+      "golden_sha256": "a2579c0b49ada6ae9847762e2b1853e60f8f4a5ffdba31c257bb53d3198afe63",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 12102560,
+          "sha256": "39daa2dc921adb4ff696178365c2d57dd4e52ee573462efd4e645f4395a5ec5e",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 24,
+          "gpu_loaded_bytes": 12006856,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 12098464,
+          "sha256": "ac2bf4005d28687e027a00e7e09937dacb753769ed50edea85ffe45e6e210aac",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 24,
+          "gpu_loaded_bytes": 12006852,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "operation": "scale",
+      "logical_payload_bytes": 8000000,
+      "data_receipt_sha256": "4c430e83ea0a8f324c87da1a757d6cfb3a142a5c348156a85ee3b086eedf79cd",
+      "golden_sha256": "34e49297c759c04698e953e3627b47d116a9c632c500dec06fec86cd71386c88",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 12115904,
+          "sha256": "bb35ed691300213e54ee01083cde85bddcc538b1a88508aee8f4c508ad4bd25d",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 12007116,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 12111808,
+          "sha256": "888f3a46ccb370c6603566b60a1a42216634ff43f67460038f84394a091910e0",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 12007112,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "operation": "add",
+      "logical_payload_bytes": 12000000,
+      "data_receipt_sha256": "89921077e5f37511953624db52e68d355d2da20f0a747b245ff7a1d206c341e9",
+      "golden_sha256": "e7e4338223eee561179f94ef8b9121a5d1a04dfdf65e58baad07c88662bce30c",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 16113600,
+          "sha256": "9a51fb8e22e09d81d89abe8d620dbd5939d5fa7a349b5901ea141591f52a80d8",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 16006884,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 16109504,
+          "sha256": "c27a1f123517354dcba712c4c0d661c0146dbb2ff429560ab12ee798951f1e97",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 16006880,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "operation": "triad",
+      "logical_payload_bytes": 12000000,
+      "data_receipt_sha256": "07d78479c9610346e536a1f0209a5b5fd6d328aea2a3a69229bdff492ae4fd87",
+      "golden_sha256": "015790688b0d2c832cf86c24bbf00fd02306b9eb521a699371159013bc245428",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 16113600,
+          "sha256": "fe602210e22b2157897f6e0bf8c4dc181667f1b6e80904bcf644bba1c322ee3c",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 16006892,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 16109504,
+          "sha256": "3abea3dc2cb6f9b0521534882221e22750062f0e2e2386efa974a10d0fa357d8",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 16006888,
+          "gpu_region_in_bounds": true
+        }
+      }
+    }
+  ],
+  "compiled_cores_per_cluster": 2
+}
