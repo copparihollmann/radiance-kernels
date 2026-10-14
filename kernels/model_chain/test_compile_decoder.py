@@ -21,6 +21,7 @@ class DecoderCompilerTest(unittest.TestCase):
             ("qwen3_0_6b", 2, "teacher_forced"),
             ("qwen3_0_6b", 2, "greedy"),
             ("tinyllama", 2, "greedy"),
+            ("mistral_7b_v03", 2, "greedy"),
         ]
         with tempfile.TemporaryDirectory() as temporary:
             for model, decode, generation in cases:

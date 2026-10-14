@@ -1,0 +1,22 @@
+{
+  "schema": "radiance.mistral-full-depth-topology-check.v1",
+  "status": "passed",
+  "scope": "32-layer reduced-dimension graph against pinned full-dimension dependencies",
+  "ordered_stages_compared": 1643,
+  "ordered_stage_ids_ops_reads_writes_equal": true,
+  "outputs_equal": true,
+  "greedy_decode_token_dependencies_equal": true,
+  "reduced_dimensions": {
+    "hidden_size": 32,
+    "intermediate_size": 64,
+    "num_attention_heads": 4,
+    "num_key_value_heads": 1,
+    "head_dim": 8,
+    "vocab_size": 64
+  },
+  "pinned_graph_sha256": "2722aec215c16516c725778e1f3be4653b42960fc582988575ecef7e5c7dcda8",
+  "pinned_config_sha256": "affafc6478ec0fd07a32f0ca57aa2fc57743f4d17d6730f86a96ac24d1507f99",
+  "graph_builder_sha256": "e006e13c438b1e1320453a6d9037c196ad838d56242e2483377831f972bb2055",
+  "device_execution": false,
+  "performance_measurement": false
+}

@@ -633,8 +633,11 @@ in logits, and cached versus full causal outputs agree to `4.47e-8`.
 The greedy graph selects the same next tokens `[0, 43]` and agrees to at
 most `8.94e-8`; changing the second decode token changes the final logits
 by `0.388`. Run `verify_mistral_reduced.py` to reproduce it. This model is
-reserved as a held-out architecture for design-rule checks: the full
-checkpoint and full-dimension graph have not been executed on Radiance.
+reserved as a held-out architecture for design-rule checks. A separate
+[32-layer reduced-width Radiance control](../../model_chain/README.md)
+now executes the same ordered dependencies with synthetic weights and checks
+all stages in Cyclotron. The full checkpoint and full dimensions have not been
+executed on Radiance.
 
 ```sh
 python3 kernels/evaluation/llm/stitch.py --model mistral_7b_v03 \

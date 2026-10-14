@@ -16,7 +16,7 @@ from split_decoder_weights import (image_segments, verify_image,
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
-          "qwen3_0_6b", "qwen3_30b_a3b")
+          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03")
 DEFAULT_MODELS = MODELS[:4]
 
 

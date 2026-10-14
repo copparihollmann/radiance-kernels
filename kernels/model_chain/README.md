@@ -204,6 +204,67 @@ python3 kernels/model_chain/verify_functional.py \
   --out "$TMPDIR/qwen3-moe-48layer-reduced/qwen3_30b_a3b/verification.json"
 ```
 
+## Mistral held-out decoder control
+
+The held-out [Mistral-7B-v0.3 graph](../evaluation/llm/mistral-7b-v03-graph.json)
+has 32 full-attention layers, grouped-query KV, RoPE, an untied LM head, and
+two dependent greedy decode steps. Its pinned config has no sliding-attention
+window. The [independent reduced upstream check](../evaluation/llm/mistral-reduced-reference.json)
+matches Transformers 5.3.0 with the same random weights to `8.94e-8` maximum
+logit error. The connected Radiance build uses a separate deterministic
+synthetic FP32 fixture.
+
+The [two-layer Radiance build](evaluation/mistral-reduced-chain-build.json)
+connects three prefill tokens and two greedy decode steps. Its native C++
+check passes all 113 stages with `2.21e-6` maximum absolute error. The
+[Cyclotron run](evaluation/mistral-reduced-chain-functional.json) passes 111
+floating-point and two integer checks with `tohost=0` after 258,645 functional
+cycles; the [artifact verifier](evaluation/mistral-reduced-chain-verification.json)
+checks the ELF, generated sources, simulator, reference code, configuration,
+and logs by SHA-256. This is a functional ISA count, not hardware latency.
+
+The [full-depth topology check](evaluation/mistral-full-depth-topology-check.json)
+compares all 1,643 ordered stage IDs, operations, tensor edges, outputs, and
+greedy token dependencies against the pinned full-dimension graph. The
+32-layer [reduced-width build](evaluation/mistral-full-depth-reduced-build.json)
+passes all 1,643 native stage checks with `1.22e-5` maximum absolute error
+and selects `[15, 59]` from its own logits. The
+[Cyclotron run](evaluation/mistral-full-depth-reduced-functional.json) passes
+1,641 floating-point and two integer stage checks with `tohost=0` after
+3,701,302 functional cycles. The
+[artifact verifier](evaluation/mistral-full-depth-reduced-verification.json)
+checks the ELF, every generated source, reference code, simulator,
+configuration, and logs by hash. Layout checking found 3,580 generated
+buffers on disjoint cache lines. The build occupied 33 MiB locally and peaked
+at 345 MiB RSS with one device compile job. These are reduced FP32 widths and
+synthetic weights: they do not constitute a full Mistral-7B checkpoint run,
+MX-Gemmini execution, RTL timing, or a performance comparison. The 128-token
+pinned graph is a topology reference; the executed prompt has three tokens.
+
+To reproduce the full-depth reduced control, set `TMPDIR` to a task directory
+and provide the Muon and Cyclotron paths for your machine:
+
+```sh
+python3 kernels/model_chain/check_mistral_topology.py \
+  --out "$TMPDIR/mistral-topology-check.json"
+RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+  --model mistral_7b_v03 --layers 32 --prefill 3 --decode-steps 2 \
+  --generation greedy --token-ids 1 2 3 --device-check-all-stages \
+  --stages-per-object 20 --out-root "$TMPDIR/mistral-full-depth-reduced" \
+  --verify-native --build
+python3 kernels/model_chain/run_functional.py --models mistral_7b_v03 \
+  --generated-root "$TMPDIR/mistral-full-depth-reduced" \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 100000000 --timeout 1200 \
+  --out "$TMPDIR/mistral-full-depth-reduced/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$TMPDIR/mistral-full-depth-reduced/mistral_7b_v03/functional-result.json" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --config "$TMPDIR/mistral-full-depth-reduced/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/mistral-7b-v03.json \
+  --out "$TMPDIR/mistral-full-depth-reduced/mistral_7b_v03/verification.json"
+```
+
 ## Qwen3 checkpoint-weight path
 
 The pinned Qwen3-0.6B checkpoint has a saved `lm_head.weight` as well as an
