@@ -873,9 +873,15 @@ agrees. A [three-token prefill, two-step greedy check](qwen3-checkpoint-multitok
 also matches upstream with at most `2.10e-5` logit error and the same two
 selected tokens. An original-width, 28-layer Radiance ELF builds with a converted FP16
 weight image for each of the one- and multi-token reference shapes, and a
-seven-stage real-weight prefix passes Cyclotron; see the
-[checkpoint-weight device record](../../model_chain/README.md#qwen3-checkpoint-weight-path).
-The complete full-weight device run remains pending.
+seven-stage real-weight prefix passes Cyclotron. The complete 28-layer,
+three-token prefill and two dependent greedy decode steps now pass all 1,607
+ordered stage checks in the Cyclotron functional ISA model with `tohost=0`;
+the [result](../../model_chain/evaluation/qwen3-full-depth-fp16-multitoken-functional.json)
+and [artifact verification](../../model_chain/evaluation/qwen3-full-depth-fp16-multitoken-functional-verification.json)
+record the exact ELF, source, image, and simulator hashes. See the
+[checkpoint-weight device record](../../model_chain/README.md#qwen3-checkpoint-weight-path)
+for the FP16 conversion and reference comparison. Its 7,412,422,453
+functional cycles are not an RTL or FPGA performance measurement.
 
 Run `python3 estimate_kv.py` to regenerate [kv-working-set.csv](kv-working-set.csv).
 The script verifies each local config against its recorded hash before

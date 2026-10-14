@@ -552,9 +552,17 @@ rechecks the ELF, all generated device sources, reference, simulator,
 configuration, completion log, and 1,192,230,912-byte checkpoint image by
 hash. This is a full-dimension FP16 checkpoint mapping with one prefill token
 and one dependent greedy decode step. Its FP16 arithmetic is not bit-for-bit
-upstream FP32 execution. The three-token/two-step ELF is running separately;
-it has no completed device result yet. Cyclotron functional cycles are not
-hardware latency or utilization.
+upstream FP32 execution. The [three-token/two-step device run](evaluation/qwen3-full-depth-fp16-multitoken-functional.json)
+also passes all 1,607 ordered checks (1,605 floating-point and two integer)
+in Cyclotron, with `tohost=0` after 7,412,422,453 functional ISA cycles. Its
+[saved-artifact verification](evaluation/qwen3-full-depth-fp16-multitoken-functional-verification.json)
+checks the ELF, generated sources, reference, simulator, completion log, and
+1,192,230,912-byte weight image by hash. This completes a 28-layer,
+three-token prefill and two dependent greedy decode steps on the functional
+device model with converted FP16 checkpoint weights. The upstream FP32 check
+above supports the graph and selected tokens; it does not establish bitwise
+FP32 equivalence. Cyclotron functional cycles are not hardware latency or
+utilization.
 
 The [last-prefill-logit checkpoint check](evaluation/qwen3-prefill-last-logit-check.json)
 uses the saved three-token full-width reference and streams the packed FP16
@@ -674,6 +682,16 @@ python3 kernels/model_chain/verify_functional.py \
   --config "$BUILD/cyclotron-config.toml" \
   --source-config kernels/evaluation/llm/inputs/qwen3-0.6b.json \
   --out "$BUILD/qwen3_0_6b/verification.json"
+python3 kernels/model_chain/run_functional.py --models qwen3_0_6b \
+  --generated-root "$BUILD_MULTI" --cyclotron-root "$CYCLOTRON" \
+  --sim-cycles 20000000000 --timeout 43200 \
+  --out "$BUILD_MULTI/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$BUILD_MULTI/qwen3_0_6b/functional-result.json" \
+  --simulator "$CYCLOTRON/target/release/cyclotron" \
+  --config "$BUILD_MULTI/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/qwen3-0.6b.json \
+  --out "$BUILD_MULTI/qwen3_0_6b/functional-verification.json"
 ```
 
 The upstream FP32 comparison reused the same checkpoint file and reached
@@ -1786,9 +1804,11 @@ five-token full-depth decoder ELFs pass host checks, but only their one-layer
 five-token controls have completed device checks. Native execution checks the
 schedule and math on the host; it does not substitute for a full device run.
 
-The remaining evaluation work is to run representative multi-token prefill
-and cached decode cases, connect the existing MX-Gemmini kernels where the
-data types and layouts agree, and validate those longer programs on RTL.
+The remaining evaluation work is to complete representative multi-token
+prefill and cached decode device checks for the four handoff models, connect
+the existing MX-Gemmini kernels where the data types and layouts agree, and
+validate the longer programs on RTL. Qwen3 now has a completed 28-layer,
+three-token/two-step Cyclotron check as described above.
 SmolVLA also needs a device check of its exact-input 10-step action chunk;
 the current FP32 mapping must be reported separately from the original BF16
 checkpoint policy. Performance comparisons need a fixed hardware baseline,
