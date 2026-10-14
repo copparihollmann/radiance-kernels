@@ -97,6 +97,29 @@ def model_specs() -> dict:
         "activation": config["hidden_act"], "qkv_bias": False,
         "tied_lm_head": False,
     }
+    source = sources["mistral-7b-v03"]
+    raw = (HERE / "inputs" / source["config_file"]).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != source["config_sha256"]:
+        raise ValueError("pinned Mistral config changed")
+    config = json.loads(raw)
+    if (config["model_type"] != "mistral" or config.get("sliding_window") is not None
+            or config.get("rope_scaling") is not None
+            or config["tie_word_embeddings"] or config["hidden_act"] != "silu"
+            or config["hidden_size"] % config["num_attention_heads"]
+            or config["num_attention_heads"] % config["num_key_value_heads"]):
+        raise ValueError("unsupported Mistral decoder configuration")
+    specs["mistral_7b_v03"] = {
+        "name": source["model"], "family": "mistral",
+        "source": source["source_url"], "source_sha256": source["config_sha256"],
+        "checkpoint_revision": source["revision"],
+        **{key: config[key] for key in (
+            "hidden_size", "intermediate_size", "num_hidden_layers",
+            "num_attention_heads", "num_key_value_heads", "vocab_size",
+            "rms_norm_eps", "rope_theta")},
+        "head_dim": config["hidden_size"] // config["num_attention_heads"],
+        "activation": config["hidden_act"], "qkv_bias": False,
+        "tied_lm_head": False,
+    }
     return specs
 
 
@@ -149,7 +172,7 @@ class Graph:
             "execution_schedule": self.execution_schedule,
             "tensors": self.tensors, "stages": self.stages,
         }
-        if self.spec["family"] in {"qwen3", "olmo3", "qwen3_moe"}:
+        if self.spec["family"] in {"qwen3", "olmo3", "qwen3_moe", "mistral"}:
             result["source_sha256"] = self.spec["source_sha256"]
         return result
 
@@ -504,7 +527,7 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
     graph.generation = generation
     logits, caches = _decoder_pass(graph, spec, "prefill", batch, prefill, 0, {})
     graph.outputs.append(logits)
-    if spec["family"] in {"qwen3", "olmo3", "qwen3_moe"}:
+    if spec["family"] in {"qwen3", "olmo3", "qwen3_moe", "mistral"}:
         graph.execution_schedule = {
             "entrypoint": "causal_generate",
             "prefill_stages": [stage["id"] for stage in graph.stages],

@@ -162,6 +162,43 @@ class ModelStitchTest(unittest.TestCase):
                          [1, 3, spec["vocab_size"]])
         self.assertFalse(graph.report()["device_execution"])
 
+    def test_held_out_mistral_uses_dense_full_attention_and_gqa(self):
+        spec = model_specs()["mistral_7b_v03"]
+        self.assertEqual((spec["num_hidden_layers"], spec["hidden_size"],
+                          spec["num_attention_heads"], spec["num_key_value_heads"]),
+                         (32, 4096, 32, 8))
+        graph = build("mistral_7b_v03", prefill=3, decode_steps=2,
+                      generation="greedy")
+        stages = {stage["id"]: stage for stage in graph.stages}
+        self.assertEqual(len(graph.outputs), 3)
+        self.assertEqual(len([stage for stage in graph.stages
+                              if stage["op"] == "causal_gqa"]), 32 * 3)
+        self.assertEqual(len([stage for stage in graph.stages
+                              if stage["op"] == "bias_add"]), 0)
+        for phase, tokens, past in (("prefill", 3, 0),
+                                    ("decode0", 1, 3), ("decode1", 1, 4)):
+            for layer in (0, 31):
+                base = f"{phase}.layer{layer:02d}"
+                self.assertEqual(graph.tensors[f"{base}.q_proj"]["shape"],
+                                 [1, tokens, 32, 128])
+                self.assertEqual(graph.tensors[f"{base}.k_proj"]["shape"],
+                                 [1, tokens, 8, 128])
+                self.assertEqual(stages[f"{base}.q_proj"]["reads"],
+                                 [f"{base}.attn_norm"])
+                self.assertEqual(stages[f"{base}.q_rope"]["reads"],
+                                 [f"{base}.q_proj"])
+                self.assertEqual(stages[f"{base}.attention"]["attrs"]["window"],
+                                 None)
+                self.assertEqual(stages[f"{base}.attention"]["attrs"]["query_start"],
+                                 past)
+                self.assertEqual(graph.tensors[f"{base}.k_cache"]["shape"],
+                                 [1, past + tokens, 8, 128])
+        self.assertEqual(stages["decode1.token_ids"]["reads"],
+                         ["decode0.lm_head"])
+        self.assertEqual(stages["prefill.lm_head"]["attrs"]["parameter"],
+                         "lm_head")
+        self.assertFalse(graph.report()["device_execution"])
+
     def test_qwen3_order_head_norm_rope_and_tied_head(self):
         spec = model_specs()["qwen3_0_6b"]
         graph = build("qwen3_0_6b", prefill=3, decode_steps=1)

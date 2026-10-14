@@ -309,7 +309,7 @@ below are derived from those configs:
 | OLMo-3-7B | Repeat 3 sliding-attention layers then 1 full-attention layer, 8 times | Keep the 4,096-token local window distinct from the full-context KV layers. Its config disables caching by default; the reduced upstream control below checks an explicit cached-decode override. |
 | Qwen3-30B-A3B | 48 full-attention layers with MoE FFNs | Route each token to 8 of 128 experts, then combine their outputs in layer order. |
 | Nemotron-3-Nano-4B | 21 Mamba2 blocks, 4 full-attention blocks, 17 MLP-only blocks in the recorded sequence | Carry Mamba state and attention KV with their separate lifetimes. |
-| Mistral-7B-v0.3 | 32 full-attention, dense-FFN layers | Reserve as the held-out dense model. |
+| Mistral-7B-v0.3 | 32 full-attention, dense-FFN layers | Held-out dense model; the graph and reduced upstream check below are available. |
 
 The inventory names block types from config fields; it does not claim that
 these models are compiled or timed on Radiance. The
@@ -317,10 +317,11 @@ Nemotron `M`, `*`, and `-` symbols respectively denote Mamba2, attention,
 and MLP-only blocks in its [official pinned configuration code](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/configuration_nemotron_h.py).
 Qwen3-MoE uses the config's expert count, top-k, sparse step, and explicit
 dense-FFN exceptions according to its [decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py);
-the pinned model has an MoE FFN in every layer. OLMo now has the ordered
-software schedule and reduced reference control below. The remaining
-architecture candidates still need the operations within each block,
-checkpoints, token inputs, and reference runs before model-level comparisons.
+the pinned model has an MoE FFN in every layer. OLMo, Qwen3-MoE, and Mistral
+now have ordered software schedules and reduced reference controls below.
+Nemotron still needs its Mamba and attention operations stitched together.
+All candidates need full checkpoint, input, and device checks before
+model-level performance comparisons.
 
 ### OLMo 3 local/global attention control
 
@@ -434,6 +435,32 @@ Regenerate the graph with:
 python3 kernels/evaluation/llm/stitch.py --model qwen3_30b_a3b \
   --batch 1 --prefill 128 --decode-steps 2 --generation greedy --compact \
   --out kernels/evaluation/llm/qwen3-30b-a3b-graph.json
+```
+
+### Held-out Mistral dense control
+
+`stitch.py --model mistral_7b_v03` emits a config-pinned
+[32-layer graph](mistral-7b-v03-graph.json) with full causal attention,
+32 query heads, 8 KV heads, 128-wide heads, RoPE, untied output projection,
+and ordered cached decode. The saved batch-1, 128-token prefill plus two
+greedy steps has 1,643 stages, including 293 without a named device
+primitive. The pinned config has `sliding_window: null`; the graph therefore
+does not impose a local-attention mask.
+
+The [reduced upstream check](mistral-reduced-reference.json) binds a
+two-layer stitched graph to the same random weights as Transformers 5.3.0.
+Three-token prefill and two cached decode phases agree to at most `8.94e-8`
+in logits, and cached versus full causal outputs agree to `4.47e-8`.
+The greedy graph selects the same next tokens `[0, 43]` and agrees to at
+most `8.94e-8`; changing the second decode token changes the final logits
+by `0.388`. Run `verify_mistral_reduced.py` to reproduce it. This model is
+reserved as a held-out architecture for design-rule checks: the full
+checkpoint and full-dimension graph have not been executed on Radiance.
+
+```sh
+python3 kernels/evaluation/llm/stitch.py --model mistral_7b_v03 \
+  --batch 1 --prefill 128 --decode-steps 2 --generation greedy --compact \
+  --out kernels/evaluation/llm/mistral-7b-v03-graph.json
 ```
 
 ### Qwen3-0.6B graph control
