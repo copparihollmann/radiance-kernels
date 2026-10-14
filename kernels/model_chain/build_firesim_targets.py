@@ -7,9 +7,33 @@ configuration. This script cannot infer or certify that hardware configuration.
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 from package_firesim import digest, hash_folds, package_hashed, verify_package
+
+
+DISK_RESERVE_BYTES = 1 << 30
+
+
+def preflight_disk_space(bundle: Path, output: Path, models: list[dict],
+                         hash_size: int) -> dict:
+    """Reserve room for all outputs, even if compact hashing fills the region."""
+    existing = output
+    while not existing.exists():
+        existing = existing.parent
+    # Every ELF copies its source and adds at most one hash region. Leave room
+    # for alignment/program headers and a fixed reserve for unrelated jobs.
+    required = sum((bundle / item["source_elf"]).stat().st_size + hash_size
+                   + (1 << 20) for item in models) + DISK_RESERVE_BYTES
+    free = shutil.disk_usage(existing).free
+    if free < required:
+        raise OSError(f"insufficient free space for target ELFs: need at least "
+                      f"{required} bytes including reserve; {free} bytes free on "
+                      f"{existing}")
+    return {"free_bytes_before_build": free,
+            "conservative_required_bytes_with_reserve": required,
+            "reserve_bytes": DISK_RESERVE_BYTES}
 
 
 def selected_models(bundle, requested, hash_size):
@@ -99,6 +123,8 @@ def main():
         target = output / f"{stem}.hbm.soc.elf"
         if target.exists() or target.with_suffix(target.suffix + ".json").exists():
             raise FileExistsError(f"refusing to replace existing output: {target}")
+    report["disk_preflight"] = preflight_disk_space(
+        bundle, output, report["models"], args.hash_size)
     for item in report["models"]:
         stem = item["donor_elf"].removesuffix(".soc.elf")
         target = output / f"{stem}.hbm.soc.elf"
