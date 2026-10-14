@@ -1,0 +1,69 @@
+{
+  "status": "passed",
+  "scope": "two-layer random-weight Qwen3 upstream comparison; not checkpoint execution or device timing",
+  "pinned_config_sha256": "660db3b73d788119c04535e48cf9be5f55bc3100841a718637ae695b442f27dd",
+  "source_model": "Qwen/Qwen3-0.6B",
+  "small_config": {
+    "hidden_size": 32,
+    "intermediate_size": 64,
+    "num_hidden_layers": 2,
+    "num_attention_heads": 2,
+    "num_key_value_heads": 1,
+    "head_dim": 8,
+    "vocab_size": 64,
+    "rms_norm_eps": 1e-06,
+    "rope_theta": 1000000
+  },
+  "torch_version": "2.9.1+cpu",
+  "transformers_version": "5.3.0",
+  "seed": 19,
+  "token_ids": [
+    [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  ],
+  "comparisons": [
+    {
+      "phase": "prefill",
+      "shape": [
+        1,
+        3,
+        64
+      ],
+      "max_abs_error": 1.1920928955078125e-07,
+      "allclose_atol_1e-5_rtol_1e-5": true,
+      "graph_output_sha256": "4fe1709d8f8ce6aca71d23b471a7429ff3b1d77dae23424e8b59394d0b89f78c",
+      "upstream_output_sha256": "936fac3566b8040fb1036e49f8bb06d367ea754de183e5f9db0466a3b4e13095"
+    },
+    {
+      "phase": "decode0",
+      "shape": [
+        1,
+        1,
+        64
+      ],
+      "max_abs_error": 3.725290298461914e-08,
+      "allclose_atol_1e-5_rtol_1e-5": true,
+      "graph_output_sha256": "3f543e442fe2f6246c893a68c70010ea647139d11fee53b43a9cd6b5a64dfe91",
+      "upstream_output_sha256": "28d77971ecab838106cce05995f83c671a2f843bb45bab2d9166cc6e9cce5a62"
+    },
+    {
+      "phase": "decode1",
+      "shape": [
+        1,
+        1,
+        64
+      ],
+      "max_abs_error": 1.1920928955078125e-07,
+      "allclose_atol_1e-5_rtol_1e-5": true,
+      "graph_output_sha256": "842f1a252a60b229d29a49e8dcfbbd3a93e554bf6310b7c53ca33477da9b32f6",
+      "upstream_output_sha256": "ac0f36ac488c8a325e186c9e5634fed534fc8d3bae6123fb60739498e2f50b3c"
+    }
+  ],
+  "upstream_cached_vs_full_max_abs_error": 8.940696716308594e-08,
+  "zero_first_query_norm_max_abs_logit_delta": 0.03315645083785057
+}

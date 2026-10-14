@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build checked tensor-dependency schedules for the four PR #1 models.
+"""Build checked tensor-dependency schedules for pinned model workloads.
 
 This is a software dataflow schedule. A listed kernel is an existing primitive,
 not an executable shared-buffer implementation of the stage.
@@ -8,6 +8,8 @@ not an executable shared-buffer implementation of the stage.
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -19,7 +21,28 @@ SPECS = HERE / "pr1-models.json"
 
 
 def model_specs() -> dict:
-    return json.loads(SPECS.read_text())
+    specs = json.loads(SPECS.read_text())
+    with (HERE / "inputs/sources.csv").open(newline="") as stream:
+        source = next(row for row in csv.DictReader(stream)
+                      if row["case"] == "qwen3-0.6b")
+    raw = (HERE / "inputs" / source["config_file"]).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != source["config_sha256"]:
+        raise ValueError("pinned Qwen3 config changed")
+    config = json.loads(raw)
+    if (config["model_type"] != "qwen3" or config.get("rope_scaling") is not None
+            or config.get("use_sliding_window") or not config["tie_word_embeddings"]):
+        raise ValueError("unsupported Qwen3 decoder configuration")
+    specs["qwen3_0_6b"] = {
+        "name": source["model"], "family": "qwen3", "source": source["source_url"],
+        "source_sha256": source["config_sha256"],
+        **{key: config[key] for key in (
+            "hidden_size", "intermediate_size", "num_hidden_layers",
+            "num_attention_heads", "num_key_value_heads", "head_dim",
+            "vocab_size", "rms_norm_eps", "rope_theta")},
+        "activation": config["hidden_act"], "qkv_bias": config["attention_bias"],
+        "tied_lm_head": True,
+    }
+    return specs
 
 
 class Graph:
@@ -59,7 +82,7 @@ class Graph:
 
     def report(self) -> dict:
         counts = Counter(stage["status"] for stage in self.stages)
-        return {
+        result = {
             "model": self.model, "source": self.spec["source"],
             "mode": "tensor_dataflow_plan",
             "tensor_shapes": "logical_ranks_from_spec",
@@ -71,6 +94,9 @@ class Graph:
             "execution_schedule": self.execution_schedule,
             "tensors": self.tensors, "stages": self.stages,
         }
+        if self.spec["family"] == "qwen3":
+            result["source_sha256"] = self.spec["source_sha256"]
+        return result
 
 
 def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
@@ -83,10 +109,13 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
     ids = token_ids or graph.input(f"{phase}.token_ids", (batch, tokens), "int32")
     if graph.tensors[ids]["shape"] != [batch, tokens]:
         raise ValueError(f"{phase}: invalid token input shape")
+    embedding_attrs = {"parameter": "embed_tokens", "vocab_size": spec["vocab_size"],
+                       "scale": h ** 0.5 if family == "gemma2" else 1.0}
+    if spec.get("tied_lm_head"):
+        embedding_attrs["tied_lm_head"] = True
     hidden = graph.add(f"{phase}.embedding", "embedding", (ids,), (batch, tokens, h),
                        "embed_scale" if family == "gemma2" else None,
-                       {"parameter": "embed_tokens", "vocab_size": spec["vocab_size"],
-                        "scale": h ** 0.5 if family == "gemma2" else 1.0})
+                       embedding_attrs)
     next_caches = {}
 
     def norm(name: str, source: str, parameter: str) -> str:
@@ -118,10 +147,24 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
                                   {"parameter": f"layers.{layer}.{kind}_bias"})
             projections.append(value)
         q, k, v = projections
+        if family == "qwen3":
+            q = graph.add(f"{base}.q_norm", "rmsnorm", (q,),
+                          (batch, tokens, qh, d), attrs={
+                              "parameter": f"layers.{layer}.q_norm",
+                              "epsilon": spec["rms_norm_eps"],
+                              "gemma_weight_offset": False})
+            k = graph.add(f"{base}.k_norm", "rmsnorm", (k,),
+                          (batch, tokens, kvh, d), attrs={
+                              "parameter": f"layers.{layer}.k_norm",
+                              "epsilon": spec["rms_norm_eps"],
+                              "gemma_weight_offset": False})
+        rope_attrs = {"position_start": past}
+        if "rope_theta" in spec:
+            rope_attrs["theta"] = spec["rope_theta"]
         q = graph.add(f"{base}.q_rope", "rope", (q,), (batch, tokens, qh, d),
-                      "rope_qkv_fused", {"position_start": past})
+                      "rope_qkv_fused", rope_attrs)
         k = graph.add(f"{base}.k_rope", "rope", (k,), (batch, tokens, kvh, d),
-                      "rope_qkv_fused", {"position_start": past})
+                      "rope_qkv_fused", rope_attrs)
         old_k, old_v = caches.get(layer, (None, None))
         k_cache = graph.add(f"{base}.k_cache", "kv_append",
                             (k,) if old_k is None else (old_k, k),
@@ -163,8 +206,16 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
         hidden = graph.add(f"{base}.ffn_residual", "add",
                            (hidden_after_attn, down), (batch, tokens, h), "vecadd")
     hidden = norm(f"{phase}.final_norm", hidden, "final_norm")
-    logits = linear(f"{phase}.lm_head", hidden,
-                    (batch, tokens, spec["vocab_size"]), "lm_head")
+    if spec.get("tied_lm_head"):
+        logits = graph.add(f"{phase}.lm_head", "linear", (hidden,),
+                           (batch, tokens, spec["vocab_size"]), "gemm_mxgemmini",
+                           {"parameter": "embed_tokens",
+                            "weight_shape": [spec["vocab_size"], h],
+                            "weight_transposed": True,
+                            "macs": batch * tokens * h * spec["vocab_size"]})
+    else:
+        logits = linear(f"{phase}.lm_head", hidden,
+                        (batch, tokens, spec["vocab_size"]), "lm_head")
     if family == "gemma2":
         logits = graph.add(f"{phase}.logit_softcap", "softcap", (logits,),
                            (batch, tokens, spec["vocab_size"]), "logit_softcap",
@@ -186,7 +237,17 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
     graph.generation = generation
     logits, caches = _decoder_pass(graph, spec, "prefill", batch, prefill, 0, {})
     graph.outputs.append(logits)
+    if spec["family"] == "qwen3":
+        graph.execution_schedule = {
+            "entrypoint": "causal_generate",
+            "prefill_stages": [stage["id"] for stage in graph.stages],
+            "decode_loop": [],
+            "cache_policy": "append each layer's rotated K and projected V before its attention",
+        }
     for step in range(decode_steps):
+        previous_caches = caches
+        first_stage = len(graph.stages)
+        previous_logits = logits
         token_ids = None
         if generation == "greedy":
             token_ids = graph.add(f"decode{step}.token_ids", "token_select", (logits,),
@@ -195,6 +256,18 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
         logits, caches = _decoder_pass(graph, spec, f"decode{step}",
                                        batch, 1, prefill + step, caches, token_ids)
         graph.outputs.append(logits)
+        if graph.execution_schedule is not None:
+            graph.execution_schedule["decode_loop"].append({
+                "step": step,
+                "token_input": token_ids or f"decode{step}.token_ids",
+                "greedy_source_logits": previous_logits if token_ids else None,
+                "previous_cache": {str(layer): list(previous_caches[layer])
+                                   for layer in range(spec["num_hidden_layers"])},
+                "updated_cache": {str(layer): list(caches[layer])
+                                  for layer in range(spec["num_hidden_layers"])},
+                "stages": [stage["id"] for stage in graph.stages[first_stage:]],
+                "output_logits": logits,
+            })
     return graph
 
 
@@ -622,11 +695,14 @@ def main() -> None:
     parser.add_argument("--decode-steps", type=int, default=1)
     parser.add_argument("--generation", choices=("teacher_forced", "greedy"),
                         default="teacher_forced")
+    parser.add_argument("--compact", action="store_true",
+                        help="write one-line JSON for retained graph artifacts")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     report = build(args.model, args.batch, args.prefill, args.decode_steps,
                    generation=args.generation).report()
-    output = json.dumps(report, indent=2) + "\n"
+    output = (json.dumps(report, separators=(",", ":")) if args.compact else
+              json.dumps(report, indent=2)) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(output)

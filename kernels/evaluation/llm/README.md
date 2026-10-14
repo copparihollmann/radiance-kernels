@@ -307,6 +307,41 @@ the pinned model has an MoE FFN in every layer. A device schedule still needs
 the operations within each block, checkpoints, token inputs, and a reference
 run before any model-level performance comparison.
 
+### Qwen3-0.6B graph control
+
+`stitch.py --model qwen3_0_6b` reads the hash-checked candidate config and
+emits prefill followed by an ordered cached-decode loop. Each of its 28
+decoder layers keeps separate query and KV head axes. In the pinned
+[Qwen3 decoder implementation](https://github.com/huggingface/transformers/blob/v4.51.3/src/transformers/models/qwen3/modeling_qwen3.py),
+query and key projections pass through per-head RMSNorm **before** RoPE;
+values do not. The graph preserves that order, uses the checkpoint's
+1,000,000 RoPE base, appends K/V by layer, and ties the output head to the
+input embedding weights. The `execution_schedule` records which logits select
+each greedy token and which KV buffers carry into the next step.
+
+For batch 1, a 256-token prefill and four greedy decode steps produce 2,679
+logical stages in the [saved graph](qwen3-0.6b-graph.json). Of those, 709 have no named device
+primitive in this inventory; the other 1,970 name starting-point primitives,
+not a compiled shared-buffer program or a claim of shape compatibility.
+Regenerate this case with:
+
+```sh
+python3 kernels/evaluation/llm/stitch.py --model qwen3_0_6b \
+  --batch 1 --prefill 256 --decode-steps 4 --generation greedy --compact \
+  --out kernels/evaluation/llm/qwen3-0.6b-graph.json
+```
+
+The [reduced upstream check](qwen3-reduced-reference.json) runs a two-layer,
+random-weight Qwen3 through independent Transformers 5.3.0 and the stitched
+NumPy executor with the **same weights**. Prefill and two cached decode
+outputs agree to at most `1.19e-7` absolute error; an upstream cached pass
+also matches an upstream full causal pass to `8.94e-8`. Zeroing the first
+query norm in the stitched path changes final logits by `0.0332`. Run
+`verify_qwen3_reduced.py` to reproduce the check. These controls establish
+the reduced decoder operation order and cache handoff. The original Qwen3
+checkpoint, full model dimensions, quantization and Radiance execution still
+need separate checks.
+
 Run `python3 estimate_kv.py` to regenerate [kv-working-set.csv](kv-working-set.csv).
 The script verifies each local config against its recorded hash before
 calculating BF16 resident KV bytes for a 256-token prompt at batch 1 and 8

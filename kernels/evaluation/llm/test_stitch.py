@@ -8,7 +8,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from reference import check_small, execute, reduced_spec
+from reference import check_small, execute, parameter, reduced_spec
 from stitch import build, model_specs
 
 
@@ -72,6 +72,64 @@ class ModelStitchTest(unittest.TestCase):
                    if stage["op"] == "causal_gqa"]
         self.assertEqual(windows, [4096 if i % 2 == 0 else None for i in range(26)])
         self.assertEqual(gemma.stages[-1]["op"], "softcap")
+
+    def test_qwen3_order_head_norm_rope_and_tied_head(self):
+        spec = model_specs()["qwen3_0_6b"]
+        graph = build("qwen3_0_6b", prefill=3, decode_steps=1)
+        self.assertEqual(spec["num_hidden_layers"], 28)
+        self.assertEqual(spec["rope_theta"], 1_000_000)
+        stages = {stage["id"]: stage for stage in graph.stages}
+        for phase, tokens, past in (("prefill", 3, 0), ("decode0", 1, 3)):
+            base = f"{phase}.layer00"
+            self.assertEqual(stages[f"{base}.q_norm"]["reads"],
+                             [f"{base}.q_proj"])
+            self.assertEqual(stages[f"{base}.k_norm"]["reads"],
+                             [f"{base}.k_proj"])
+            self.assertEqual(stages[f"{base}.q_rope"]["reads"],
+                             [f"{base}.q_norm"])
+            self.assertEqual(stages[f"{base}.k_rope"]["reads"],
+                             [f"{base}.k_norm"])
+            self.assertEqual(stages[f"{base}.q_rope"]["attrs"],
+                             {"position_start": past, "theta": 1_000_000})
+            self.assertEqual(graph.tensors[f"{base}.q_norm"]["shape"],
+                             [1, tokens, 16, 128])
+            self.assertEqual(graph.tensors[f"{base}.k_norm"]["shape"],
+                             [1, tokens, 8, 128])
+            self.assertEqual(stages[f"{base}.attention"]["attrs"]["window"], None)
+        self.assertEqual(stages["prefill.lm_head"]["attrs"]["parameter"],
+                         stages["prefill.embedding"]["attrs"]["parameter"])
+        self.assertTrue(stages["prefill.lm_head"]["attrs"]["weight_transposed"])
+
+        reduced = reduced_spec(spec)
+        small = build("qwen3_0_6b", prefill=3, decode_steps=0,
+                      specs={"qwen3_0_6b": reduced})
+        values = execute(small, {"prefill.token_ids":
+                                 np.array([[1, 2, 3]], dtype=np.int32)})
+        table = parameter("embed_tokens", (64, 32))
+        self.assertTrue(np.array_equal(values["prefill.embedding"],
+                                       table[[1, 2, 3]][None]))
+        expected = values["prefill.final_norm"] @ table.T
+        self.assertTrue(np.allclose(values["prefill.lm_head"], expected,
+                                    rtol=0, atol=1e-6))
+        self.assertTrue(check_small("qwen3_0_6b")["passed"])
+
+    def test_qwen3_schedule_carries_kv_and_greedy_tokens(self):
+        graph = build("qwen3_0_6b", prefill=3, decode_steps=2,
+                      generation="greedy")
+        schedule = graph.execution_schedule
+        self.assertEqual(schedule["entrypoint"], "causal_generate")
+        steps = schedule["decode_loop"]
+        self.assertEqual(len(steps), 2)
+        self.assertEqual(steps[0]["greedy_source_logits"], graph.outputs[0])
+        self.assertEqual(steps[1]["greedy_source_logits"], graph.outputs[1])
+        self.assertEqual(steps[0]["token_input"], "decode0.token_ids")
+        self.assertEqual(steps[1]["previous_cache"]["27"],
+                         steps[0]["updated_cache"]["27"])
+        self.assertEqual(steps[1]["updated_cache"]["27"],
+                         ["decode1.layer27.k_cache", "decode1.layer27.v_cache"])
+        scheduled = (schedule["prefill_stages"] +
+                     [name for step in steps for name in step["stages"]])
+        self.assertEqual(scheduled, [stage["id"] for stage in graph.stages])
 
     def test_smolvla_covers_vision_vlm_and_action_denoising(self):
         graph = build("smolvla_base")

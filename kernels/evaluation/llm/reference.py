@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small deterministic numerical control for the PR #1 decoder schedules.
+"""Small deterministic numerical control for decoder schedules.
 
 The weights are generated for this control. They are not checkpoint weights,
 and this NumPy path is not a Radiance timing or precision model.
@@ -28,9 +28,9 @@ class WeightProvider(Protocol):
     def embedding_row(self, name: str, row: int, width: int) -> np.ndarray: ...
 
 
-def rope(x: np.ndarray, start: int) -> np.ndarray:
+def rope(x: np.ndarray, start: int, theta: float = 10000.0) -> np.ndarray:
     half = x.shape[-1] // 2
-    frequencies = 10000.0 ** (-np.arange(half, dtype=np.float32) / half)
+    frequencies = theta ** (-np.arange(half, dtype=np.float32) / half)
     angle = np.arange(start, start + x.shape[1], dtype=np.float32)[:, None] * frequencies
     cosine, sine = np.cos(angle)[None, :, None, :], np.sin(angle)[None, :, None, :]
     left, right = x[..., :half], x[..., half:]
@@ -90,10 +90,17 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
             ids = args[0]
             if ids.min() < 0 or ids.max() >= attrs["vocab_size"]:
                 raise ValueError("token id outside vocabulary")
-            rows = [weights.embedding_row(attrs["parameter"], int(token), shape[-1])
-                    if weights is not None else
-                    parameter(f"{attrs['parameter']}.{int(token)}", (shape[-1],))
-                    for token in ids.flat]
+            if attrs.get("tied_lm_head") and weights is None:
+                weight_shape = (attrs["vocab_size"], shape[-1])
+                if np.prod(weight_shape, dtype=np.int64) > max_tensor_elements:
+                    raise ValueError("synthetic tied embedding exceeds numerical control limit")
+                table = parameter(attrs["parameter"], weight_shape)
+                rows = [table[int(token)] for token in ids.flat]
+            else:
+                rows = [weights.embedding_row(attrs["parameter"], int(token), shape[-1])
+                        if weights is not None else
+                        parameter(f"{attrs['parameter']}.{int(token)}", (shape[-1],))
+                        for token in ids.flat]
             value = np.stack(rows).reshape(shape) * attrs["scale"]
         elif op == "rmsnorm":
             if weights is not None:
@@ -106,16 +113,21 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
                                                keepdims=True) + attrs["epsilon"]) * gamma
         elif op == "linear":
             weight_shape = tuple(attrs["weight_shape"])
+            if np.prod(weight_shape, dtype=np.int64) > max_tensor_elements and weights is None:
+                raise ValueError(f"{name}: synthetic weight exceeds numerical control limit")
             weight = (weights(attrs["parameter"], weight_shape) if weights is not None
                       else parameter(attrs["parameter"], weight_shape,
+                                     0.05 if attrs.get("weight_transposed") else
                                      1.0 / np.sqrt(weight_shape[0])))
+            if attrs.get("weight_transposed"):
+                weight = weight.T
             value = (args[0] @ weight).reshape(shape)
         elif op == "bias_add":
             bias = (weights(attrs["parameter"], shape[2:]) if weights is not None
                     else parameter(attrs["parameter"], shape[2:]))
             value = args[0] + bias
         elif op == "rope":
-            value = rope(args[0], attrs["position_start"])
+            value = rope(args[0], attrs["position_start"], attrs.get("theta", 10000.0))
         elif op == "kv_append":
             value = np.concatenate(args, axis=1) if len(args) == 2 else args[0]
         elif op == "causal_gqa":
