@@ -481,6 +481,17 @@ at 345 MiB RSS with one device compile job. These are reduced FP32 widths and
 synthetic weights: they do not constitute a full Mistral-7B checkpoint run,
 MX-Gemmini execution, RTL timing, or a performance comparison. The 128-token
 pinned graph is a topology reference; the executed prompt has three tokens.
+The [same-fixture upstream check](../evaluation/llm/mistral-device-fixture-upstream.json)
+binds Transformers 5.3.0 to all 291 FP32 parameter declarations in this exact
+generated device source. It compares upstream CPU outputs with the stitched
+NumPy reference used by the separate Cyclotron stage checks. With the 32-layer,
+three-prefill/two-greedy schedule, all 96 layer outputs and three logit
+tensors agree at `rtol=1e-4, atol=1e-5`;
+the maximum layer-output and logit errors are `1.34e-5` and `1.67e-6`.
+Both paths select `[15, 59]`. The check verifies the generated source and
+ELF hashes against the passing Cyclotron receipt. It does not read device
+logits directly or claim a new device measurement. It consumed about 362 MiB
+peak RAM.
 
 To reproduce the full-depth reduced control, set `TMPDIR` to a task directory
 and provide the Muon and Cyclotron paths for your machine:
@@ -504,6 +515,9 @@ python3 kernels/model_chain/verify_functional.py \
   --config "$TMPDIR/mistral-full-depth-reduced/cyclotron-config.toml" \
   --source-config kernels/evaluation/llm/inputs/mistral-7b-v03.json \
   --out "$TMPDIR/mistral-full-depth-reduced/mistral_7b_v03/verification.json"
+python3 kernels/evaluation/llm/verify_mistral_device_fixture.py \
+  --build-dir "$TMPDIR/mistral-full-depth-reduced/mistral_7b_v03" \
+  --out "$TMPDIR/mistral-device-fixture-upstream.json"
 ```
 
 ## Qwen3 checkpoint-weight path

@@ -824,8 +824,14 @@ by `0.388`. Run `verify_mistral_reduced.py` to reproduce it. This model is
 reserved as a held-out architecture for design-rule checks. A separate
 [32-layer reduced-width Radiance control](../../model_chain/README.md)
 now executes the same ordered dependencies with synthetic weights and checks
-all stages in Cyclotron. The full checkpoint and full dimensions have not been
-executed on Radiance.
+all stages in Cyclotron. A separate
+[same-fixture check](mistral-device-fixture-upstream.json) binds the exact 291
+generated device parameter declarations to upstream Transformers 5.3.0. It
+compares upstream CPU with the stitched NumPy reference that the separate
+Cyclotron run checks stage by stage. All 96 layer outputs and the
+prefill/decode logits pass `rtol=1e-4, atol=1e-5`;
+the two greedy IDs are `[15, 59]` in both paths. The full checkpoint and full
+dimensions have not been executed on Radiance.
 
 ```sh
 python3 kernels/evaluation/llm/stitch.py --model mistral_7b_v03 \
