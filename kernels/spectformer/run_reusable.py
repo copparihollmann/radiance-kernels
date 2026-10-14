@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -106,11 +107,17 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
             sha256(weights) != build["weights_sha256"]):
         raise ValueError("weights differ from export")
     pixels = load_input(input_path, image["image_size"])
+    seed_kind = build.get("seed_kind")
+    if seed_kind is not None and not check_reference:
+        raise ValueError("a block-seeded probe requires an upstream output check")
     output_kind = build.get("output_kind", "logits")
     output_count = build.get("output_count", image["num_classes"])
     output_offset = build.get("output_offset", build["logits_offset"])
     input_bytes = out / "input.bin"
-    input_bytes.write_bytes(pixels.tobytes())
+    seed = upstream_output(image, pixels, seed_kind) if seed_kind else pixels
+    if seed_kind and seed.size != (image["image_size"] // 16) ** 2 * image["embed_dim"]:
+        raise ValueError("upstream block seed has the wrong tensor size")
+    input_bytes.write_bytes(seed.astype("<f4", copy=False).tobytes())
     expected = None
     if check_reference:
         expected = upstream_output(image, pixels, output_kind)
@@ -138,13 +145,15 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
     arenas = re.findall(r"(?m)^([0-9a-fA-F]+) [A-Za-z] v_arena$", symbols)
     if len(arenas) != 1:
         raise ValueError("ELF must contain one v_arena")
+    input_address = (int(arenas[0], 16) + build["seed_offset"]
+                     if seed_kind else build["input_address"])
     dump = out / ("logits.bin" if output_kind == "logits" else "output.bin")
     dump.unlink(missing_ok=True)
     environment = os.environ.copy()
     environment["RADIANCE_DISABLE_CYCLOTRON_TRACE"] = "1"
     environment["CYCLOTRON_WEIGHTS"] = ",".join((
         f"0x{image['base_address']:x}:{weights.resolve()}",
-        f"0x{build['input_address']:x}:{input_bytes.resolve()}",
+        f"0x{input_address:x}:{input_bytes.resolve()}",
     ))
     environment["CYCLOTRON_DUMP_GMEM"] = (
         f"0x{int(arenas[0], 16) + output_offset:x}:"
@@ -162,7 +171,7 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
             exit_code = 124
     events = scan_cyclotron_log(log, weights.stat().st_size,
                                 image["base_address"], input_bytes.stat().st_size,
-                                build["input_address"])
+                                input_address)
     complete = (exit_code == 0 and events["passed"] == 1 and
                 events["weights"] == 1 and events["input"] == 1 and
                 len(events["cycles"]) == 1 and dump.is_file() and
@@ -194,6 +203,8 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
         "variant_depth": image.get("depth"), "image_size": image["image_size"],
         "weight_provenance": image["weight_provenance"],
         "input_path": str(input_path.resolve()), "input_sha256": sha256(input_bytes),
+        "source_input_sha256": hashlib.sha256(pixels.tobytes()).hexdigest(),
+        "seed_kind": seed_kind, "loaded_input_address": input_address,
         "checkpoint_sha256": image["checkpoint_sha256"],
         "weights_sha256": sha256(weights), "elf_sha256": sha256(elf),
         "simulator_sha256": sha256(simulator),

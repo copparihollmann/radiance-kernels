@@ -87,6 +87,23 @@ logits with maximum absolute error `5.24e-4`. A deliberate zero-second
 timeout produced a [failed receipt](evaluation/streamed-log-timeout-control.json)
 with no output hash or cycle count, and the upstream verifier rejected it.
 
+To isolate a vanilla block, compile a window with `--start-at-block N` and
+`--stop-after-block N`. The runner computes the pinned upstream output before
+block N, preloads that tensor into the device token buffer, and compares the
+device block output with the next upstream hook. This checks one device block
+without replaying earlier device blocks; it cannot establish full-network
+correctness or accumulated numerical error. Block-seeded runs require the
+reference check and reject `--no-reference`. For example:
+
+```sh
+python kernels/spectformer/compile.py --image-manifest "$EXPORT/manifest.json" \
+  --out "$TMPDIR/spectformer/block2" --runtime-input \
+  --start-at-block 2 --stop-after-block 2 --build
+python kernels/spectformer/run_reusable.py --target "$TMPDIR/spectformer/block2" \
+  --input "$HELDOUT_NPY" --out "$TMPDIR/spectformer/block2-run" \
+  --cyclotron-root "$CYCLOTRON_ROOT" --timeout 1800 --sim-cycles 1000000000
+```
+
 The trained fixtures below came from the [scikit-learn 1.6.1 handwritten digits data](https://github.com/scikit-learn/scikit-learn/blob/1.6.1/sklearn/datasets/data/digits.csv.gz), SHA-256 `09f66e6debdee2cd2b5ae59e0d6abbb73fc2b0e0185d2e1957e9ebb51e23aa22`. `train_checkpoint.py` takes four examples from each of ten digit classes, resizes them to 224×224, and makes 20 AdamW steps on the full upstream model. Digits 0–9 occupy output indices 0–9 in the original 1,000-logit head. Two separate images are held out for inference checks. This is a trained-weight test of checkpoint loading and inference, with no ImageNet accuracy claim. Each training receipt records the source and dataset hashes, selected indices, seed, optimizer settings, and checkpoint hash. Checkpoint hashes: `2ca40d05343b340fbb3c4fc8ec83ea1d0c5bd3a20c4066f4dbae767e50db9ee5` (XS) and `3a8d80d44d4a280cf20e8db2048b5a526371186fc0c5ded7729b4d57604dd28e` (hierarchical S).
 
 ```sh

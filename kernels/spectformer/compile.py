@@ -32,7 +32,8 @@ def generate(image_manifest: Path, out: Path,
              logit_rtol: float = 5e-3, logit_atol: float = 1e-3,
              runtime_input: bool = False,
              stop_after_patch: bool = False,
-             stop_after_block: int | None = None) -> Path:
+             stop_after_block: int | None = None,
+             start_at_block: int | None = None) -> Path:
     manifest = json.loads(image_manifest.read_text())
     if not (math.isfinite(logit_rtol) and math.isfinite(logit_atol) and
             logit_rtol >= 0 and logit_atol >= 0):
@@ -43,6 +44,9 @@ def generate(image_manifest: Path, out: Path,
         raise ValueError("a prefix build requires runtime input and an external reference")
     if stop_after_patch and stop_after_block is not None:
         raise ValueError("choose one prefix endpoint")
+    if start_at_block is not None and (not runtime_input or stop_after_patch or
+                                       stop_after_block is None):
+        raise ValueError("a block-seeded probe needs runtime input and a block endpoint")
     image_path = image_manifest.parent / "image.bin"
     if sha256(image_path) != manifest["image_sha256"]:
         raise ValueError("image hash differs from manifest")
@@ -64,6 +68,8 @@ def generate(image_manifest: Path, out: Path,
         raise ValueError("invalid SpectFormer dimensions")
     if stop_after_block is not None and not 0 <= stop_after_block < manifest["depth"]:
         raise ValueError("block index is outside the upstream graph")
+    if start_at_block is not None and not 0 <= start_at_block <= stop_after_block:
+        raise ValueError("start block must be at or before the endpoint")
 
     # These named buffers are reused across blocks. Each stage has its own
     # read/write contract; the residual lives in tokens throughout the graph.
@@ -168,6 +174,12 @@ def generate(image_manifest: Path, out: Path,
         stages = stages[:last_index + 1]
         trace_points = [point for point in trace_points
                         if point["stage_index"] <= last_index]
+    if start_at_block is not None:
+        first_index = next(i for i, stage in enumerate(stages)
+                           if stage["name"] == f"blocks.{start_at_block}.norm1")
+        stages = stages[first_index:]
+        trace_points = [{**point, "stage_index": point["stage_index"] - first_index}
+                        for point in trace_points if point["stage_index"] >= first_index]
     prefix = stop_after_patch or stop_after_block is not None
     output_offset = offsets["tokens"] if prefix else offsets["logits"]
     output_count = n * d if prefix else manifest["num_classes"]
@@ -308,6 +320,11 @@ VERIFY_BLOCK
         "output_offset": output_offset, "output_count": output_count,
         "output_kind": output_kind, "stop_after_patch": stop_after_patch,
         "stop_after_block": stop_after_block,
+        "start_at_block": start_at_block,
+        "seed_kind": (None if start_at_block is None else
+                      "vanilla_patch_embed" if start_at_block == 0 else
+                      f"vanilla_block_{start_at_block - 1}"),
+        "seed_offset": offsets["tokens"] if start_at_block is not None else None,
         "weight_provenance": manifest["weight_provenance"],
         "runtime_input": runtime_input,
         "weights_sha256": manifest.get("weights_sha256"),
@@ -334,13 +351,15 @@ def main() -> None:
                         help="device probe of the full-size patch embedding output")
     parser.add_argument("--stop-after-block", type=int,
                         help="device probe through a zero-based upstream block")
+    parser.add_argument("--start-at-block", type=int,
+                        help="start from the upstream output before this block; requires --stop-after-block")
     parser.add_argument("--logit-rtol", type=float, default=5e-3)
     parser.add_argument("--logit-atol", type=float, default=1e-3)
     args = parser.parse_args()
     target = generate(args.image_manifest, args.out,
                       args.logit_rtol, args.logit_atol,
                       args.runtime_input, args.stop_after_patch,
-                      args.stop_after_block)
+                      args.stop_after_block, args.start_at_block)
     if args.build:
         build_device(target)
     print(target)
