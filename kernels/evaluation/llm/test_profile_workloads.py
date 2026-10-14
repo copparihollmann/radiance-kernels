@@ -32,6 +32,15 @@ class WorkloadProfileTest(unittest.TestCase):
         self.assertEqual(schedule["policy_select_action"]["queued_actions_per_refill"], 50)
         self.assertEqual(result["stages"][-1]["id"], "denoise9.euler")
 
+    def test_packed_weights_flag_an_oversized_gemma_shape(self):
+        fixed = profile("gemma_2_2b_it", batch=1, prefill=2, decode_steps=2)
+        large = profile("gemma_2_2b_it", batch=8, prefill=128, decode_steps=1)
+        self.assertEqual(fixed["packed_weights"]["image_size_bytes"], 2019513344)
+        self.assertEqual(fixed["packed_weights"]["used_logical_parameter_count"], 289)
+        self.assertFalse(fixed["totals"]["packed_image_plus_largest_tensor_exceeds_2gib"])
+        self.assertTrue(large["totals"]["packed_image_plus_largest_tensor_exceeds_2gib"])
+        self.assertEqual(large["totals"]["largest_mapped_tensor_bytes"], 1048576000)
+
 
 if __name__ == "__main__":
     unittest.main()

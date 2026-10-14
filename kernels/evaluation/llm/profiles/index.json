@@ -7,7 +7,7 @@
       "model": "tinyllama",
       "case": "fixed_handoff_shape",
       "trace": "tinyllama-fixed_handoff_shape.json",
-      "trace_sha256": "2e40b34d345c0583775ee0f5a3aac439d6bb2e5bc446ccd1259e555e79138ea2",
+      "trace_sha256": "ae31a738bb6ca9d03e17ff948bd38558a104382a83b40f382c94fa534e7cdf45",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 2,
@@ -16,12 +16,24 @@
       },
       "graph_sha256": "441e30d88f644b7275ef025d59a3c329a2ecfce1f7913e4b110e473d7032b059",
       "stage_count": 1133,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/tinyllama-2g-int8-image.json",
+        "manifest_sha256": "d6274ed2f8b37b44cec1226631ad77672568931a6fe11e5f884448abbcc69dca",
+        "image_sha256": "5182cdd4d523a40239fcf77742a90f0a7e3cc0e0d436feb55b40567eef6a9559",
+        "format": "int8_scaled",
+        "image_size_bytes": 1102157824,
+        "used_logical_parameter_count": 201,
+        "used_packed_parameter_footprint_bytes": 1102157824,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 4137680896,
         "logical_operand_bytes": 15539736,
         "mapped_operand_bytes": 31079448,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 256000
+        "largest_mapped_tensor_bytes": 256000,
+        "packed_image_plus_largest_tensor_bytes": 1102413824,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefill": {
@@ -38,7 +50,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         },
         "decode0": {
           "stages": 378,
@@ -55,7 +69,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         },
         "decode1": {
           "stages": 378,
@@ -72,7 +88,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         }
       }
     },
@@ -80,7 +98,7 @@
       "model": "tinyllama",
       "case": "medium_context",
       "trace": "tinyllama-medium_context.json",
-      "trace_sha256": "dc1307d474ef00008e83b16474dd0d04e2d9afe8c2d5c1581d632463a7a7e838",
+      "trace_sha256": "f444bb72929e746ebbb6f5a96ffd46055dfb4952c7b90fb81ad2585608af1bce",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 128,
@@ -89,12 +107,24 @@
       },
       "graph_sha256": "3d79ea134a653c95564f7abcc50ec06c21bd5168be87104de7e910cef78d0341",
       "stage_count": 755,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/tinyllama-2g-int8-image.json",
+        "manifest_sha256": "d6274ed2f8b37b44cec1226631ad77672568931a6fe11e5f884448abbcc69dca",
+        "image_sha256": "5182cdd4d523a40239fcf77742a90f0a7e3cc0e0d436feb55b40567eef6a9559",
+        "format": "int8_scaled",
+        "image_size_bytes": 1102157824,
+        "used_logical_parameter_count": 201,
+        "used_packed_parameter_footprint_bytes": 1102157824,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 133440208896,
         "logical_operand_bytes": 500909064,
         "mapped_operand_bytes": 1001817608,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 16384000
+        "largest_mapped_tensor_bytes": 16384000,
+        "packed_image_plus_largest_tensor_bytes": 1118541824,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefill": {
@@ -111,7 +141,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         },
         "decode0": {
           "stages": 378,
@@ -128,7 +160,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         }
       }
     },
@@ -136,7 +170,7 @@
       "model": "tinyllama",
       "case": "high_batch",
       "trace": "tinyllama-high_batch.json",
-      "trace_sha256": "2d9c0e09c77e7122e2ec49e89aec595515a3b805ef27c244cd8f850f90e7129a",
+      "trace_sha256": "d4a48607dd3dee4c40981768a0b08074cc36a6d72bd872c27aa2e6b22618ae46",
       "scenario": {
         "batch": 8,
         "prefill_tokens": 128,
@@ -145,12 +179,24 @@
       },
       "graph_sha256": "01826fc84a47c075cdfb83f56764c023a4725435edac182a0c7fefa3c493c56c",
       "stage_count": 755,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/tinyllama-2g-int8-image.json",
+        "manifest_sha256": "d6274ed2f8b37b44cec1226631ad77672568931a6fe11e5f884448abbcc69dca",
+        "image_sha256": "5182cdd4d523a40239fcf77742a90f0a7e3cc0e0d436feb55b40567eef6a9559",
+        "format": "int8_scaled",
+        "image_size_bytes": 1102157824,
+        "used_logical_parameter_count": 201,
+        "used_packed_parameter_footprint_bytes": 1102157824,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 1067521671168,
         "logical_operand_bytes": 4007272512,
         "mapped_operand_bytes": 8014540864,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 131072000
+        "largest_mapped_tensor_bytes": 131072000,
+        "packed_image_plus_largest_tensor_bytes": 1233229824,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefill": {
@@ -167,7 +213,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         },
         "decode0": {
           "stages": 378,
@@ -184,7 +232,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         }
       }
     },
@@ -192,7 +242,7 @@
       "model": "tinyllama",
       "case": "long_context",
       "trace": "tinyllama-long_context.json",
-      "trace_sha256": "c988d875deab6cf9978c807d549fb162f02784a701fc153763ad11cf66328b53",
+      "trace_sha256": "ef9ba8a5fb446eab23b2eae0674658ad8985ed753ec5a394907a3c15067b6965",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1024,
@@ -201,12 +251,24 @@
       },
       "graph_sha256": "f81fa3287f8055a358a9c5d9f38e4693da5c97387e89f85f24fea4ec22b88055",
       "stage_count": 755,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/tinyllama-2g-int8-image.json",
+        "manifest_sha256": "d6274ed2f8b37b44cec1226631ad77672568931a6fe11e5f884448abbcc69dca",
+        "image_sha256": "5182cdd4d523a40239fcf77742a90f0a7e3cc0e0d436feb55b40567eef6a9559",
+        "format": "int8_scaled",
+        "image_size_bytes": 1102157824,
+        "used_logical_parameter_count": 201,
+        "used_packed_parameter_footprint_bytes": 1102157824,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 1060280729600,
         "logical_operand_bytes": 3981005320,
         "mapped_operand_bytes": 7962006536,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 131072000
+        "largest_mapped_tensor_bytes": 131072000,
+        "packed_image_plus_largest_tensor_bytes": 1233229824,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefill": {
@@ -223,7 +285,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         },
         "decode0": {
           "stages": 378,
@@ -240,7 +304,9 @@
             "causal_gqa": 22,
             "add": 44,
             "gated_activation": 22
-          }
+          },
+          "unique_packed_parameter_count": 201,
+          "unique_packed_parameter_footprint_bytes": 1102157824
         }
       }
     },
@@ -248,7 +314,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "fixed_handoff_shape",
       "trace": "deepseek_r1_distill_qwen_1_5b-fixed_handoff_shape.json",
-      "trace_sha256": "d6c8a6c23d92d1132397708f7ad50232f1e3661251defbc4bedab9babe61ce06",
+      "trace_sha256": "bdcca60bf2d53af28b9ef59de935be3ec20f0b070bbcfd1391bce87501f93f09",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1,
@@ -257,12 +323,24 @@
       },
       "graph_sha256": "ffce6f7a27c1fbfdbf220647a3bc4e28d2d530590ab6a0cd6294906db2567232",
       "stage_count": 1691,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/deepseek-2g-int8-image.json",
+        "manifest_sha256": "3a7b670b02e81b9a02cbaeeac24bef13c03850509d7cf2cd996fc8f6b914a6c8",
+        "image_sha256": "4a8231489ce916df33e2745262c0a5060eb8f161d2c92db4665f979c25eba49a",
+        "format": "int8_scaled",
+        "image_size_bytes": 1781318656,
+        "used_logical_parameter_count": 339,
+        "used_packed_parameter_footprint_bytes": 1781318656,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 4630708224,
         "logical_operand_bytes": 17899284,
         "mapped_operand_bytes": 35798548,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 607744
+        "largest_mapped_tensor_bytes": 607744,
+        "packed_image_plus_largest_tensor_bytes": 1781926400,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefill": {
@@ -280,7 +358,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         },
         "decode0": {
           "stages": 564,
@@ -298,7 +378,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         },
         "decode1": {
           "stages": 564,
@@ -316,7 +398,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         }
       }
     },
@@ -324,7 +408,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "medium_context",
       "trace": "deepseek_r1_distill_qwen_1_5b-medium_context.json",
-      "trace_sha256": "11bc0efbfdecd5229b8a0c403c600741b56aa26b79d4f42b6f4dae1604966f5b",
+      "trace_sha256": "f195916f311631bf5536751878d2ec3fdd1a4fb40351b99645e5eedab8b637ee",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 128,
@@ -333,12 +417,24 @@
       },
       "graph_sha256": "3db89ca3a1c82a1d14d230aeb201c3ecfa482509611c8d5015e13b6503f72150",
       "stage_count": 1127,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/deepseek-2g-int8-image.json",
+        "manifest_sha256": "3a7b670b02e81b9a02cbaeeac24bef13c03850509d7cf2cd996fc8f6b914a6c8",
+        "image_sha256": "4a8231489ce916df33e2745262c0a5060eb8f161d2c92db4665f979c25eba49a",
+        "format": "int8_scaled",
+        "image_size_bytes": 1781318656,
+        "used_logical_parameter_count": 339,
+        "used_packed_parameter_footprint_bytes": 1781318656,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 199120453632,
         "logical_operand_bytes": 782345480,
         "mapped_operand_bytes": 1564690440,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 77791232
+        "largest_mapped_tensor_bytes": 77791232,
+        "packed_image_plus_largest_tensor_bytes": 1859109888,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefill": {
@@ -356,7 +452,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         },
         "decode0": {
           "stages": 564,
@@ -374,7 +472,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         }
       }
     },
@@ -382,7 +482,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "high_batch",
       "trace": "deepseek_r1_distill_qwen_1_5b-high_batch.json",
-      "trace_sha256": "ff6060b25d752001e7f9f78eba9a6318e3008ad36793d9f0a29a9124a772d5b8",
+      "trace_sha256": "49e59f085f6be1fd08c7fa13f687945de458510cc8eac5a5e803f02272f8ffbf",
       "scenario": {
         "batch": 8,
         "prefill_tokens": 128,
@@ -391,12 +491,24 @@
       },
       "graph_sha256": "ac7b561a702d0fe3752b0dbf7dede1cca24298965ae356fd02f26eba58a39415",
       "stage_count": 1127,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/deepseek-2g-int8-image.json",
+        "manifest_sha256": "3a7b670b02e81b9a02cbaeeac24bef13c03850509d7cf2cd996fc8f6b914a6c8",
+        "image_sha256": "4a8231489ce916df33e2745262c0a5060eb8f161d2c92db4665f979c25eba49a",
+        "format": "int8_scaled",
+        "image_size_bytes": 1781318656,
+        "used_logical_parameter_count": 339,
+        "used_packed_parameter_footprint_bytes": 1781318656,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 1592963629056,
         "logical_operand_bytes": 6258763840,
         "mapped_operand_bytes": 12517523520,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 622329856
+        "largest_mapped_tensor_bytes": 622329856,
+        "packed_image_plus_largest_tensor_bytes": 2403648512,
+        "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
       "phase_summary": {
         "prefill": {
@@ -414,7 +526,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         },
         "decode0": {
           "stages": 564,
@@ -432,7 +546,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         }
       }
     },
@@ -440,7 +556,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "long_context",
       "trace": "deepseek_r1_distill_qwen_1_5b-long_context.json",
-      "trace_sha256": "3b011ab1b065dd2e806667f4bac678681cd2396409b9db746603829d2ed530bb",
+      "trace_sha256": "8979cb006ad449ed6b312f8def902886003df8bc316a91a2e83d150b89b11154",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1024,
@@ -449,12 +565,24 @@
       },
       "graph_sha256": "b02341649097acf51f4e8d70cc52a3724a0101abb85cdf3683c7dcf3c6c26efa",
       "stage_count": 1127,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/deepseek-2g-int8-image.json",
+        "manifest_sha256": "3a7b670b02e81b9a02cbaeeac24bef13c03850509d7cf2cd996fc8f6b914a6c8",
+        "image_sha256": "4a8231489ce916df33e2745262c0a5060eb8f161d2c92db4665f979c25eba49a",
+        "format": "int8_scaled",
+        "image_size_bytes": 1781318656,
+        "used_logical_parameter_count": 339,
+        "used_packed_parameter_footprint_bytes": 1781318656,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 1582158643200,
         "logical_operand_bytes": 6219019016,
         "mapped_operand_bytes": 12438033928,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 622329856
+        "largest_mapped_tensor_bytes": 622329856,
+        "packed_image_plus_largest_tensor_bytes": 2403648512,
+        "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
       "phase_summary": {
         "prefill": {
@@ -472,7 +600,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         },
         "decode0": {
           "stages": 564,
@@ -490,7 +620,9 @@
             "causal_gqa": 28,
             "add": 56,
             "gated_activation": 28
-          }
+          },
+          "unique_packed_parameter_count": 339,
+          "unique_packed_parameter_footprint_bytes": 1781318656
         }
       }
     },
@@ -498,7 +630,7 @@
       "model": "gemma_2_2b_it",
       "case": "fixed_handoff_shape",
       "trace": "gemma_2_2b_it-fixed_handoff_shape.json",
-      "trace_sha256": "4a0e16cf9e94ac88a22e5dac422afb641afb4193bfc65e7d9e4e42bfceb15837",
+      "trace_sha256": "3d44a3eeaf32a8d590f6f9746e139a34832c510044632345fa7630256198cd38",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 2,
@@ -507,12 +639,24 @@
       },
       "graph_sha256": "f1935b8aa580e4972411b17641fbf7c57e510400d146dc4c9c484bbc6240ecc3",
       "stage_count": 1496,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/gemma-2g-int5-int6-image.json",
+        "manifest_sha256": "a1fcfd5900459de8bdf6e71a95b460a4f0b32262b35b59562c1609c3c64fba14",
+        "image_sha256": "d833eed763a829445636a3b08b1c85cc36dfd4e2140ed30a05c3603406b7f091",
+        "format": "int5_group64_int6_tied",
+        "image_size_bytes": 2019513344,
+        "used_logical_parameter_count": 289,
+        "used_packed_parameter_footprint_bytes": 2019513344,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 10456399872,
         "logical_operand_bytes": 35602456,
         "mapped_operand_bytes": 71204888,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 2048000
+        "largest_mapped_tensor_bytes": 2048000,
+        "packed_image_plus_largest_tensor_bytes": 2021561344,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefill": {
@@ -530,7 +674,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         },
         "decode0": {
           "stages": 499,
@@ -548,7 +694,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         },
         "decode1": {
           "stages": 499,
@@ -566,7 +714,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         }
       }
     },
@@ -574,7 +724,7 @@
       "model": "gemma_2_2b_it",
       "case": "medium_context",
       "trace": "gemma_2_2b_it-medium_context.json",
-      "trace_sha256": "dfd5c54ee74ef57a7f7c144482ee03594b67b6fe907f681ee6464e88eb6e139e",
+      "trace_sha256": "12cb43fc0b859da02a81764a466cb720ee440099aa498bcf5892197dea43e1fc",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 128,
@@ -583,12 +733,24 @@
       },
       "graph_sha256": "048d64257bf305f1ee5df26b23b67dcaa47f440567308d9049b383a45d94d831",
       "stage_count": 997,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/gemma-2g-int5-int6-image.json",
+        "manifest_sha256": "a1fcfd5900459de8bdf6e71a95b460a4f0b32262b35b59562c1609c3c64fba14",
+        "image_sha256": "d833eed763a829445636a3b08b1c85cc36dfd4e2140ed30a05c3603406b7f091",
+        "format": "int5_group64_int6_tied",
+        "image_size_bytes": 2019513344,
+        "used_logical_parameter_count": 289,
+        "used_packed_parameter_footprint_bytes": 2019513344,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 337218895872,
         "logical_operand_bytes": 1153555976,
         "mapped_operand_bytes": 2307111432,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 131072000
+        "largest_mapped_tensor_bytes": 131072000,
+        "packed_image_plus_largest_tensor_bytes": 2150585344,
+        "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
       "phase_summary": {
         "prefill": {
@@ -606,7 +768,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         },
         "decode0": {
           "stages": 499,
@@ -624,7 +788,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         }
       }
     },
@@ -632,7 +798,7 @@
       "model": "gemma_2_2b_it",
       "case": "high_batch",
       "trace": "gemma_2_2b_it-high_batch.json",
-      "trace_sha256": "c0137ee94b8a6c33d6fa85c64a2557d394f6fc495f48ceb743f5376bf8ff6ea5",
+      "trace_sha256": "74697f8a84c96617a5fcab6921853918684e4ef72e5b434877f58dcf7c20b999",
       "scenario": {
         "batch": 8,
         "prefill_tokens": 128,
@@ -641,12 +807,24 @@
       },
       "graph_sha256": "4527990510d681cb4b0d3425d48001787a7e19e70cfc851b64a49b82098a9235",
       "stage_count": 997,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/gemma-2g-int5-int6-image.json",
+        "manifest_sha256": "a1fcfd5900459de8bdf6e71a95b460a4f0b32262b35b59562c1609c3c64fba14",
+        "image_sha256": "d833eed763a829445636a3b08b1c85cc36dfd4e2140ed30a05c3603406b7f091",
+        "format": "int5_group64_int6_tied",
+        "image_size_bytes": 2019513344,
+        "used_logical_parameter_count": 289,
+        "used_packed_parameter_footprint_bytes": 2019513344,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 2697751166976,
         "logical_operand_bytes": 9228447808,
         "mapped_operand_bytes": 18456891456,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 1048576000
+        "largest_mapped_tensor_bytes": 1048576000,
+        "packed_image_plus_largest_tensor_bytes": 3068089344,
+        "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
       "phase_summary": {
         "prefill": {
@@ -664,7 +842,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         },
         "decode0": {
           "stages": 499,
@@ -682,7 +862,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         }
       }
     },
@@ -690,7 +872,7 @@
       "model": "gemma_2_2b_it",
       "case": "long_context",
       "trace": "gemma_2_2b_it-long_context.json",
-      "trace_sha256": "ce7dcee1d5f92fb1b72e5cde2ab0c1b3a87517400c4afeab1a64913929621848",
+      "trace_sha256": "e0a00515231f4741daa22b056cd2ba5aebaeef18799dc2205a6c2d131daf25f6",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1024,
@@ -699,12 +881,24 @@
       },
       "graph_sha256": "b323f85afbcdeb0afe2cd599320211214829476ab1d227b0249394b2b6810183",
       "stage_count": 997,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/gemma-2g-int5-int6-image.json",
+        "manifest_sha256": "a1fcfd5900459de8bdf6e71a95b460a4f0b32262b35b59562c1609c3c64fba14",
+        "image_sha256": "d833eed763a829445636a3b08b1c85cc36dfd4e2140ed30a05c3603406b7f091",
+        "format": "int5_group64_int6_tied",
+        "image_size_bytes": 2019513344,
+        "used_logical_parameter_count": 289,
+        "used_packed_parameter_footprint_bytes": 2019513344,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 2679452467200,
         "logical_operand_bytes": 9171627016,
         "mapped_operand_bytes": 18343249928,
         "largest_mapped_tensor": "prefill.lm_head",
-        "largest_mapped_tensor_bytes": 1048576000
+        "largest_mapped_tensor_bytes": 1048576000,
+        "packed_image_plus_largest_tensor_bytes": 3068089344,
+        "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
       "phase_summary": {
         "prefill": {
@@ -722,7 +916,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         },
         "decode0": {
           "stages": 499,
@@ -740,7 +936,9 @@
             "add": 52,
             "gated_activation": 26,
             "softcap": 1
-          }
+          },
+          "unique_packed_parameter_count": 289,
+          "unique_packed_parameter_footprint_bytes": 2019513344
         }
       }
     },
@@ -748,7 +946,7 @@
       "model": "smolvla_base",
       "case": "one_action_queue_refill",
       "trace": "smolvla_base-one_action_queue_refill.json",
-      "trace_sha256": "229745e09cf7647950a8702a00e05cf349c2cc7b46b9fa053e110f7316083015",
+      "trace_sha256": "06030732df8d3a6c00dd0a097aa62aa43e19c14a56295761cef6b069e3fb5bb5",
       "scenario": {
         "batch": 1,
         "prefill_tokens": null,
@@ -757,12 +955,24 @@
       },
       "graph_sha256": "d9ebbd7181e084a602d2cb0b0c2685667d80ab117abb2d16e6df8910b58feee8",
       "stage_count": 3673,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/smolvla-2g-source-weights-image.json",
+        "manifest_sha256": "bd71f941b0f0266d3ff10d15ffb4840c039a2c557e5cac276b9cceb5f2d0e3ba",
+        "image_sha256": "66173e02bf55e918c37cc0bd94406aeb0c50d0ee1e52f866e8e06f7b395e9501",
+        "format": "fp32",
+        "image_size_bytes": 1610949504,
+        "used_logical_parameter_count": 499,
+        "used_packed_parameter_footprint_bytes": 1610949504,
+        "raw_image_bytes_verified_here": false
+      },
       "totals": {
         "linear_macs": 354131264512,
         "logical_operand_bytes": 4297734185,
         "mapped_operand_bytes": 8596728664,
         "largest_mapped_tensor": "camera0.vision.layer00.fc1.linear",
-        "largest_mapped_tensor_bytes": 12582912
+        "largest_mapped_tensor_bytes": 12582912,
+        "packed_image_plus_largest_tensor_bytes": 1623532416,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
       "phase_summary": {
         "prefix": {
@@ -790,7 +1000,9 @@
             "rope_with_positions": 32,
             "masked_gqa": 16,
             "gated_activation": 16
-          }
+          },
+          "unique_packed_parameter_count": 346,
+          "unique_packed_parameter_footprint_bytes": 1211552256
         },
         "denoise0": {
           "stages": 276,
@@ -818,7 +1030,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise1": {
           "stages": 276,
@@ -846,7 +1060,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise2": {
           "stages": 276,
@@ -874,7 +1090,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise3": {
           "stages": 276,
@@ -902,7 +1120,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise4": {
           "stages": 276,
@@ -930,7 +1150,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise5": {
           "stages": 276,
@@ -958,7 +1180,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise6": {
           "stages": 276,
@@ -986,7 +1210,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise7": {
           "stages": 276,
@@ -1014,7 +1240,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise8": {
           "stages": 276,
@@ -1042,7 +1270,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         },
         "denoise9": {
           "stages": 276,
@@ -1070,7 +1300,9 @@
             "gated_activation": 16,
             "prefix_attention_slice": 8,
             "euler_step": 1
-          }
+          },
+          "unique_packed_parameter_count": 153,
+          "unique_packed_parameter_footprint_bytes": 399397248
         }
       }
     }

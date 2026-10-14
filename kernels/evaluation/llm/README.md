@@ -256,13 +256,16 @@ the one-time vision/VLM prefix, all ten denoising iterations, and the
 
 These are shape-derived traces. The operand byte totals sum tensor sizes at
 stage boundaries using model logical dtypes and the current FP32/32-bit
-software buffer mapping. They exclude weights and scratch space and do not
-predict cache misses or DRAM transactions. The MAC totals cover linear
-stages only. The 128- and 1,024-token cases are **not compiled device
-programs**. For example, Gemma's largest mapped tensor in the long-context
-case is a 1,048,576,000-byte prefill logit tensor, so a 2 GiB target with
-the current 2,019,513,344-byte packed weight image would need output tiling
-or another placement policy. These traces identify software mapping work;
+software buffer mapping. They exclude scratch space and do not predict cache
+misses or DRAM transactions. Each trace also binds to a packed-weight image
+manifest, records its storage footprint, and counts tied address ranges once;
+regeneration checks the pinned config hash but does not rehash the raw weight
+bytes. The MAC totals cover linear stages only. The 128- and 1,024-token
+cases are **not compiled device programs**. For example, Gemma's largest
+mapped tensor in the long-context case is a 1,048,576,000-byte prefill logit
+tensor. Together with its 2,019,513,344-byte packed image, even this lower
+bound exceeds the 2 GiB target, so it would need output tiling or another
+placement policy. These traces identify software mapping work;
 they are not utilization, latency, or performance results.
 
 This directory records candidate workload inputs for an initial Radiance

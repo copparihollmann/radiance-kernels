@@ -19,6 +19,13 @@ from stitch import build, model_specs, SPECS
 
 LOGICAL_DTYPE_BYTES = {"bf16": 2, "fp32": 4, "int32": 4, "bool": 1}
 MAPPED_DTYPE_BYTES = {"bf16": 4, "fp32": 4, "int32": 4, "bool": 4}
+WEIGHT_MANIFESTS = {
+    "tinyllama": "tinyllama-2g-int8-image.json",
+    "deepseek_r1_distill_qwen_1_5b": "deepseek-2g-int8-image.json",
+    "gemma_2_2b_it": "gemma-2g-int5-int6-image.json",
+    "smolvla_base": "smolvla-2g-source-weights-image.json",
+}
+WEIGHT_ROOT = Path(__file__).resolve().parents[2] / "model_chain/evaluation"
 
 
 def canonical_sha256(value: object) -> str:
@@ -37,17 +44,43 @@ def tensor_bytes(tensor: dict, dtype_bytes: dict[str, int]) -> int:
     return prod(tensor["shape"]) * dtype_bytes[tensor["dtype"]]
 
 
+def packed_footprint(names: set[str], parameters: dict[str, dict]) -> int:
+    """Count unique GPU address intervals, including exact tied aliases once."""
+    ranges = defaultdict(list)
+    for name in names:
+        item = parameters[name]
+        ranges[item.get("segment_index", 0)].append(
+            (item["gpu_address"], item["gpu_address"] + item["size_bytes"]))
+    total = 0
+    for intervals in ranges.values():
+        end = -1
+        for low, high in sorted(intervals):
+            total += high - max(low, end) if high > end else 0
+            end = max(end, high)
+    return total
+
+
 def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
     if batch <= 0 or prefill <= 0 or decode_steps < 0:
         raise ValueError("batch and prefill must be positive; decode_steps cannot be negative")
     specs = model_specs()
     graph = build(model, batch=batch, prefill=prefill,
                   decode_steps=decode_steps, generation="greedy")
+    weight_path = WEIGHT_ROOT / WEIGHT_MANIFESTS[model]
+    weight_manifest = json.loads(weight_path.read_text())
+    if (weight_manifest["model"] != model or
+            weight_manifest["checkpoint_config_sha256"] != specs[model]["source_sha256"]):
+        raise ValueError(f"{model}: packed weight manifest differs from pinned model")
+    parameters = {item["logical_name"]: item
+                  for item in weight_manifest["parameters"]}
+    if len(parameters) != len(weight_manifest["parameters"]):
+        raise ValueError(f"{model}: duplicate logical weight names")
     smolvla = model == "smolvla_base"
     stages = []
     phases = defaultdict(lambda: {"stages": 0, "linear_macs": 0,
                                   "logical_operand_bytes": 0,
-                                  "mapped_operand_bytes": 0, "ops": Counter()})
+                                  "mapped_operand_bytes": 0, "ops": Counter(),
+                                  "parameter_names": set()})
     produced = set(graph.tensors) - {stage["writes"] for stage in graph.stages}
     for index, stage in enumerate(graph.stages):
         if any(name not in produced for name in stage["reads"]):
@@ -67,6 +100,11 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
             macs = prod(writes["shape"]) * k
             if "macs" in stage["attrs"] and stage["attrs"]["macs"] != macs:
                 raise ValueError(f"{stage['id']}: declared MAC count differs from shape")
+        parameter_names = set(stage["attrs"].get("parameters", {}))
+        if stage["attrs"].get("parameter") is not None:
+            parameter_names.add(stage["attrs"]["parameter"])
+        if parameter_names - parameters.keys():
+            raise ValueError(f"{stage['id']}: weight image lacks a graph parameter")
         phase = stage_phase(model, stage["id"])
         record = {"index": index, "id": stage["id"], "phase": phase,
                   "op": stage["op"], "reads": stage["reads"],
@@ -76,7 +114,10 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
                   "logical_write_bytes": logical_write,
                   "mapped_read_bytes": mapped_read,
                   "mapped_write_bytes": mapped_write,
-                  "linear_macs": macs}
+                  "linear_macs": macs,
+                  "packed_parameter_names": sorted(parameter_names),
+                  "packed_parameter_storage_bytes": sum(
+                      parameters[name]["size_bytes"] for name in parameter_names)}
         stages.append(record)
         summary = phases[phase]
         summary["stages"] += 1
@@ -84,6 +125,7 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
         summary["logical_operand_bytes"] += logical_read + logical_write
         summary["mapped_operand_bytes"] += mapped_read + mapped_write
         summary["ops"][stage["op"]] += 1
+        summary["parameter_names"].update(parameter_names)
     schedule = graph.execution_schedule
     if smolvla:
         prefix = schedule["prefix_once_per_refill"]["stages"]
@@ -94,10 +136,19 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
                 schedule["policy_select_action"]["queued_actions_per_refill"] !=
                 specs[model]["n_action_steps"]):
             raise ValueError("SmolVLA trace lost its action-refill loop structure")
-    phase_summary = {name: {**values, "ops": dict(values["ops"])}
-                     for name, values in phases.items()}
+    phase_summary = {
+        name: {**{key: value for key, value in values.items()
+                  if key != "parameter_names"},
+               "ops": dict(values["ops"]),
+               "unique_packed_parameter_count": len(values["parameter_names"]),
+               "unique_packed_parameter_footprint_bytes": packed_footprint(
+                   values["parameter_names"], parameters)}
+        for name, values in phases.items()}
+    used_parameters = set().union(*(item["parameter_names"]
+                                    for item in phases.values()))
     largest_tensor = max(graph.tensors, key=lambda name: tensor_bytes(
         graph.tensors[name], MAPPED_DTYPE_BYTES))
+    largest_bytes = tensor_bytes(graph.tensors[largest_tensor], MAPPED_DTYPE_BYTES)
     return {
         "schema": "radiance.llm.shape_trace.v1",
         "model": model, "source_spec_sha256": hashlib.sha256(SPECS.read_bytes()).hexdigest(),
@@ -112,7 +163,19 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
             "mapped_buffer_dtypes": MAPPED_DTYPE_BYTES,
             "mapped_buffer_scope": "current FP32/32-bit software storage, excluding weights and temporary scratch",
             "linear_macs": "linear stages only; attention and other arithmetic excluded",
+            "packed_weight_bytes": "storage footprint of named parameters, with tied GPU address intervals counted once; not bytes fetched from HBM",
             "device_execution": False, "performance_measurement": False,
+        },
+        "packed_weights": {
+            "manifest": "kernels/model_chain/evaluation/" + WEIGHT_MANIFESTS[model],
+            "manifest_sha256": hashlib.sha256(weight_path.read_bytes()).hexdigest(),
+            "image_sha256": weight_manifest["image_sha256"],
+            "format": weight_manifest["dtype"],
+            "image_size_bytes": weight_manifest["image_size_bytes"],
+            "used_logical_parameter_count": len(used_parameters),
+            "used_packed_parameter_footprint_bytes": packed_footprint(
+                used_parameters, parameters),
+            "raw_image_bytes_verified_here": False,
         },
         "outputs": graph.outputs,
         "execution_schedule": schedule,
@@ -123,8 +186,11 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
             "logical_operand_bytes": sum(item["logical_read_bytes"] + item["logical_write_bytes"] for item in stages),
             "mapped_operand_bytes": sum(item["mapped_read_bytes"] + item["mapped_write_bytes"] for item in stages),
             "largest_mapped_tensor": largest_tensor,
-            "largest_mapped_tensor_bytes": tensor_bytes(
-                graph.tensors[largest_tensor], MAPPED_DTYPE_BYTES),
+            "largest_mapped_tensor_bytes": largest_bytes,
+            "packed_image_plus_largest_tensor_bytes": (
+                weight_manifest["image_size_bytes"] + largest_bytes),
+            "packed_image_plus_largest_tensor_exceeds_2gib": (
+                weight_manifest["image_size_bytes"] + largest_bytes > 2**31),
         },
         "stages": stages,
     }
@@ -154,6 +220,7 @@ def matrix(out_dir: Path) -> dict:
                      "scenario": result["scenario"],
                      "graph_sha256": result["graph_sha256"],
                      "stage_count": result["stage_count"],
+                     "packed_weights": result["packed_weights"],
                      "totals": result["totals"],
                      "phase_summary": result["phase_summary"]})
     index = {"schema": "radiance.llm.shape_trace_matrix.v1",
