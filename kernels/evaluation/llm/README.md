@@ -364,6 +364,33 @@ python3 kernels/evaluation/llm/stitch.py --model olmo3_7b \
   --out kernels/evaluation/llm/olmo3-7b-graph.json
 ```
 
+[`profile_olmo3_shapes.py`](profile_olmo3_shapes.py) derives
+[four scenario summaries](olmo3-shape-profiles.json) from that pinned graph
+without downloading weights. It counts each distinct parameter once and
+checks the total against the config's independent block formula: 7.298
+billion elements, or 13.59 GiB at BF16. That weight footprint alone exceeds
+both 2 and 4 GiB device-memory budgets. Running this full model on such a
+target needs a weight streaming, quantization, or partitioning policy before
+timing can be interpreted.
+
+| Batch × prefill | BF16 KV with local window | BF16 full prefill logits | Peak named tensors with FP32 graph buffers |
+| --- | ---: | ---: | ---: |
+| 1 × 128 | 0.06 GiB | 0.02 GiB | 0.18 GiB |
+| 8 × 128 | 0.50 GiB | 0.19 GiB | 1.41 GiB |
+| 1 × 4,097 | 2.00 GiB | 0.77 GiB | 5.60 GiB |
+| 1 × 8,192 | 2.50 GiB | 1.53 GiB | 11.19 GiB |
+
+The KV column assumes local layers keep at most 4,096 tokens while global
+layers keep the full context. The current graph instead retains full logical
+history and masks local attention at use; its FP32 live-tensor column counts
+that graph's distinct named buffers and retained logits, with no reuse or
+scratch allocation. These columns answer different capacity questions and
+cannot be added as independent allocations. Projecting only the last prefill
+token's logits and bounding physical local-layer KV are software changes to
+check against the upstream output before a long-context device run. The
+record also counts linear and attention dot-product MACs by phase; none of its
+byte or MAC counts are measured cache traffic, utilization, or latency.
+
 ### Qwen3-0.6B graph control
 
 `stitch.py --model qwen3_0_6b` reads the hash-checked candidate config and

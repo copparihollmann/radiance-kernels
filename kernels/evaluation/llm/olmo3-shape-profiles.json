@@ -1,0 +1,209 @@
+{
+  "schema": "radiance.olmo3-shape-profiles.v1",
+  "scenarios": {
+    "short_b1": {
+      "status": "shape_estimate_only",
+      "model": "allenai/Olmo-3-7B-Instruct",
+      "source_config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
+      "batch": 1,
+      "prefill_tokens": 128,
+      "decode_steps": 2,
+      "generation": "greedy",
+      "stage_count": 2123,
+      "operator_counts": {
+        "add": 192,
+        "causal_gqa": 96,
+        "embedding": 3,
+        "gated_activation": 96,
+        "kv_append": 192,
+        "linear": 675,
+        "reshape_heads": 288,
+        "rmsnorm": 387,
+        "rope_yarn": 192,
+        "token_select": 2
+      },
+      "analytical_parameter_elements": 7298011136,
+      "analytical_bf16_parameter_bytes": 14596022272,
+      "prefill_logit_shape": [
+        1,
+        128,
+        100278
+      ],
+      "prefill_logit_bf16_bytes": 25671168,
+      "window_retained_kv_bf16_bytes": 67108864,
+      "full_history_graph_kv_bf16_bytes": 67108864,
+      "largest_layer_kv_bf16_bytes": 2097152,
+      "new_token_kv_write_bf16_bytes": 524288,
+      "named_tensor_peak_fp32_mapping_bytes": 189205208,
+      "named_tensor_peak_stage": "decode1.layer00.k_cache",
+      "phase_work": {
+        "prefill": {
+          "linear_macs": 881503240192,
+          "attention_dot_macs": 2164260864
+        },
+        "decode0": {
+          "linear_macs": 6886744064,
+          "attention_dot_macs": 33816576
+        },
+        "decode1": {
+          "linear_macs": 6886744064,
+          "attention_dot_macs": 34078720
+        }
+      },
+      "scope": "pinned-config and stitched-graph sizes; no checkpoint image, cache misses, measured bandwidth, latency, or device execution"
+    },
+    "short_b8": {
+      "status": "shape_estimate_only",
+      "model": "allenai/Olmo-3-7B-Instruct",
+      "source_config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
+      "batch": 8,
+      "prefill_tokens": 128,
+      "decode_steps": 2,
+      "generation": "greedy",
+      "stage_count": 2123,
+      "operator_counts": {
+        "add": 192,
+        "causal_gqa": 96,
+        "embedding": 3,
+        "gated_activation": 96,
+        "kv_append": 192,
+        "linear": 675,
+        "reshape_heads": 288,
+        "rmsnorm": 387,
+        "rope_yarn": 192,
+        "token_select": 2
+      },
+      "analytical_parameter_elements": 7298011136,
+      "analytical_bf16_parameter_bytes": 14596022272,
+      "prefill_logit_shape": [
+        8,
+        128,
+        100278
+      ],
+      "prefill_logit_bf16_bytes": 205369344,
+      "window_retained_kv_bf16_bytes": 536870912,
+      "full_history_graph_kv_bf16_bytes": 536870912,
+      "largest_layer_kv_bf16_bytes": 16777216,
+      "new_token_kv_write_bf16_bytes": 4194304,
+      "named_tensor_peak_fp32_mapping_bytes": 1513641664,
+      "named_tensor_peak_stage": "decode1.layer00.k_cache",
+      "phase_work": {
+        "prefill": {
+          "linear_macs": 7052025921536,
+          "attention_dot_macs": 17314086912
+        },
+        "decode0": {
+          "linear_macs": 55093952512,
+          "attention_dot_macs": 270532608
+        },
+        "decode1": {
+          "linear_macs": 55093952512,
+          "attention_dot_macs": 272629760
+        }
+      },
+      "scope": "pinned-config and stitched-graph sizes; no checkpoint image, cache misses, measured bandwidth, latency, or device execution"
+    },
+    "window_boundary_b1": {
+      "status": "shape_estimate_only",
+      "model": "allenai/Olmo-3-7B-Instruct",
+      "source_config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
+      "batch": 1,
+      "prefill_tokens": 4097,
+      "decode_steps": 2,
+      "generation": "greedy",
+      "stage_count": 2123,
+      "operator_counts": {
+        "add": 192,
+        "causal_gqa": 96,
+        "embedding": 3,
+        "gated_activation": 96,
+        "kv_append": 192,
+        "linear": 675,
+        "reshape_heads": 288,
+        "rmsnorm": 387,
+        "rope_yarn": 192,
+        "token_select": 2
+      },
+      "analytical_parameter_elements": 7298011136,
+      "analytical_bf16_parameter_bytes": 14596022272,
+      "prefill_logit_shape": [
+        1,
+        4097,
+        100278
+      ],
+      "prefill_logit_bf16_bytes": 821677932,
+      "window_retained_kv_bf16_bytes": 2147614720,
+      "full_history_graph_kv_bf16_bytes": 2148007936,
+      "largest_layer_kv_bf16_bytes": 67125248,
+      "new_token_kv_write_bf16_bytes": 524288,
+      "named_tensor_peak_fp32_mapping_bytes": 6008044976,
+      "named_tensor_peak_stage": "decode1.layer00.k_cache",
+      "phase_work": {
+        "prefill": {
+          "linear_macs": 28214990430208,
+          "attention_dot_macs": 2200633933824
+        },
+        "decode0": {
+          "linear_macs": 6886744064,
+          "attention_dot_macs": 1073872896
+        },
+        "decode1": {
+          "linear_macs": 6886744064,
+          "attention_dot_macs": 1073938432
+        }
+      },
+      "scope": "pinned-config and stitched-graph sizes; no checkpoint image, cache misses, measured bandwidth, latency, or device execution"
+    },
+    "long_b1": {
+      "status": "shape_estimate_only",
+      "model": "allenai/Olmo-3-7B-Instruct",
+      "source_config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
+      "batch": 1,
+      "prefill_tokens": 8192,
+      "decode_steps": 2,
+      "generation": "greedy",
+      "stage_count": 2123,
+      "operator_counts": {
+        "add": 192,
+        "causal_gqa": 96,
+        "embedding": 3,
+        "gated_activation": 96,
+        "kv_append": 192,
+        "linear": 675,
+        "reshape_heads": 288,
+        "rmsnorm": 387,
+        "rope_yarn": 192,
+        "token_select": 2
+      },
+      "analytical_parameter_elements": 7298011136,
+      "analytical_bf16_parameter_bytes": 14596022272,
+      "prefill_logit_shape": [
+        1,
+        8192,
+        100278
+      ],
+      "prefill_logit_bf16_bytes": 1642954752,
+      "window_retained_kv_bf16_bytes": 2684354560,
+      "full_history_graph_kv_bf16_bytes": 4294967296,
+      "largest_layer_kv_bf16_bytes": 134217728,
+      "new_token_kv_write_bf16_bytes": 524288,
+      "named_tensor_peak_fp32_mapping_bytes": 12011609816,
+      "named_tensor_peak_stage": "decode1.layer00.k_cache",
+      "phase_work": {
+        "prefill": {
+          "linear_macs": 56416207372288,
+          "attention_dot_macs": 7147496669184
+        },
+        "decode0": {
+          "linear_macs": 6886744064,
+          "attention_dot_macs": 1342242816
+        },
+        "decode1": {
+          "linear_macs": 6886744064,
+          "attention_dot_macs": 1342308352
+        }
+      },
+      "scope": "pinned-config and stitched-graph sizes; no checkpoint image, cache misses, measured bandwidth, latency, or device execution"
+    }
+  }
+}
