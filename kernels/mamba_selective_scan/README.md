@@ -72,3 +72,5 @@ binds both runs to the same reduced mixer input and source hash, checks the
 48-channel split into `x/B/C`, and records the second Cyclotron pass. The
 host file connects two device executions; this is a numerical composition
 check, not an on-device shared-buffer execution.
+The [connected pair](../mamba_conv_scan/README.md) subsequently runs both
+primitives in one ELF and verifies the same outputs.

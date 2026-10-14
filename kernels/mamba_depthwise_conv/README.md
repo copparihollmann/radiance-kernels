@@ -31,3 +31,5 @@ in its task temporary directory. The scan test can use that file as its input
 with `--conv-output` and `--conv-result`. This handoff runs two separate ELFs
 with a host file between them. It checks the numerical boundary; it is not a
 connected on-device Mamba block or hardware performance measurement.
+The [connected pair](../mamba_conv_scan/README.md) subsequently executes
+convolution and scan in one ELF with their state carried across decode.

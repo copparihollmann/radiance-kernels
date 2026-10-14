@@ -396,7 +396,13 @@ The [two-kernel handoff check](../../mamba_selective_scan/evaluation/conv-scan-h
 feeds the verified convolution device output into a separately built scan ELF
 through a host file. It checks the `x/B/C` split and scan result on one reduced
 mixer, without claiming connected execution or full-model performance.
-Those names do not make the stages connected executables. The pinned source's
+The [connected reduced pair](../../mamba_conv_scan/README.md) then runs those
+two callbacks in one ELF, passing the 48-channel convolution output directly
+to the scan on device. Its [Cyclotron receipt](../../mamba_conv_scan/evaluation/transformers-reduced-cyclotron.json)
+checks both outputs and both carried states across prefill and decode on two
+Muon cores; all four hashes match the separate checks. It remains a reduced,
+random-weight pair. Those graph stage names do not make the 42-block network
+a connected executable. The pinned source's
 attention cache handoff remains the main reference discrepancy, and this
 full graph has neither a pinned-checkpoint numerical comparison nor a
 connected Radiance ELF.
