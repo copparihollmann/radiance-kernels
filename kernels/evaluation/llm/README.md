@@ -406,6 +406,12 @@ a connected executable. The pinned source's
 attention cache handoff remains the main reference discrepancy, and this
 full graph has neither a pinned-checkpoint numerical comparison nor a
 connected Radiance ELF.
+The [reduced full mixer](../../mamba_mixer/README.md) adds input projection,
+gated RMSNorm, and output projection around that connected pair. Its final
+output agrees with the seeded Transformers CPU fallback within `4.11e-6`
+maximum absolute error over seven tokens, including two cached decode calls.
+This is a mixer-level check at reduced width; it does not resolve the pinned
+network or attention-cache discrepancy.
 Regenerate with:
 
 ```sh

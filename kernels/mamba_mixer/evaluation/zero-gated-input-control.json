@@ -1,0 +1,14 @@
+{
+  "schema": "radiance.mamba-mixer-negative-control.v1",
+  "status": "expected_failure_observed",
+  "backend": "cyclotron",
+  "mutation": "replace gated RMSNorm input scan_y * silu(gate) with zero; preceding projection, convolution and scan callbacks unchanged",
+  "expected": "final mixer output check fails",
+  "observed_tohost": 449,
+  "observed_case": 224,
+  "functional_cycles": 51124,
+  "mutated_kernel_sha256": "8a12006c42c330f8f4a574c4b796c05243703ed1573afe682990f2b09f00fac9",
+  "mutated_elf_sha256": "51b21a6e00484feb0975520c1668bd59c7c43d1f2553ef4b08e45f5ac474749a",
+  "build_log_sha256": "8a4f98998e028d6e1ddc1a25d3828b55438127517cb7d0fd9d6a58da63d52766",
+  "simulator_log_sha256": "f629357d59a6558813f99bf56b113b9579f5777165607ce6521d5112dccf4143"
+}
