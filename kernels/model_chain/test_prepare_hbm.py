@@ -60,6 +60,22 @@ class PrepareHbmTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "completion status"):
             transform_kernel(KERNEL.replace("mu_tohost(", "other_status("))
 
+    def test_two_cluster_launch_and_status_contract(self):
+        source = self.root / "source-two"
+        source.mkdir()
+        (source / "manifest.json").write_text(json.dumps({
+            "device_source_files": ["kernel.cpp"], "batch_clusters": 2,
+        }))
+        kernel = KERNEL.replace("mu_hart_id()", "vx_core_id()")
+        kernel = kernel.replace("nullptr", "(void*)(uintptr_t)replica")
+        kernel = kernel.replace("  if (!verify_chunk_000()) return 0;\n", "")
+        (source / "kernel.cpp").write_text(kernel)
+        target = prepare(source, self.root / "hbm-two")
+        manifest = json.loads((target / "manifest.json").read_text())
+        self.assertEqual(manifest["hbm_launch_clusters"], 2)
+        self.assertIn("MODEL_HBM_CLUSTERS 2u", (target / "host.cpp").read_text())
+        self.assertIn("model_hbm_end(); return 0;", (target / "kernel.cpp").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

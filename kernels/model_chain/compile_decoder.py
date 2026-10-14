@@ -95,10 +95,19 @@ def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
 
 def emit_stage(index: int, stage: dict, graph: stitch.Graph,
                parameter: str | None, parameter_dtype: str = "fp32",
-               scale_parameter: str | None = None) -> str:
+               scale_parameter: str | None = None,
+               batch_clusters: int = 1) -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
-    ins = [symbol(name) for name in stage["reads"]]
-    out = symbol(stage["writes"])
+    def tensor_pointer(name: str) -> str:
+        base = symbol(name)
+        if batch_clusters == 1:
+            return base
+        size = int(np.prod(graph.tensors[name]["shape"]))
+        stride = (size + 15) // 16 * 16
+        return f"({base} + replica * {stride}u)"
+
+    ins = [tensor_pointer(name) for name in stage["reads"]]
+    out = tensor_pointer(stage["writes"])
     batch = shape[0]
     count = int(np.prod(shape))
     if op == "embedding":
@@ -163,7 +172,9 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
         body = f"token_select({ins[0]}, {out}, {batch}, {in_shape[1]}, {in_shape[2]}, tid, tpb)"
     else:
         raise ValueError(f"unsupported operation {op} at {stage['id']}")
-    return (f"static void stage_{index}(void*, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
+    return (f"static void stage_{index}(void* context, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
+            + ("  const uint32_t replica = (uint32_t)(uintptr_t)context;\n"
+               if batch_clusters != 1 else "") +
             "#ifdef RADIANCE_DEVICE\n"
             "  // Each stage consumes the previous stage's GMEM output. Muon L0d is\n"
             "  // private per core, so keep this correctness build on core 0.\n"
@@ -182,20 +193,25 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              checkpoint_dir: Path | None = None,
              weight_image: Path | None = None,
              stage_limit: int | None = None,
-             token_ids: list[int] | None = None) -> Path:
+             token_ids: list[int] | None = None,
+             batch_clusters: int = 1) -> Path:
     if device_opt not in ("O1", "O2", "O3"):
         raise ValueError(f"unsupported device optimization level: {device_opt}")
     if stages_per_object < 0:
         raise ValueError("stages per object cannot be negative")
+    if batch_clusters not in (1, 2):
+        raise ValueError("batch clusters must be one or two")
+    if batch_clusters == 2 and device_check_all_stages:
+        raise ValueError("two-cluster builds use final and attention/activation checks")
     external = checkpoint_dir is not None or weight_image is not None
     if external and (checkpoint_dir is None or weight_image is None):
         raise ValueError("checkpoint directory and weight image are both required")
     if stage_limit is not None and not external:
         raise ValueError("stage limit is only for checkpoint device probes")
-    if external and (model not in MODELS
-                     or stages_per_object <= 0 or not device_check_all_stages):
+    if external and (model not in MODELS or stages_per_object <= 0
+                     or (batch_clusters == 1 and not device_check_all_stages)):
         raise ValueError("checkpoint builds require a pinned model, sharded objects, "
-                         "and all-stage checks")
+                         "and all-stage checks for one-cluster runs")
     specs = stitch.model_specs()
     spec = dict(specs[model]) if external else reference.reduced_spec(specs[model])
     if token_ids is not None:
@@ -312,8 +328,14 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     for name, tensor in graph.tensors.items():
         data = inputs.get(name)
         dtype = "int32_t" if tensor["dtype"] == "int32" else "float"
+        count = int(np.prod(tensor["shape"]))
+        stride = (count + 15) // 16 * 16
+        if data is not None and batch_clusters == 2:
+            padded = np.zeros(stride, dtype=data.dtype)
+            padded[:count] = data.ravel()
+            data = np.tile(padded, batch_clusters)
         declarations.append(array_decl(symbol(name), data,
-                                       int(np.prod(tensor["shape"])), dtype))
+                                       stride * batch_clusters, dtype))
     if not external:
         params = {}
         for stage in graph.stages:
@@ -368,7 +390,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                                                          "int4_int8_tied")
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
-                                    parameter_dtype(stage), scale_symbol(stage)))
+                                    parameter_dtype(stage), scale_symbol(stage),
+                                    batch_clusters))
     stage_files = []
     if stages_per_object:
         for first in range(0, len(graph.stages), stages_per_object):
@@ -467,8 +490,10 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         device_declarations = "\n".join(externs)
     else:
         device_declarations = "\n".join(declarations)
-    schedule = "\n".join(f"  mu_schedule(stage_{i}, nullptr, 1);\n"
-                         "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();"
+    schedule = "\n".join(f"  mu_schedule(stage_{i}, "
+                         + ("(void*)(uintptr_t)replica" if batch_clusters == 2
+                            else "nullptr") + ", 1);\n"
+                         + "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();"
                          for i in range(len(graph.stages)))
     if device_check_all_stages:
         float_verify = "\n".join(
@@ -490,7 +515,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     else:
         verify = "\n".join(
             f"  for (uint32_t i = 0; i < {count}; ++i) "
-            f"if (!mu_close({out}[i], {gold}[i], 5e-3f, 5e-4f)) ++errors;"
+            f"if (!mu_close({out}[i"
+            + (f" + replica * {((count + 15) // 16 * 16)}u" if batch_clusters == 2
+               else "") + f"], {gold}[i], 5e-3f, 5e-4f)) ++errors;"
             for out, gold, count in device_checks)
     if stage_files and device_check_all_stages:
         all_checks = [(out, gold, count, "float")
@@ -539,6 +566,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                      else "\n".join(stage_src))
     cpp = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
            "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
+           + ("#include \"model_cluster_id.h\"\n" if batch_clusters == 2 else "") +
            "#include \"pipeline_math.hpp\"\n"
            + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
            + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
@@ -546,21 +574,30 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
            + "extern \"C\" uint32_t __mu_num_warps = 1;\n"
            + device_declarations + "\n" + device_stages + "\n" + verify_prototypes +
-           "\nint main() {\n" + schedule +
-           "\n  if (mu_hart_id() != 0) { for (;;) {} }\n"
+           "\nint main() {\n"
+           + ("  const uint32_t replica = model_chain_cluster_id();\n"
+              if batch_clusters == 2 else "") + schedule +
+           ("\n  if (vx_core_id() != 0) { for (;;) {} }\n" if batch_clusters == 2
+            else "\n  if (mu_hart_id() != 0) { for (;;) {} }\n") +
            "  uint32_t errors = 0;\n" + verify +
            "\n  mu_tohost(errors ? ((errors << 1) | 1u) : 0u);\n  return 0;\n}\n")
     write_if_changed(target / "kernel.cpp", cpp)
     native_check_source = "\n".join(
         f"  for (uint32_t i = 0; i < {count}; ++i) {{\n"
-        f"    const float delta = __builtin_fabsf({out}[i] - {gold}[i]);\n"
+        f"    const float delta = __builtin_fabsf({out}[i"
+        + (f" + {replica * ((count + 15) // 16 * 16)}u" if batch_clusters == 2
+           else "") + f"] - {gold}[i]);\n"
         f"    if (delta > maximum) maximum = delta;\n"
         f"    if (delta > 1e-4f * __builtin_fabsf({gold}[i]) + 1e-5f) ++errors;\n"
         f"  }}"
+        for replica in range(batch_clusters)
         for out, gold, count in native_checks)
     native_int_check_source = "\n".join(
         f"  for (uint32_t i = 0; i < {count}; ++i) "
-        f"if ({out}[i] != {gold}[i]) ++errors;"
+        f"if ({out}[i"
+        + (f" + {replica * ((count + 15) // 16 * 16)}u" if batch_clusters == 2
+           else "") + f"] != {gold}[i]) ++errors;"
+        for replica in range(batch_clusters)
         for out, gold, count in integer_checks)
     native = ("#include <stdint.h>\n#include <stdio.h>\n"
               "#include \"pipeline_math.hpp\"\n"
@@ -571,7 +608,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
               + "\n".join(part.replace("__global ", "")
                           for part in declarations + ([] if device_check_all_stages else native_extra))
               + "\n" + "\n".join(stage_src) + "\nint main() {\n"
-              + "\n".join(f"  stage_{i}(nullptr, 0, 1, 0);"
+              + "\n".join(f"  stage_{i}((void*)(uintptr_t){replica}, 0, 1, 0);"
+                          for replica in range(batch_clusters)
                           for i in range(len(graph.stages)))
               + "\n  uint32_t errors = 0; float maximum = 0.0f;\n"
               + native_check_source + "\n" + native_int_check_source +
@@ -644,6 +682,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             if generation == "greedy" else None),
         "generation": generation, "stages": len(graph.stages),
         "device_check_all_stages": device_check_all_stages,
+        "batch_clusters": batch_clusters,
         "verified_tensors": (
             [stage["id"] for stage in graph.stages
              if graph.tensors[stage["writes"]]["dtype"] != "int32"]
@@ -734,6 +773,8 @@ def main() -> None:
                         help="weights-image.json from export_decoder_weights.py")
     parser.add_argument("--stage-limit", type=int,
                         help="compile only the first N stages as a checkpoint probe")
+    parser.add_argument("--batch-clusters", type=int, choices=(1, 2), default=1,
+                        help="independent identical requests on one or two clusters")
     parser.add_argument("--token-ids", type=int, nargs="+",
                         help="prefill IDs; append decode IDs for teacher-forced mode")
     parser.add_argument("--verify-native", action="store_true")
@@ -745,7 +786,8 @@ def main() -> None:
                       args.decode_steps, args.generation, args.out_root,
                       args.device_check_all_stages, args.device_opt,
                       args.stages_per_object, args.checkpoint_dir,
-                      args.weight_image, args.stage_limit, args.token_ids)
+                      args.weight_image, args.stage_limit, args.token_ids,
+                      args.batch_clusters)
     if args.verify_native and args.weight_image:
         parser.error("native C++ checking is not supported for external weight images")
     if args.verify_native or (args.build and args.weight_image is None):

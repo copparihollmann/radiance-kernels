@@ -1,0 +1,81 @@
+{
+  "schema": "radiance.model_chain.batch2_candidate.v1",
+  "model": "TinyLlama-1.1B-Chat-v1.0",
+  "scope": "two independent identical greedy requests on two Radiance clusters",
+  "status": "software_validated_hardware_pending",
+  "stages_per_replica": 1133,
+  "replicas": 2,
+  "active_cores_per_cluster": 1,
+  "prefill_token_ids": [
+    1,
+    15043
+  ],
+  "decode_steps": 2,
+  "expected_greedy_token_ids": [
+    29892,
+    2787
+  ],
+  "checkpoint_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933",
+  "weight_image_sha256": "5182cdd4d523a40239fcf77742a90f0a7e3cc0e0d436feb55b40567eef6a9559",
+  "reference_output_sha256": "657e42c9256223d9427ce85256e4ad0ade329292b486f28e347aa77ed1b5bfab",
+  "source_manifest_sha256": "725e09e0ce00071032c398ed53ec51acf875ee2943d19d352a1076c68c9e37f8",
+  "source_device_elf_sha256": "364afbb2525ba42c86325b92caae199964630355e2e4b69ed3a3943cb57ab839",
+  "source_soc_elf_sha256": "cb99cb0d42d7889971a3f6a31603210655b42591fd4105ded10c2c9b4f530cb0",
+  "packaged_elf_sha256": "586d6d61efeb62ec486aec0232cb292187a8630f2b01112916defa8f9fe230db",
+  "package_receipt_sha256": "90673bcbba729b6a32336cd60aaceed32536b0336d5944d0216f5980440e1ee1",
+  "hash_map": {
+    "gpu_bytes": 2147483648,
+    "unit_bytes": 32,
+    "slices": 4,
+    "compact": true
+  },
+  "package_source_and_image_verified": true,
+  "native_check": {
+    "status": "passed",
+    "checked_tensors_per_replica": 135,
+    "errors_per_replica": {
+      "0": 0,
+      "1": 0
+    },
+    "max_abs_error": 0.000526428223,
+    "tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "result_sha256": "45e1f847ed266300ae058ab1d340faac2eb1adb9bcdafa23dadabb32b53bac61",
+    "host_threads": 2
+  },
+  "cyclotron_prefix": {
+    "cluster0": {
+      "status": "passed",
+      "tohost": 0,
+      "cycles_functional": 132035,
+      "elf_sha256": "c10c4f3cf6a867191626a9da464de8caae7043b232dc1d96dd31e20278b4a73c",
+      "log_sha256": "c07a592fd34bec91a225a359383b0fda89f485fa3d152494ed0642636bbf5fd2",
+      "preloaded_image_bytes": 1102157824
+    },
+    "cluster1": {
+      "status": "passed",
+      "tohost": 0,
+      "cycles_functional": 144448,
+      "elf_sha256": "152b67efdb78ad91af0e3f247745960a5294721fa88a982ada239d4132501ad9",
+      "log_sha256": "2d7bb3306035f07f7575ddd4d9fb10d8a3134a520c33e09968de8c0f4f0a5da8",
+      "preloaded_image_bytes": 1102157824
+    },
+    "cluster1_changed_input": {
+      "status": "failed",
+      "tohost": 3583,
+      "cycles_functional": 144387,
+      "elf_sha256": "8e28d83368c2a1514149ca2039b9cc17d42862ff40abd1db114698f864fe4618",
+      "log_sha256": "25c7f67fc76b3abf908ca8fdaf79753a53f350e43834e82ed9d3c70eda6eb790",
+      "preloaded_image_bytes": 1102157824
+    }
+  },
+  "cyclotron_simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "cyclotron_config_sha256": "14c425c441bfceb6b8602b5862787f955bc06ec1298712456c9074d628fe1339",
+  "full_model_device_execution": false,
+  "simultaneous_two_cluster_execution": false,
+  "rtl_or_fpga_execution": false,
+  "hardware_map_match_verified": false,
+  "performance_measurement": false
+}

@@ -1,5 +1,31 @@
 # Connected model kernels
 
+## Two-cluster decoder batch
+
+`compile_decoder.py --batch-clusters 2` gives each cluster its own padded
+activation and KV-cache buffers while both read the same checkpoint weights.
+The current batch uses the same fixed prompt on each cluster. Each cluster
+runs the complete graph on its core 0 and checks the selected final and
+attention/activation tensors before reporting its own printBuf status.
+`prepare_hbm.py` launches and waits for both clusters. This mapping tests
+two independent inferences; it does not split a single inference across SMs.
+
+The first [two-cluster TinyLlama candidate](evaluation/tinyllama-int8-batch2-hbm-candidate.json)
+contains all 1,133 stages per request and the same pinned INT8 weight image
+as the one-cluster build. Both generated C++ schedules pass 135 selected
+tensor checks per request against the packed-weight reference and produce
+greedy token IDs `[29892, 2787]`. The largest absolute difference is
+`0.00052643`, within the device check's `rtol=0.005, atol=0.0005` tolerance.
+Cyclotron ran the checkpoint-backed first two stages once with each replica's
+address range selected; both passed. Changing only the second replica's input
+made its device check fail. Cyclotron has one cluster in this setup, so those
+runs check address selection and arithmetic, not concurrent two-SM execution.
+The full two-cluster HBM SoC ELF and its 2 GiB, 32-byte, four-slice hashed
+FireSim package passed layout and byte-reconstruction checks. The package
+still needs the exact target HWDB match and an FPGA run before it can supply
+two-SM latency or throughput. The per-channel INT8 weights are a lossy
+variant of the original checkpoint.
+
 The kernels in this directory exercise tensor handoffs inside **one Radiance
 executable**. `kernel.cpp` is a small three-stage device check:
 `RMSNorm → FP32 linear → residual`. `compile_decoder.py` reads the decoder

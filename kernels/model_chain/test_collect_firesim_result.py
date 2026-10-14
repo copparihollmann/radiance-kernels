@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from collect_firesim_result import check_source, collect, parse_uart
+from collect_firesim_result import check_source, collect, parse_uart, parse_uart_batch2
 
 
 VALID_UART = """model_chain_hbm: launch cluster 0
@@ -15,6 +15,20 @@ model_status=600d0000
 gpu_start_cycle64=4294967290
 gpu_end_cycle64=4294967310
 kernel_cycles64=20
+PASS
+"""
+
+VALID_BATCH_UART = """model_chain_hbm: launch clusters=2
+cluster_status=0:0x600d0000
+cluster=0
+gpu_start_cycle64=100
+gpu_end_cycle64=140
+kernel_cycles64=40
+cluster_status=1:0x600d0000
+cluster=1
+gpu_start_cycle64=110
+gpu_end_cycle64=165
+kernel_cycles64=55
 PASS
 """
 
@@ -57,6 +71,48 @@ class CollectFiresimResultTest(unittest.TestCase):
         self.assertEqual(result["kernel_cycles64"], 20)
         self.assertEqual(result["gpu_start_cycle64"], 4294967290)
         self.assertEqual(result["gpu_end_cycle64"], 4294967310)
+        self.assertEqual(parse_uart(VALID_UART.replace(
+            "model_status=600d0000", "model_status=0x600d0000"))["status"], "passed")
+
+    def test_two_cluster_report_binds_both_statuses_and_native_check(self):
+        source = json.loads(self.source.read_text())
+        source.update({"batch_clusters": 2, "hbm_launch_clusters": 2,
+                       "target_protocol": "nightly_hbm_printbuf_clusters",
+                       "device_check_all_stages": False,
+                       "verified_tensors": source["verified_tensors"][:135],
+                       "hbm_verifier_files": 0})
+        self.source.write_text(json.dumps(source))
+        native = self.root / "native-result.json"
+        native.write_text(json.dumps({
+            "status": "passed", "replicas": 2,
+            "stages_per_replica": source["stages"],
+            "device_elf_sha256": source["radiance_elf_sha256"],
+            "weight_image_sha256": source["weight_image_sha256"],
+            "checkpoint_sha256": source["checkpoint_sha256"],
+        }))
+        self.uart.write_text(VALID_BATCH_UART)
+
+        def collect_two(native_path=native):
+            return collect(model="tinyllama", sm_count=2, job_id="test-two",
+                           bitstream_id="test-two-sm", elf=self.elf,
+                           receipt=self.receipt, source_manifest=self.source,
+                           hwdb_config=self.hwdb, workload_config=self.workload,
+                           uart_log=self.uart, firesim_exit_code=0,
+                           counter_files=[], native_result=native_path)
+
+        result = collect_two()
+        self.assertEqual(result["status"], "passed")
+        self.assertIsNone(result["kernel_cycles64"])
+        self.assertEqual(result["cluster_timings"][1]["kernel_cycles64"], 55)
+        self.assertIn("two-cluster native check receipt is required",
+                      collect_two(None)["problems"])
+        for uart in (VALID_BATCH_UART.replace("cluster_status=1:0x600d0000",
+                                              "cluster_status=1:0x00000001"),
+                     VALID_BATCH_UART.replace("cluster=1\n", ""),
+                     VALID_BATCH_UART.replace("kernel_cycles64=55", "kernel_cycles64=56"),
+                     VALID_BATCH_UART + "cluster_status=1:0x600d0000\n"):
+            with self.subTest(uart=uart):
+                self.assertEqual(parse_uart_batch2(uart)["status"], "failed")
 
     def test_duplicate_and_partial_reports_are_rejected(self):
         for log in (VALID_UART + "PASS\n",

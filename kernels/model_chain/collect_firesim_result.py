@@ -18,6 +18,10 @@ EXPECTED_MODELS = {
     "gemma_2_2b_it": (1496, "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a"),
     "smolvla_base": (3673, "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb"),
 }
+EXPECTED_BATCH2_TINYLLAMA = {
+    "selected_tensors": 135,
+    "reference_output_sha256": "657e42c9256223d9427ce85256e4ad0ade329292b486f28e347aa77ed1b5bfab",
+}
 
 
 def sha256(path: Path) -> str:
@@ -65,7 +69,7 @@ def parse_uart(log) -> dict:
     if not problems:
         try:
             status = values["model_status"]
-            if not re.fullmatch(r"[0-9a-fA-F]{8}", status):
+            if not re.fullmatch(r"(?:0x)?[0-9a-fA-F]{8}", status):
                 raise ValueError("model_status must be eight hex digits")
             parsed["model_status"] = int(status, 16)
             for key in FIELDS[1:]:
@@ -92,18 +96,91 @@ def parse_uart(log) -> dict:
             "fail_markers": markers["FAIL"]}
 
 
-def check_source(model: str, source: dict) -> list[str]:
+def parse_uart_batch2(log) -> dict:
+    """Accept exactly two ordered cluster reports from the HBM batch host."""
+    lines = list(log.splitlines() if isinstance(log, str) else log)
+    launch = [index for index, raw in enumerate(lines)
+              if raw.strip() == "model_chain_hbm: launch clusters=2"]
+    passes = [index for index, raw in enumerate(lines) if raw.strip() == "PASS"]
+    fails = [index for index, raw in enumerate(lines) if raw.strip() == "FAIL"]
+    problems = []
+    if len(launch) != 1 or len(passes) != 1 or fails:
+        problems.append("expected one two-cluster launch and PASS with no FAIL")
+    if any(raw.strip().startswith("model_chain_hbm: launch") and
+           raw.strip() != "model_chain_hbm: launch clusters=2"
+           for raw in lines):
+        problems.append("contradictory launch marker")
+    fields = {}
+    claimed = []
+    cursor = launch[0] if launch else -1
+    for cluster in (0, 1):
+        expected = [f"cluster_status={cluster}:", f"cluster={cluster}",
+                    "gpu_start_cycle64=", "gpu_end_cycle64=", "kernel_cycles64="]
+        record = {}
+        for position, prefix in enumerate(expected):
+            matches = [(index, raw.strip()[len(prefix):])
+                       for index, raw in enumerate(lines)
+                       if raw.strip().startswith(prefix)]
+            if position >= 2:
+                matches = [(index, value) for index, value in matches
+                           if index > cursor and
+                           (cluster == 1 or not any(
+                               lines[prior].strip() == "cluster=1"
+                               for prior in range(cursor + 1, index)))]
+            if len(matches) != 1 or matches[0][0] <= cursor:
+                problems.append(f"cluster {cluster}: missing, repeated, or unordered {prefix}")
+                break
+            cursor, value = matches[0]
+            claimed.append(cursor)
+            if position == 0:
+                if not re.fullmatch(r"(?:0x)?[0-9a-fA-F]{8}", value):
+                    problems.append(f"cluster {cluster}: malformed status")
+                else:
+                    record["model_status"] = int(value, 16)
+            elif position >= 2:
+                key = prefix[:-1]
+                if not re.fullmatch(r"[0-9]+", value) or int(value) >= 1 << 64:
+                    problems.append(f"cluster {cluster}: malformed {key}")
+                else:
+                    record[key] = int(value)
+        if len(record) == 4:
+            if record["model_status"] != PASS_STATUS:
+                problems.append(f"cluster {cluster}: device status is not PASS")
+            if record["gpu_end_cycle64"] <= record["gpu_start_cycle64"]:
+                problems.append(f"cluster {cluster}: end does not follow start")
+            elif record["kernel_cycles64"] != (record["gpu_end_cycle64"] -
+                                                record["gpu_start_cycle64"]):
+                problems.append(f"cluster {cluster}: cycles differ from end minus start")
+            fields[cluster] = record
+    report_prefixes = ("cluster_status=", "cluster=", "model_status=",
+                       "gpu_start_cycle64=", "gpu_end_cycle64=",
+                       "kernel_cycles64=")
+    reported = [index for index, raw in enumerate(lines)
+                if raw.strip().startswith(report_prefixes)]
+    if sorted(claimed) != reported:
+        problems.append("extra or duplicate cluster report field")
+    if passes and cursor >= passes[0]:
+        problems.append("PASS precedes a cluster report")
+    return {"status": "passed" if not problems else "failed",
+            "problems": problems, "fields": fields}
+
+
+def check_source(model: str, source: dict, sm_count: int = 1) -> list[str]:
     stages, checkpoint = EXPECTED_MODELS[model]
     problems = []
     if (source.get("model") != model or source.get("stages") != stages or
             source.get("checkpoint_sha256") != checkpoint or
             source.get("stage_limit") is not None or
             not source.get("device_elf_built") or
-            source.get("target_protocol") != "nightly_hbm_printbuf_cluster0" or
-            source.get("hbm_launch_clusters") != 1):
+            source.get("target_protocol") != (
+                "nightly_hbm_printbuf_clusters" if sm_count == 2 else
+                "nightly_hbm_printbuf_cluster0") or
+            source.get("hbm_launch_clusters") != sm_count):
         problems.append("source manifest is not the pinned full model HBM build")
     transform = source.get("hbm_transform") or {}
     if model == "smolvla_base":
+        if sm_count != 1:
+            problems.append("two-cluster SmolVLA build is not supported")
         if (source.get("scope") != "full_checkpoint_action_chunk" or
                 source.get("output_validation") != "all_elements_vs_upstream_policy" or
                 source.get("output_check_tolerance") !=
@@ -113,6 +190,19 @@ def check_source(model: str, source: dict) -> list[str]:
                 transform.get("scheduled_calls") != stages + 1 or
                 transform.get("status_return_sites", 0) < 2):
             problems.append("SmolVLA build lacks its final-action reference check")
+    elif sm_count == 2:
+        if (model != "tinyllama" or
+                source.get("scope") != "full_dimension_checkpoint_decoder" or
+                source.get("batch_clusters") != 2 or
+                source.get("device_check_all_stages") is not False or
+                len(source.get("verified_tensors", [])) !=
+                EXPECTED_BATCH2_TINYLLAMA["selected_tensors"] or
+                source.get("reference_output_sha256") !=
+                EXPECTED_BATCH2_TINYLLAMA["reference_output_sha256"] or
+                source.get("hbm_verifier_files") != 0 or
+                transform.get("scheduled_calls") != stages or
+                transform.get("status_return_sites", 0) < 1):
+            problems.append("two-cluster decoder build lacks its selected checks")
     else:
         if (source.get("scope") != "full_dimension_checkpoint_decoder" or
                 source.get("device_check_all_stages") is not True or
@@ -131,19 +221,31 @@ def check_source(model: str, source: dict) -> list[str]:
 def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
             elf: Path, receipt: Path, source_manifest: Path, hwdb_config: Path,
             workload_config: Path, uart_log: Path,
-            firesim_exit_code: int, counter_files: list[Path]) -> dict:
+            firesim_exit_code: int, counter_files: list[Path],
+            native_result: Path | None = None) -> dict:
     receipt_data = json.loads(receipt.read_text())
     source_data = json.loads(source_manifest.read_text())
     elf_digest = sha256(elf)
     receipt_digest = receipt_data.get("firesim_elf_sha256")
     with uart_log.open(errors="replace") as stream:
-        uart = parse_uart(stream)
+        uart = parse_uart_batch2(stream) if sm_count == 2 else parse_uart(stream)
     problems = list(uart["problems"])
     if not re.fullmatch(r"[0-9a-f]{64}", str(receipt_digest)):
         problems.append("ELF receipt has no SHA-256")
     elif elf_digest != receipt_digest:
         problems.append("staged ELF differs from its receipt")
-    problems.extend(check_source(model, source_data))
+    problems.extend(check_source(model, source_data, sm_count))
+    if sm_count == 2:
+        if native_result is None:
+            problems.append("two-cluster native check receipt is required")
+        else:
+            native = json.loads(native_result.read_text())
+            if (native.get("status") != "passed" or native.get("replicas") != 2 or
+                    native.get("stages_per_replica") != source_data.get("stages") or
+                    native.get("device_elf_sha256") != source_data.get("radiance_elf_sha256") or
+                    native.get("weight_image_sha256") != source_data.get("weight_image_sha256") or
+                    native.get("checkpoint_sha256") != source_data.get("checkpoint_sha256")):
+                problems.append("two-cluster native check differs from the source build")
     if source_data.get("soc_elf_sha256") != receipt_data.get("source_elf_sha256"):
         problems.append("packaged ELF receipt differs from the model source build")
     if firesim_exit_code != 0:
@@ -169,6 +271,7 @@ def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
         "gpu_start_cycle64": uart["fields"].get("gpu_start_cycle64"),
         "gpu_end_cycle64": uart["fields"].get("gpu_end_cycle64"),
         "model_status": uart["fields"].get("model_status"),
+        "cluster_timings": uart["fields"] if sm_count == 2 else None,
         "upstream_execution_equivalent": False,
         "elf_sha256": elf_digest,
         "elf_receipt_sha256": sha256(receipt),
@@ -178,12 +281,14 @@ def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
         "source_stage_count": source_data.get("stages"),
         "source_scope": source_data.get("scope"),
         "source_output_check": ("final_action_chunk" if model == "smolvla_base"
+                                else "selected_outputs_each_replica" if sm_count == 2
                                 else "every_decoder_stage"),
         "checkpoint_sha256": source_data.get("checkpoint_sha256"),
         "hwdb_config_sha256": sha256(hwdb_config),
         "workload_config_sha256": sha256(workload_config),
         "uart_log_sha256": sha256(uart_log),
         "counter_files": hashes,
+        "native_result_sha256": sha256(native_result) if native_result else None,
         "paths": {"elf": str(elf.resolve()),
                   "elf_receipt": str(receipt.resolve()),
                   "source_manifest": str(source_manifest.resolve()),
@@ -208,6 +313,8 @@ def main() -> None:
     parser.add_argument("--uart-log", type=Path, required=True)
     parser.add_argument("--firesim-exit-code", type=int, required=True)
     parser.add_argument("--counter-file", type=Path, action="append", default=[])
+    parser.add_argument("--native-result", type=Path,
+                        help="required for a two-SM model batch")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.sm_count not in (1, 2, 4):
@@ -220,7 +327,8 @@ def main() -> None:
                      workload_config=args.workload_config,
                      uart_log=args.uart_log,
                      firesim_exit_code=args.firesim_exit_code,
-                     counter_files=args.counter_file)
+                     counter_files=args.counter_file,
+                     native_result=args.native_result)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     print(result["status"])

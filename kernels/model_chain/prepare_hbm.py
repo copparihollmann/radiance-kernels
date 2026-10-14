@@ -34,7 +34,9 @@ def transform_kernel(source):
         raise ValueError("expected one device main")
     source = source.replace("\nint main() {\n",
                             "\nint main() {\n  model_hbm_wait_launch();\n")
-    park = "  if (mu_hart_id() != 0) { for (;;) {} }"
+    park = ("  if (vx_core_id() != 0) { for (;;) {} }"
+            if "  if (vx_core_id() != 0) { for (;;) {} }" in source else
+            "  if (mu_hart_id() != 0) { for (;;) {} }")
     if source.count(park) != 1:
         raise ValueError("expected one nonzero-hart park")
     source = source.replace(park, "  if (mu_hart_id() != 0) { "
@@ -78,6 +80,9 @@ def prepare(source_dir, output_dir):
         raise ValueError("output must be outside the source build")
     source_manifest_path = source_dir / "manifest.json"
     source_manifest = json.loads(source_manifest_path.read_text())
+    clusters = source_manifest.get("batch_clusters", 1)
+    if clusters not in (1, 2):
+        raise ValueError("only one or two cluster model batches are supported")
     names = source_manifest.get("device_source_files", [])
     if "kernel.cpp" not in names or not names:
         raise ValueError("source build has no device source list")
@@ -86,7 +91,9 @@ def prepare(source_dir, output_dir):
         if Path(name).name != name or not name.endswith(".cpp"):
             raise ValueError(f"invalid generated source name: {name}")
         shutil.copy2(source_dir / name, output_dir / name)
-    shutil.copy2(HERE / "host_hbm.cpp", output_dir / "host.cpp")
+    host_source = (HERE / "host_hbm.cpp").read_text()
+    (output_dir / "host.cpp").write_text(
+        f"#define MODEL_HBM_CLUSTERS {clusters}u\n" + host_source)
     shutil.copy2(HERE / "model_hbm_bridge.h", output_dir / "model_hbm_bridge.h")
     shutil.copy2(HERE / "model_hbm_pb.h", output_dir / "model_hbm_pb.h")
     transformed, changes = transform_kernel((output_dir / "kernel.cpp").read_text())
@@ -118,8 +125,9 @@ def prepare(source_dir, output_dir):
     manifest = dict(source_manifest)
     manifest.update({"device_elf_built": False,
                      "device_execution": False,
-                     "target_protocol": "nightly_hbm_printbuf_cluster0",
-                     "hbm_launch_clusters": 1,
+                     "target_protocol": ("nightly_hbm_printbuf_cluster0" if clusters == 1
+                                         else "nightly_hbm_printbuf_clusters"),
+                     "hbm_launch_clusters": clusters,
                      "source_manifest_sha256": hash_file(source_manifest_path),
                      "source_device_elf_sha256": source_manifest.get(
                          "radiance_elf_sha256"),
