@@ -260,13 +260,21 @@ software buffer mapping. They exclude scratch space and do not predict cache
 misses or DRAM transactions. Each trace also binds to a packed-weight image
 manifest, records its storage footprint, and counts tied address ranges once;
 regeneration checks the pinned config hash but does not rehash the raw weight
-bytes. The MAC totals cover linear stages only. The 128- and 1,024-token
-cases are **not compiled device programs**. For example, Gemma's largest
-mapped tensor in the long-context case is a 1,048,576,000-byte prefill logit
+bytes. The trace also counts named tensors alive at each stage. It starts with
+graph inputs resident, retains all graph outputs, and allocates each stage
+result before releasing its last input. It assumes distinct storage for every
+live tensor. The peak is a software graph
+footprint under those assumptions, not a measured L2 working set or an exact
+device capacity requirement: in-place reuse can lower it, while scratch and
+other buffers can raise it. The MAC totals cover linear stages only. The 128-
+and 1,024-token cases are **not compiled device programs**. For example,
+Gemma's largest mapped tensor in the long-context case is a
+1,048,576,000-byte prefill logit
 tensor. Together with its 2,019,513,344-byte packed image, even this lower
-bound exceeds the 2 GiB target, so it would need output tiling or another
-placement policy. These traces identify software mapping work;
-they are not utilization, latency, or performance results.
+bound exceeds the 2 GiB target; even its 128-token, batch-1 prefill crosses
+that bound. These shapes would need output tiling or another placement policy.
+These traces identify software mapping work; they are not utilization,
+latency, or performance results.
 
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The

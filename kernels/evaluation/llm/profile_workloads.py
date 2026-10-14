@@ -60,6 +60,45 @@ def packed_footprint(names: set[str], parameters: dict[str, dict]) -> int:
     return total
 
 
+def live_tensor_footprint(graph, model: str) -> dict:
+    """Count named tensors alive in schedule order with graph outputs retained."""
+    sizes = {name: tensor_bytes(item, MAPPED_DTYPE_BYTES)
+             for name, item in graph.tensors.items()}
+    remaining = Counter(name for stage in graph.stages for name in stage["reads"])
+    retained = set(graph.outputs)
+    written = {stage["writes"] for stage in graph.stages}
+    live = {name for name in graph.tensors if name not in written and
+            (remaining[name] or name in retained)}
+    current = sum(sizes[name] for name in live)
+    peak = current
+    peak_stage = "initial_inputs"
+    phase_peaks = {}
+    for stage in graph.stages:
+        name = stage["writes"]
+        if name in live or any(source not in live for source in stage["reads"]):
+            raise ValueError(f"{stage['id']}: invalid live-tensor dependency")
+        live.add(name)
+        current += sizes[name]
+        phase = stage_phase(model, stage["id"])
+        if current > phase_peaks.get(phase, (0, ""))[0]:
+            phase_peaks[phase] = (current, stage["id"])
+        if current > peak:
+            peak, peak_stage = current, stage["id"]
+        for source in stage["reads"]:
+            remaining[source] -= 1
+            if remaining[source] == 0 and source not in retained:
+                live.remove(source)
+                current -= sizes[source]
+        if remaining[name] == 0 and name not in retained:
+            live.remove(name)
+            current -= sizes[name]
+    if not retained.issubset(live):
+        raise ValueError("a graph output was released before completion")
+    return {"peak_bytes": peak, "peak_stage": peak_stage,
+            "phase_peaks": phase_peaks, "retained_output_bytes": sum(
+                sizes[name] for name in retained)}
+
+
 def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
     if batch <= 0 or prefill <= 0 or decode_steps < 0:
         raise ValueError("batch and prefill must be positive; decode_steps cannot be negative")
@@ -149,6 +188,10 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
     largest_tensor = max(graph.tensors, key=lambda name: tensor_bytes(
         graph.tensors[name], MAPPED_DTYPE_BYTES))
     largest_bytes = tensor_bytes(graph.tensors[largest_tensor], MAPPED_DTYPE_BYTES)
+    liveness = live_tensor_footprint(graph, model)
+    for phase, (peak_bytes, peak_stage) in liveness["phase_peaks"].items():
+        phase_summary[phase]["peak_live_mapped_tensor_bytes"] = peak_bytes
+        phase_summary[phase]["peak_live_stage"] = peak_stage
     return {
         "schema": "radiance.llm.shape_trace.v1",
         "model": model, "source_spec_sha256": hashlib.sha256(SPECS.read_bytes()).hexdigest(),
@@ -164,6 +207,7 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
             "mapped_buffer_scope": "current FP32/32-bit software storage, excluding weights and temporary scratch",
             "linear_macs": "linear stages only; attention and other arithmetic excluded",
             "packed_weight_bytes": "storage footprint of named parameters, with tied GPU address intervals counted once; not bytes fetched from HBM",
+            "live_mapped_tensor_bytes": "sum of distinct named tensor sizes alive in graph order, with initial graph inputs resident, all graph outputs retained, and each result allocated before its last input is released; in-place reuse, device buffers, scratch, and cache behavior are not modeled",
             "device_execution": False, "performance_measurement": False,
         },
         "packed_weights": {
@@ -187,6 +231,11 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
             "mapped_operand_bytes": sum(item["mapped_read_bytes"] + item["mapped_write_bytes"] for item in stages),
             "largest_mapped_tensor": largest_tensor,
             "largest_mapped_tensor_bytes": largest_bytes,
+            "peak_live_mapped_tensor_bytes": liveness["peak_bytes"],
+            "peak_live_stage": liveness["peak_stage"],
+            "retained_output_bytes": liveness["retained_output_bytes"],
+            "packed_image_plus_peak_live_mapped_tensor_bytes": (
+                weight_manifest["image_size_bytes"] + liveness["peak_bytes"]),
             "packed_image_plus_largest_tensor_bytes": (
                 weight_manifest["image_size_bytes"] + largest_bytes),
             "packed_image_plus_largest_tensor_exceeds_2gib": (

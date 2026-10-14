@@ -2,10 +2,23 @@
 
 import unittest
 
-from profile_workloads import profile
+from profile_workloads import live_tensor_footprint, profile
+from stitch import Graph
 
 
 class WorkloadProfileTest(unittest.TestCase):
+    def test_live_footprint_retains_outputs_and_counts_repeated_reads_once(self):
+        graph = Graph("toy", {"source": "test"})
+        graph.input("a", (2,))
+        graph.input("b", (3,), "int32")
+        graph.add("c", "add", ("a", "b"), (2,))
+        graph.add("d", "add", ("c", "c"), (2,))
+        graph.outputs = ["d"]
+        result = live_tensor_footprint(graph, "toy")
+        self.assertEqual(result["peak_bytes"], 28)
+        self.assertEqual(result["peak_stage"], "c")
+        self.assertEqual(result["retained_output_bytes"], 8)
+
     def test_decoder_prefill_and_cached_decode_remain_distinct(self):
         result = profile("tinyllama", batch=1, prefill=2, decode_steps=2)
         self.assertEqual(result["stage_count"], 1133)
@@ -34,12 +47,16 @@ class WorkloadProfileTest(unittest.TestCase):
 
     def test_packed_weights_flag_an_oversized_gemma_shape(self):
         fixed = profile("gemma_2_2b_it", batch=1, prefill=2, decode_steps=2)
+        medium = profile("gemma_2_2b_it", batch=1, prefill=128, decode_steps=1)
         large = profile("gemma_2_2b_it", batch=8, prefill=128, decode_steps=1)
         self.assertEqual(fixed["packed_weights"]["image_size_bytes"], 2019513344)
         self.assertEqual(fixed["packed_weights"]["used_logical_parameter_count"], 289)
         self.assertFalse(fixed["totals"]["packed_image_plus_largest_tensor_exceeds_2gib"])
+        self.assertTrue(medium["totals"]["packed_image_plus_largest_tensor_exceeds_2gib"])
         self.assertTrue(large["totals"]["packed_image_plus_largest_tensor_exceeds_2gib"])
         self.assertEqual(large["totals"]["largest_mapped_tensor_bytes"], 1048576000)
+        self.assertGreaterEqual(large["totals"]["peak_live_mapped_tensor_bytes"],
+                                large["totals"]["largest_mapped_tensor_bytes"])
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@
       "model": "tinyllama",
       "case": "fixed_handoff_shape",
       "trace": "tinyllama-fixed_handoff_shape.json",
-      "trace_sha256": "ae31a738bb6ca9d03e17ff948bd38558a104382a83b40f382c94fa534e7cdf45",
+      "trace_sha256": "2ab658da2f536d365b2fdf3a08e5aea87bece55432aa528c136d1ce595e0b1ab",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 2,
@@ -32,6 +32,10 @@
         "mapped_operand_bytes": 31079448,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 256000,
+        "peak_live_mapped_tensor_bytes": 588800,
+        "peak_live_stage": "decode1.layer00.activation",
+        "retained_output_bytes": 512000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1102746624,
         "packed_image_plus_largest_tensor_bytes": 1102413824,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -52,7 +56,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 362496,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 378,
@@ -71,7 +77,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 527360,
+          "peak_live_stage": "decode0.lm_head"
         },
         "decode1": {
           "stages": 378,
@@ -90,7 +98,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 588800,
+          "peak_live_stage": "decode1.layer00.activation"
         }
       }
     },
@@ -98,7 +108,7 @@
       "model": "tinyllama",
       "case": "medium_context",
       "trace": "tinyllama-medium_context.json",
-      "trace_sha256": "f444bb72929e746ebbb6f5a96ffd46055dfb4952c7b90fb81ad2585608af1bce",
+      "trace_sha256": "b1b9bd6a0aabc9b1fe4e61b5379655afe136f6fdea1ea607047f98e4b7662a04",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 128,
@@ -123,6 +133,10 @@
         "mapped_operand_bytes": 1001817608,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 16384000,
+        "peak_live_mapped_tensor_bytes": 23199744,
+        "peak_live_stage": "prefill.lm_head",
+        "retained_output_bytes": 16512000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1125357568,
         "packed_image_plus_largest_tensor_bytes": 1118541824,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -143,7 +157,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 23199744,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 378,
@@ -162,7 +178,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 22301696,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -170,7 +188,7 @@
       "model": "tinyllama",
       "case": "high_batch",
       "trace": "tinyllama-high_batch.json",
-      "trace_sha256": "d4a48607dd3dee4c40981768a0b08074cc36a6d72bd872c27aa2e6b22618ae46",
+      "trace_sha256": "6f4f8bcb977c5f62d93afd89aca79688e888190a0732b436bd56abd3b8718a66",
       "scenario": {
         "batch": 8,
         "prefill_tokens": 128,
@@ -195,6 +213,10 @@
         "mapped_operand_bytes": 8014540864,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 131072000,
+        "peak_live_mapped_tensor_bytes": 185597952,
+        "peak_live_stage": "prefill.lm_head",
+        "retained_output_bytes": 132096000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1287755776,
         "packed_image_plus_largest_tensor_bytes": 1233229824,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -215,7 +237,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 185597952,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 378,
@@ -234,7 +258,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 178413568,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -242,7 +268,7 @@
       "model": "tinyllama",
       "case": "long_context",
       "trace": "tinyllama-long_context.json",
-      "trace_sha256": "ef9ba8a5fb446eab23b2eae0674658ad8985ed753ec5a394907a3c15067b6965",
+      "trace_sha256": "afe300ef8a72d248130085eaaeed30121a8199b1aa8dec6d01aa59378a570c4a",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1024,
@@ -267,6 +293,10 @@
         "mapped_operand_bytes": 7962006536,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 131072000,
+        "peak_live_mapped_tensor_bytes": 185597952,
+        "peak_live_stage": "prefill.lm_head",
+        "retained_output_bytes": 131200000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1287755776,
         "packed_image_plus_largest_tensor_bytes": 1233229824,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -287,7 +317,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 185597952,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 378,
@@ -306,7 +338,9 @@
             "gated_activation": 22
           },
           "unique_packed_parameter_count": 201,
-          "unique_packed_parameter_footprint_bytes": 1102157824
+          "unique_packed_parameter_footprint_bytes": 1102157824,
+          "peak_live_mapped_tensor_bytes": 178277376,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -314,7 +348,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "fixed_handoff_shape",
       "trace": "deepseek_r1_distill_qwen_1_5b-fixed_handoff_shape.json",
-      "trace_sha256": "bdcca60bf2d53af28b9ef59de935be3ec20f0b070bbcfd1391bce87501f93f09",
+      "trace_sha256": "aaf105f0b0c452565fee2353c689d2448a2b85994f811a160bce124f09693038",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1,
@@ -339,6 +373,10 @@
         "mapped_operand_bytes": 35798548,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 607744,
+        "peak_live_mapped_tensor_bytes": 1829376,
+        "peak_live_stage": "decode1.lm_head",
+        "retained_output_bytes": 1823232,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1783148032,
         "packed_image_plus_largest_tensor_bytes": 1781926400,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -360,7 +398,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 671232,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 564,
@@ -380,7 +420,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 1336320,
+          "peak_live_stage": "decode0.lm_head"
         },
         "decode1": {
           "stages": 564,
@@ -400,7 +442,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 1829376,
+          "peak_live_stage": "decode1.lm_head"
         }
       }
     },
@@ -408,7 +452,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "medium_context",
       "trace": "deepseek_r1_distill_qwen_1_5b-medium_context.json",
-      "trace_sha256": "f195916f311631bf5536751878d2ec3fdd1a4fb40351b99645e5eedab8b637ee",
+      "trace_sha256": "981d1b5f17d7a5173076cb08bfaa9cdf2821cfef938862739f565bbcf8d1a5d6",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 128,
@@ -433,6 +477,10 @@
         "mapped_operand_bytes": 1564690440,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 77791232,
+        "peak_live_mapped_tensor_bytes": 85917696,
+        "peak_live_stage": "prefill.lm_head",
+        "retained_output_bytes": 78398976,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1867236352,
         "packed_image_plus_largest_tensor_bytes": 1859109888,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -454,7 +502,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 85917696,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 564,
@@ -474,7 +524,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 85277696,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -482,7 +534,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "high_batch",
       "trace": "deepseek_r1_distill_qwen_1_5b-high_batch.json",
-      "trace_sha256": "49e59f085f6be1fd08c7fa13f687945de458510cc8eac5a5e803f02272f8ffbf",
+      "trace_sha256": "311f9195860b6e56f35e4b40b8d72d6bb2c174e8941c2b376893aa0d66a56459",
       "scenario": {
         "batch": 8,
         "prefill_tokens": 128,
@@ -507,6 +559,10 @@
         "mapped_operand_bytes": 12517523520,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 622329856,
+        "peak_live_mapped_tensor_bytes": 687341568,
+        "peak_live_stage": "prefill.lm_head",
+        "retained_output_bytes": 627191808,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 2468660224,
         "packed_image_plus_largest_tensor_bytes": 2403648512,
         "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
@@ -528,7 +584,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 687341568,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 564,
@@ -548,7 +606,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 682221568,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -556,7 +616,7 @@
       "model": "deepseek_r1_distill_qwen_1_5b",
       "case": "long_context",
       "trace": "deepseek_r1_distill_qwen_1_5b-long_context.json",
-      "trace_sha256": "8979cb006ad449ed6b312f8def902886003df8bc316a91a2e83d150b89b11154",
+      "trace_sha256": "5e379414f2deb45015729944ca8fcdc72fa841e7de5d5652a4f8ca8179298287",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1024,
@@ -581,6 +641,10 @@
         "mapped_operand_bytes": 12438033928,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 622329856,
+        "peak_live_mapped_tensor_bytes": 687341568,
+        "peak_live_stage": "prefill.lm_head",
+        "retained_output_bytes": 622937600,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 2468660224,
         "packed_image_plus_largest_tensor_bytes": 2403648512,
         "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
@@ -602,7 +666,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 687341568,
+          "peak_live_stage": "prefill.lm_head"
         },
         "decode0": {
           "stages": 564,
@@ -622,7 +688,9 @@
             "gated_activation": 28
           },
           "unique_packed_parameter_count": 339,
-          "unique_packed_parameter_footprint_bytes": 1781318656
+          "unique_packed_parameter_footprint_bytes": 1781318656,
+          "peak_live_mapped_tensor_bytes": 682114048,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -630,7 +698,7 @@
       "model": "gemma_2_2b_it",
       "case": "fixed_handoff_shape",
       "trace": "gemma_2_2b_it-fixed_handoff_shape.json",
-      "trace_sha256": "3d44a3eeaf32a8d590f6f9746e139a34832c510044632345fa7630256198cd38",
+      "trace_sha256": "52231ef6d4cbec181ae16f15441f39ece4eec0568aa16c3c31154b86d247ddc6",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 2,
@@ -655,6 +723,10 @@
         "mapped_operand_bytes": 71204888,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 2048000,
+        "peak_live_mapped_tensor_bytes": 5120000,
+        "peak_live_stage": "decode1.logit_softcap",
+        "retained_output_bytes": 4096000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 2024633344,
         "packed_image_plus_largest_tensor_bytes": 2021561344,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -676,7 +748,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 4521984,
+          "peak_live_stage": "prefill.logit_softcap"
         },
         "decode0": {
           "stages": 499,
@@ -696,7 +770,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 4734976,
+          "peak_live_stage": "decode0.logit_softcap"
         },
         "decode1": {
           "stages": 499,
@@ -716,7 +792,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 5120000,
+          "peak_live_stage": "decode1.logit_softcap"
         }
       }
     },
@@ -724,7 +802,7 @@
       "model": "gemma_2_2b_it",
       "case": "medium_context",
       "trace": "gemma_2_2b_it-medium_context.json",
-      "trace_sha256": "12cb43fc0b859da02a81764a466cb720ee440099aa498bcf5892197dea43e1fc",
+      "trace_sha256": "5be199125fd5926f2732ded218fd94a66ef7d0e1f0701a8902ca3cbc544ccd31",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 128,
@@ -749,6 +827,10 @@
         "mapped_operand_bytes": 2307111432,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 131072000,
+        "peak_live_mapped_tensor_bytes": 289406976,
+        "peak_live_stage": "prefill.logit_softcap",
+        "retained_output_bytes": 132096000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 2308920320,
         "packed_image_plus_largest_tensor_bytes": 2150585344,
         "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
@@ -770,7 +852,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 289406976,
+          "peak_live_stage": "prefill.logit_softcap"
         },
         "decode0": {
           "stages": 499,
@@ -790,7 +874,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 158888960,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -798,7 +884,7 @@
       "model": "gemma_2_2b_it",
       "case": "high_batch",
       "trace": "gemma_2_2b_it-high_batch.json",
-      "trace_sha256": "74697f8a84c96617a5fcab6921853918684e4ef72e5b434877f58dcf7c20b999",
+      "trace_sha256": "52e0d523eb767ad7babc4efb7175b4c419d99148dbb2e605bef3a2cba64e4949",
       "scenario": {
         "batch": 8,
         "prefill_tokens": 128,
@@ -823,6 +909,10 @@
         "mapped_operand_bytes": 18456891456,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 1048576000,
+        "peak_live_mapped_tensor_bytes": 2315255808,
+        "peak_live_stage": "prefill.logit_softcap",
+        "retained_output_bytes": 1056768000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 4334769152,
         "packed_image_plus_largest_tensor_bytes": 3068089344,
         "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
@@ -844,7 +934,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 2315255808,
+          "peak_live_stage": "prefill.logit_softcap"
         },
         "decode0": {
           "stages": 499,
@@ -864,7 +956,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 1271111680,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -872,7 +966,7 @@
       "model": "gemma_2_2b_it",
       "case": "long_context",
       "trace": "gemma_2_2b_it-long_context.json",
-      "trace_sha256": "e0a00515231f4741daa22b056cd2ba5aebaeef18799dc2205a6c2d131daf25f6",
+      "trace_sha256": "4e5b8c9e679acf7717cb143f56a32d045e71cd486a575404715ec0fe032caf05",
       "scenario": {
         "batch": 1,
         "prefill_tokens": 1024,
@@ -897,6 +991,10 @@
         "mapped_operand_bytes": 18343249928,
         "largest_mapped_tensor": "prefill.lm_head",
         "largest_mapped_tensor_bytes": 1048576000,
+        "peak_live_mapped_tensor_bytes": 2315255808,
+        "peak_live_stage": "prefill.logit_softcap",
+        "retained_output_bytes": 1049600000,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 4334769152,
         "packed_image_plus_largest_tensor_bytes": 3068089344,
         "packed_image_plus_largest_tensor_exceeds_2gib": true
       },
@@ -918,7 +1016,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 2315255808,
+          "peak_live_stage": "prefill.logit_softcap"
         },
         "decode0": {
           "stages": 499,
@@ -938,7 +1038,9 @@
             "softcap": 1
           },
           "unique_packed_parameter_count": 289,
-          "unique_packed_parameter_footprint_bytes": 2019513344
+          "unique_packed_parameter_footprint_bytes": 2019513344,
+          "peak_live_mapped_tensor_bytes": 1270903808,
+          "peak_live_stage": "decode0.layer00.k_cache"
         }
       }
     },
@@ -946,7 +1048,7 @@
       "model": "smolvla_base",
       "case": "one_action_queue_refill",
       "trace": "smolvla_base-one_action_queue_refill.json",
-      "trace_sha256": "06030732df8d3a6c00dd0a097aa62aa43e19c14a56295761cef6b069e3fb5bb5",
+      "trace_sha256": "b3b3ef39d75d24d206e8f8017836d1915283ef3dab62564ac3111f43050f6e07",
       "scenario": {
         "batch": 1,
         "prefill_tokens": null,
@@ -971,6 +1073,10 @@
         "mapped_operand_bytes": 8596728664,
         "largest_mapped_tensor": "camera0.vision.layer00.fc1.linear",
         "largest_mapped_tensor_bytes": 12582912,
+        "peak_live_mapped_tensor_bytes": 34609932,
+        "peak_live_stage": "camera0.vision.layer00.fc1",
+        "retained_output_bytes": 6400,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1645559436,
         "packed_image_plus_largest_tensor_bytes": 1623532416,
         "packed_image_plus_largest_tensor_exceeds_2gib": false
       },
@@ -1002,7 +1108,9 @@
             "gated_activation": 16
           },
           "unique_packed_parameter_count": 346,
-          "unique_packed_parameter_footprint_bytes": 1211552256
+          "unique_packed_parameter_footprint_bytes": 1211552256,
+          "peak_live_mapped_tensor_bytes": 34609932,
+          "peak_live_stage": "camera0.vision.layer00.fc1"
         },
         "denoise0": {
           "stages": 276,
@@ -1032,7 +1140,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise0.expert00.activation"
         },
         "denoise1": {
           "stages": 276,
@@ -1062,7 +1172,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise1.expert00.activation"
         },
         "denoise2": {
           "stages": 276,
@@ -1092,7 +1204,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise2.expert00.activation"
         },
         "denoise3": {
           "stages": 276,
@@ -1122,7 +1236,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise3.expert00.activation"
         },
         "denoise4": {
           "stages": 276,
@@ -1152,7 +1268,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise4.expert00.activation"
         },
         "denoise5": {
           "stages": 276,
@@ -1182,7 +1300,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise5.expert00.activation"
         },
         "denoise6": {
           "stages": 276,
@@ -1212,7 +1332,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise6.expert00.activation"
         },
         "denoise7": {
           "stages": 276,
@@ -1242,7 +1364,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise7.expert00.activation"
         },
         "denoise8": {
           "stages": 276,
@@ -1272,7 +1396,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 11310124,
+          "peak_live_stage": "denoise8.expert00.activation"
         },
         "denoise9": {
           "stages": 276,
@@ -1302,7 +1428,9 @@
             "euler_step": 1
           },
           "unique_packed_parameter_count": 153,
-          "unique_packed_parameter_footprint_bytes": 399397248
+          "unique_packed_parameter_footprint_bytes": 399397248,
+          "peak_live_mapped_tensor_bytes": 10772840,
+          "peak_live_stage": "denoise9.expert00.k_append"
         }
       }
     }
