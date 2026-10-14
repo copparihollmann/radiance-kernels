@@ -1,0 +1,20 @@
+{
+  "schema": "radiance.nemotron-source-audit.v1",
+  "status": "static_source_contract_only",
+  "model": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+  "revision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+  "modeling_url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/resolve/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/modeling_nemotron_h.py",
+  "modeling_sha256": "ea982af0b805f181573f919ecb001d5bbc0153459923cf4b2f1ccae194e415a4",
+  "config_sha256": "fde9241f66cd414458df444a80eb535f53aef2b4b240a91f092e651fa6f27219",
+  "attention_block_mixer_call_line": 778,
+  "attention_block_mixer_call_keywords": [
+    "cache_position"
+  ],
+  "attention_mixer_accepts_past_key_value": true,
+  "attention_block_passes_cache": false,
+  "attention_block_passes_mask": false,
+  "first_non_mamba_layer": 1,
+  "first_attention_layer": 12,
+  "sequence_length_cache_selector_includes_mlp_layers": true,
+  "conclusion": "The pinned attention block call omits past_key_value and attention_mask. The cache's default sequence selector can choose an MLP-only layer before the first attention layer. This identifies source-level handoff gaps; it does not execute the checkpoint."
+}

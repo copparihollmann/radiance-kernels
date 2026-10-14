@@ -385,6 +385,20 @@ python3 kernels/evaluation/llm/stitch.py --model nemotron3_nano_4b \
   --out kernels/evaluation/llm/nemotron3-nano-4b-graph.json
 ```
 
+[`audit_nemotron_source.py`](audit_nemotron_source.py) checks the exact
+revision-pinned modeling file by SHA-256 and Python syntax tree. The
+[saved audit](nemotron-source-audit.json) records that the attention block's
+mixer call passes only `cache_position`, although its attention mixer accepts
+`past_key_value` and `attention_mask`. It also records that the hybrid cache's
+default sequence-length selector includes MLP-only layers: the first such
+layer is 1, before the first attention layer at 12. This is a source contract
+finding, not a run of the pretrained checkpoint. It explains why the graph's
+intended cached-attention behavior cannot yet be claimed equivalent to the
+pinned implementation. Reproduce with
+`python3 kernels/evaluation/llm/audit_nemotron_source.py --out
+kernels/evaluation/llm/nemotron-source-audit.json`; the script fetches only
+the pinned 79 KB modeling file into memory.
+
 ### OLMo 3 local/global attention control
 
 [`verify_olmo3_reduced.py`](verify_olmo3_reduced.py) executes the emitted
