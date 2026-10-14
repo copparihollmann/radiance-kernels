@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "spectral.hpp"
+#include "pipeline_math.hpp"
 
 namespace spectformer {
 
@@ -96,7 +97,7 @@ inline void split_attention(const SF_GLOBAL float* q, const SF_GLOBAL float* kv,
     }
     float denominator = 0.0f;
     for (uint32_t key = 0; key < tokens; ++key) {
-      scores[key] = __builtin_expf(scores[key] - maximum);
+      scores[key] = model_chain::exponential(scores[key] - maximum);
       denominator += scores[key];
     }
     for (uint32_t d = 0; d < head_width; ++d) {

@@ -22,6 +22,7 @@ class SpectralMathTest(unittest.TestCase):
         library = Path(cls.temporary.name) / "spectral_test.so"
         source.write_text('''
 #include "spectral.hpp"
+#include "hierarchical_ops.hpp"
 extern "C" void run_spectral(const float* input, const float* filter,
                               const float* cos_h, const float* sin_h,
                               const float* cos_w, const float* sin_w,
@@ -54,6 +55,17 @@ extern "C" void run_attention(const float* qkv, float* output,
                                 heads, tid, threads);
   delete[] scratch;
 }
+extern "C" void run_split_attention(const float* q, const float* kv,
+                                      float* output, unsigned tokens,
+                                      unsigned channels, unsigned heads,
+                                      unsigned queries) {
+  const unsigned threads = 4;
+  float* scratch = new float[threads * tokens];
+  for (unsigned tid = 0; tid < threads; ++tid)
+    spectformer::split_attention(q, kv, output, scratch, tokens, channels,
+                                  heads, queries, tid, threads);
+  delete[] scratch;
+}
 ''')
         subprocess.run(["g++", "-O2", "-shared", "-fPIC", "-I", str(HERE),
                         "-I", str(HERE.parent / "model_chain"),
@@ -64,6 +76,9 @@ extern "C" void run_attention(const float* qkv, float* output,
         cls.attention = ctypes.CDLL(str(library)).run_attention
         cls.attention.argtypes = [ctypes.POINTER(ctypes.c_float)] * 2 + [
             ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
+        cls.split_attention = ctypes.CDLL(str(library)).run_split_attention
+        cls.split_attention.argtypes = [ctypes.POINTER(ctypes.c_float)] * 3 + [
+            ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
 
     @classmethod
     def tearDownClass(cls):
@@ -112,6 +127,30 @@ extern "C" void run_attention(const float* qkv, float* output,
         ptr = ctypes.POINTER(ctypes.c_float)
         self.attention(qkv.ctypes.data_as(ptr), actual.ctypes.data_as(ptr),
                        tokens, channels, heads)
+        np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=2e-5)
+
+    def test_split_attention_softmax_matches_numpy(self):
+        rng = np.random.default_rng(7428)
+        tokens, queries, channels, heads = 7, 3, 8, 2
+        q = (rng.normal(size=(queries, channels)) * 2).astype(np.float32)
+        kv = (rng.normal(size=(tokens, 2, channels)) * 2).astype(np.float32)
+        expected = np.empty((queries, channels), dtype=np.float32)
+        width = channels // heads
+        for head in range(heads):
+            span = slice(head * width, (head + 1) * width)
+            qh = q[:, span].astype(np.float64)
+            kh = kv[:, 0, span].astype(np.float64)
+            vh = kv[:, 1, span].astype(np.float64)
+            scores = qh @ kh.T / np.sqrt(width)
+            scores -= scores.max(axis=1, keepdims=True)
+            weights = np.exp(scores)
+            weights /= weights.sum(axis=1, keepdims=True)
+            expected[:, span] = weights @ vh
+        actual = np.empty_like(expected)
+        ptr = ctypes.POINTER(ctypes.c_float)
+        self.split_attention(q.ctypes.data_as(ptr), kv.ctypes.data_as(ptr),
+                             actual.ctypes.data_as(ptr), tokens, channels,
+                             heads, queries)
         np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=2e-5)
 
 
