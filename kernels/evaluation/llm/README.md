@@ -317,9 +317,10 @@ Nemotron `M`, `*`, and `-` symbols respectively denote Mamba2, attention,
 and MLP-only blocks in its [official pinned configuration code](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/configuration_nemotron_h.py).
 Qwen3-MoE uses the config's expert count, top-k, sparse step, and explicit
 dense-FFN exceptions according to its [decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py);
-the pinned model has an MoE FFN in every layer. A device schedule still needs
-the operations within each block, checkpoints, token inputs, and a reference
-run before any model-level performance comparison.
+the pinned model has an MoE FFN in every layer. OLMo now has the ordered
+software schedule and reduced reference control below. The remaining
+architecture candidates still need the operations within each block,
+checkpoints, token inputs, and reference runs before model-level comparisons.
 
 ### OLMo 3 local/global attention control
 
@@ -341,6 +342,25 @@ YaRN inverse frequencies are also checked against upstream. Reproduce with
 `python3 kernels/evaluation/llm/verify_olmo3_reduced.py` in the pinned
 Transformers environment. This is a reduced operation-order check; a pinned
 checkpoint, full-size Radiance executable, and performance run remain open.
+
+`stitch.py --model olmo3_7b` also emits a pinned, full-dimension tensor
+dependency graph. The [saved 4,097-token prefill plus two-step greedy
+schedule](olmo3-7b-graph.json) has all 32 layers in their 3-local/1-full
+order and 2,123 stages. The input length crosses the 4,096-token local
+window. Each phase records Q/K normalization across the complete projection
+**before** head reshaping, YaRN rotation, layer-specific causal masks, and
+the K/V dependency carried into the next phase. It retains the full logical
+KV history and applies the local window at attention; this does not prescribe
+a physical cache allocation. The output is a shape and dependency plan:
+965 stages have no named device primitive, and even the named primitives
+are starting points rather than connected, shape-compatible implementations.
+It has no checkpoint tensors or device latency. Regenerate it with:
+
+```sh
+python3 kernels/evaluation/llm/stitch.py --model olmo3_7b \
+  --batch 1 --prefill 4097 --decode-steps 2 --generation greedy --compact \
+  --out kernels/evaluation/llm/olmo3-7b-graph.json
+```
 
 ### Qwen3-0.6B graph control
 

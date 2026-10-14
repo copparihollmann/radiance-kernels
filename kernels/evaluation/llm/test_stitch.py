@@ -73,6 +73,52 @@ class ModelStitchTest(unittest.TestCase):
         self.assertEqual(windows, [4096 if i % 2 == 0 else None for i in range(26)])
         self.assertEqual(gemma.stages[-1]["op"], "softcap")
 
+    def test_olmo3_preserves_projection_norms_and_local_global_order(self):
+        spec = model_specs()["olmo3_7b"]
+        self.assertEqual(spec["num_hidden_layers"], 32)
+        self.assertEqual(spec["layer_types"],
+                         ["sliding_attention", "sliding_attention",
+                          "sliding_attention", "full_attention"] * 8)
+        graph = build("olmo3_7b", prefill=4, decode_steps=2,
+                      generation="greedy")
+        stages = {stage["id"]: stage for stage in graph.stages}
+        self.assertEqual(len(graph.outputs), 3)
+        self.assertEqual(graph.execution_schedule["entrypoint"], "causal_generate")
+        for phase, tokens, past in (("prefill", 4, 0),
+                                    ("decode0", 1, 4), ("decode1", 1, 5)):
+            attention = [stage for stage in graph.stages
+                         if stage["id"].startswith(phase + ".layer")
+                         and stage["op"] == "causal_gqa"]
+            self.assertEqual([stage["attrs"]["window"] for stage in attention],
+                             [4096, 4096, 4096, None] * 8)
+            for layer in (0, 3, 31):
+                base = f"{phase}.layer{layer:02d}"
+                self.assertEqual(stages[f"{base}.q_norm"]["reads"],
+                                 [f"{base}.q_proj"])
+                self.assertEqual(stages[f"{base}.q_heads"]["reads"],
+                                 [f"{base}.q_norm"])
+                self.assertEqual(stages[f"{base}.q_rope"]["reads"],
+                                 [f"{base}.q_heads"])
+                self.assertEqual(graph.tensors[f"{base}.q_norm"]["shape"],
+                                 [1, tokens, 4096])
+                self.assertEqual(stages[f"{base}.post_attn_norm"]["reads"],
+                                 [f"{base}.o_proj"])
+                self.assertEqual(stages[f"{base}.gate_proj"]["reads"],
+                                 [f"{base}.attn_residual"])
+                self.assertEqual(stages[f"{base}.post_ffn_norm"]["reads"],
+                                 [f"{base}.down_proj"])
+                self.assertEqual(stages[f"{base}.attention"]["attrs"]["query_start"],
+                                 past)
+                self.assertEqual(graph.tensors[f"{base}.k_cache"]["shape"],
+                                 [1, past + tokens, 32, 128])
+        self.assertEqual(stages["decode0.layer00.k_cache"]["reads"],
+                         ["prefill.layer00.k_cache", "decode0.layer00.k_rope"])
+        self.assertEqual(stages["decode1.token_ids"]["reads"],
+                         ["decode0.lm_head"])
+        self.assertEqual(stages["prefill.lm_head"]["attrs"]["parameter"],
+                         "lm_head")
+        self.assertFalse(graph.report()["device_execution"])
+
     def test_qwen3_order_head_norm_rope_and_tied_head(self):
         spec = model_specs()["qwen3_0_6b"]
         graph = build("qwen3_0_6b", prefill=3, decode_steps=1)

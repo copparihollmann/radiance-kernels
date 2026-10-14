@@ -23,8 +23,8 @@ SPECS = HERE / "pr1-models.json"
 def model_specs() -> dict:
     specs = json.loads(SPECS.read_text())
     with (HERE / "inputs/sources.csv").open(newline="") as stream:
-        source = next(row for row in csv.DictReader(stream)
-                      if row["case"] == "qwen3-0.6b")
+        sources = {row["case"]: row for row in csv.DictReader(stream)}
+    source = sources["qwen3-0.6b"]
     raw = (HERE / "inputs" / source["config_file"]).read_bytes()
     if hashlib.sha256(raw).hexdigest() != source["config_sha256"]:
         raise ValueError("pinned Qwen3 config changed")
@@ -44,6 +44,33 @@ def model_specs() -> dict:
             "vocab_size", "rms_norm_eps", "rope_theta")},
         "activation": config["hidden_act"], "qkv_bias": config["attention_bias"],
         "tied_lm_head": True,
+    }
+    source = sources["olmo3-7b"]
+    raw = (HERE / "inputs" / source["config_file"]).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != source["config_sha256"]:
+        raise ValueError("pinned OLMo 3 config changed")
+    config = json.loads(raw)
+    if (config["model_type"] != "olmo3" or config["attention_bias"]
+            or config["tie_word_embeddings"] or config["hidden_act"] != "silu"
+            or len(config["layer_types"]) != config["num_hidden_layers"]
+            or set(config["layer_types"]) != {"sliding_attention", "full_attention"}
+            or config["hidden_size"] % config["num_attention_heads"]
+            or config["num_attention_heads"] % config["num_key_value_heads"]
+            or config["rope_scaling"]["rope_type"] != "yarn"):
+        raise ValueError("unsupported OLMo 3 decoder configuration")
+    specs["olmo3_7b"] = {
+        "name": source["model"], "family": "olmo3", "source": source["source_url"],
+        "source_sha256": source["config_sha256"],
+        "checkpoint_revision": source["revision"],
+        **{key: config[key] for key in (
+            "hidden_size", "intermediate_size", "num_hidden_layers",
+            "num_attention_heads", "num_key_value_heads", "vocab_size",
+            "rms_norm_eps", "rope_theta", "sliding_window", "layer_types",
+            "rope_scaling")},
+        "head_dim": config["hidden_size"] // config["num_attention_heads"],
+        "activation": config["hidden_act"], "qkv_bias": False,
+        "tied_lm_head": False,
+        "checkpoint_use_cache_default": config["use_cache"],
     }
     return specs
 
@@ -97,7 +124,7 @@ class Graph:
             "execution_schedule": self.execution_schedule,
             "tensors": self.tensors, "stages": self.stages,
         }
-        if self.spec["family"] == "qwen3":
+        if self.spec["family"] in {"qwen3", "olmo3"}:
             result["source_sha256"] = self.spec["source_sha256"]
         return result
 
@@ -105,6 +132,8 @@ class Graph:
 def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
                   tokens: int, past: int, caches: dict[int, tuple[str, str]],
                   token_ids: str | None = None) -> tuple[str, dict]:
+    if spec["family"] == "olmo3":
+        return _olmo3_pass(graph, spec, phase, batch, tokens, past, caches, token_ids)
     h, f = spec["hidden_size"], spec["intermediate_size"]
     qh, kvh, d = (spec[key] for key in
                   ("num_attention_heads", "num_key_value_heads", "head_dim"))
@@ -226,6 +255,105 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
     return logits, next_caches
 
 
+def _olmo3_pass(graph: Graph, spec: dict, phase: str, batch: int,
+                tokens: int, past: int, caches: dict[int, tuple[str, str]],
+                token_ids: str | None = None) -> tuple[str, dict]:
+    """Keep OLMo's projection-wide Q/K norms and ordered local/full masks."""
+    h, f = spec["hidden_size"], spec["intermediate_size"]
+    qh, kvh, d = (spec[key] for key in
+                  ("num_attention_heads", "num_key_value_heads", "head_dim"))
+    ids = token_ids or graph.input(f"{phase}.token_ids", (batch, tokens), "int32")
+    if graph.tensors[ids]["shape"] != [batch, tokens]:
+        raise ValueError(f"{phase}: invalid token input shape")
+    hidden = graph.add(f"{phase}.embedding", "embedding", (ids,),
+                       (batch, tokens, h), attrs={
+                           "parameter": "embed_tokens", "vocab_size": spec["vocab_size"]})
+    next_caches = {}
+
+    def linear(name: str, source: str, shape: tuple[int, ...], parameter: str) -> str:
+        in_width = graph.tensors[source]["shape"][-1]
+        out_width = 1
+        for width in shape[2:]:
+            out_width *= width
+        return graph.add(name, "linear", (source,), shape, "gemm_mxgemmini",
+                         {"parameter": parameter, "weight_shape": [in_width, out_width],
+                          "macs": batch * tokens * in_width * out_width})
+
+    def norm(name: str, source: str, parameter: str,
+             *, projection_wide: bool = False) -> str:
+        shape = tuple(graph.tensors[source]["shape"])
+        return graph.add(name, "rmsnorm", (source,), shape,
+                         None if projection_wide else "rmsnorm_qkv_fused",
+                         {"parameter": parameter, "epsilon": spec["rms_norm_eps"],
+                          "gemma_weight_offset": False,
+                          "norm_axis": "complete_projection" if projection_wide
+                          else "hidden_width"})
+
+    for layer, attention_type in enumerate(spec["layer_types"]):
+        base = f"{phase}.layer{layer:02d}"
+        q = linear(f"{base}.q_proj", hidden, (batch, tokens, qh * d),
+                   f"layers.{layer}.q_proj")
+        k = linear(f"{base}.k_proj", hidden, (batch, tokens, kvh * d),
+                   f"layers.{layer}.k_proj")
+        v = linear(f"{base}.v_proj", hidden, (batch, tokens, kvh * d),
+                   f"layers.{layer}.v_proj")
+        q = norm(f"{base}.q_norm", q, f"layers.{layer}.q_norm",
+                 projection_wide=True)
+        k = norm(f"{base}.k_norm", k, f"layers.{layer}.k_norm",
+                 projection_wide=True)
+        q = graph.add(f"{base}.q_heads", "reshape_heads", (q,),
+                      (batch, tokens, qh, d), attrs={"heads": qh, "head_dim": d})
+        k = graph.add(f"{base}.k_heads", "reshape_heads", (k,),
+                      (batch, tokens, kvh, d), attrs={"heads": kvh, "head_dim": d})
+        v = graph.add(f"{base}.v_heads", "reshape_heads", (v,),
+                      (batch, tokens, kvh, d), attrs={"heads": kvh, "head_dim": d})
+        rope = {"position_start": past, "theta": spec["rope_theta"],
+                "scaling": spec["rope_scaling"]}
+        q = graph.add(f"{base}.q_rope", "rope_yarn", (q,),
+                      (batch, tokens, qh, d), attrs=rope)
+        k = graph.add(f"{base}.k_rope", "rope_yarn", (k,),
+                      (batch, tokens, kvh, d), attrs=rope)
+        old_k, old_v = caches.get(layer, (None, None))
+        k_cache = graph.add(f"{base}.k_cache", "kv_append",
+                            (k,) if old_k is None else (old_k, k),
+                            (batch, past + tokens, kvh, d))
+        v_cache = graph.add(f"{base}.v_cache", "kv_append",
+                            (v,) if old_v is None else (old_v, v),
+                            (batch, past + tokens, kvh, d))
+        next_caches[layer] = (k_cache, v_cache)
+        attention = graph.add(f"{base}.attention", "causal_gqa",
+                              (q, k_cache, v_cache), (batch, tokens, qh * d),
+                              attrs={"query_start": past, "q_heads": qh,
+                                     "kv_heads": kvh, "head_dim": d,
+                                     "attention_type": attention_type,
+                                     "window": spec["sliding_window"]
+                                     if attention_type == "sliding_attention" else None,
+                                     "softcap": None})
+        attn_out = linear(f"{base}.o_proj", attention, (batch, tokens, h),
+                          f"layers.{layer}.o_proj")
+        attn_out = norm(f"{base}.post_attn_norm", attn_out,
+                        f"layers.{layer}.post_attn_norm")
+        after_attn = graph.add(f"{base}.attn_residual", "add",
+                               (hidden, attn_out), (batch, tokens, h), "vecadd")
+        gate = linear(f"{base}.gate_proj", after_attn, (batch, tokens, f),
+                      f"layers.{layer}.gate_proj")
+        up = linear(f"{base}.up_proj", after_attn, (batch, tokens, f),
+                    f"layers.{layer}.up_proj")
+        activation = graph.add(f"{base}.activation", "gated_activation",
+                               (gate, up), (batch, tokens, f), "swiglu",
+                               {"function": "silu"})
+        down = linear(f"{base}.down_proj", activation, (batch, tokens, h),
+                      f"layers.{layer}.down_proj")
+        down = norm(f"{base}.post_ffn_norm", down,
+                    f"layers.{layer}.post_ffn_norm")
+        hidden = graph.add(f"{base}.ffn_residual", "add",
+                           (after_attn, down), (batch, tokens, h), "vecadd")
+    hidden = norm(f"{phase}.final_norm", hidden, "final_norm")
+    logits = linear(f"{phase}.lm_head", hidden,
+                    (batch, tokens, spec["vocab_size"]), "lm_head")
+    return logits, next_caches
+
+
 def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
                   decode_steps: int, generation: str = "teacher_forced") -> Graph:
     if min(batch, prefill) <= 0 or decode_steps < 0:
@@ -240,12 +368,16 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
     graph.generation = generation
     logits, caches = _decoder_pass(graph, spec, "prefill", batch, prefill, 0, {})
     graph.outputs.append(logits)
-    if spec["family"] == "qwen3":
+    if spec["family"] in {"qwen3", "olmo3"}:
         graph.execution_schedule = {
             "entrypoint": "causal_generate",
             "prefill_stages": [stage["id"] for stage in graph.stages],
             "decode_loop": [],
-            "cache_policy": "append each layer's rotated K and projected V before its attention",
+            "cache_policy": (
+                "append rotated K and projected V; retain logical KV and apply "
+                "each layer's local or full mask at attention"
+                if spec["family"] == "olmo3" else
+                "append each layer's rotated K and projected V before its attention"),
         }
     for step in range(decode_steps):
         previous_caches = caches
