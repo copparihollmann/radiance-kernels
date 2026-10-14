@@ -262,7 +262,7 @@ absolute error and selects token `16` in both paths. Projecting the first
 hidden row instead differs by `12.14` at maximum; a deliberately corrupted
 packed-table hash is rejected. This checks the numerical basis for the
 [last-logit graph mode](../evaluation/llm/profiles/qwen3-prefill-last-logit.json)
-without executing that optimized graph on device. Reproduce with:
+for the full-width checkpoint. Reproduce with:
 
 ```sh
 OPENBLAS_NUM_THREADS=1 python3 kernels/model_chain/verify_qwen3_last_logit.py \
@@ -273,8 +273,53 @@ OPENBLAS_NUM_THREADS=1 python3 kernels/model_chain/verify_qwen3_last_logit.py \
 
 The [standalone device selection check](../select_last_token/README.md) also
 copies the saved full-width final hidden row on Radiance and matches all
-1,024 values exactly in Cyclotron. The optimized full-model ELF remains to
-be built and checked.
+1,024 values exactly in Cyclotron. A connected, reduced-width check now
+compiles the complete two-layer greedy graph in both full-prefill-logit and
+last-prefill-logit modes. The [matched baseline](evaluation/qwen3-prefill-all-reduced-functional.json)
+passes 125 stages in 250,062 Cyclotron functional cycles; the
+[last-token build](evaluation/qwen3-prefill-last-reduced-functional.json)
+passes 126 stages in 246,015 cycles. Their
+[device-buffer comparison](evaluation/qwen3-prefill-last-device-comparison.json)
+reruns both ELFs and reads back the executed buffers: the selected final
+hidden row, final prefill logits, and both decode logit rows match exactly
+across 224 FP32 values. Both paths greedily select `[48, 51]`. Selecting the
+first prefill row instead changes the logits by `0.598` at maximum. The
+build and verification receipts for both paths are under `evaluation/`. The
+4,047-cycle difference is a Cyclotron functional cycle difference, not a
+hardware latency or utilization measurement. These builds use reduced
+synthetic FP32 weights; the full-width checkpoint version of this optimized
+ELF remains to be built and checked.
+
+Reproduce the reduced comparison with `TMPDIR` and the Muon toolchain set
+for your machine:
+
+```sh
+for mode in all last; do
+  RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+    --model qwen3_0_6b --layers 2 --prefill 3 --decode-steps 2 \
+    --generation greedy --prefill-logits "$mode" --token-ids 1 2 3 \
+    --device-check-all-stages --stages-per-object 20 \
+    --out-root "$TMPDIR/qwen3-${mode}-prefill-chain" --verify-native --build
+  python3 kernels/model_chain/run_functional.py --models qwen3_0_6b \
+    --generated-root "$TMPDIR/qwen3-${mode}-prefill-chain" \
+    --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+    --sim-cycles 100000000 --timeout 300 \
+    --out "$TMPDIR/qwen3-${mode}-prefill-chain/functional-results.json"
+  python3 kernels/model_chain/verify_functional.py \
+    --result "$TMPDIR/qwen3-${mode}-prefill-chain/qwen3_0_6b/functional-result.json" \
+    --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+    --config "$TMPDIR/qwen3-${mode}-prefill-chain/cyclotron-config.toml" \
+    --source-config kernels/evaluation/llm/inputs/qwen3-0.6b.json \
+    --out "$TMPDIR/qwen3-${mode}-prefill-chain/qwen3_0_6b/verification.json"
+done
+python3 kernels/model_chain/verify_qwen3_prefill_device.py \
+  --all-root "$TMPDIR/qwen3-all-prefill-chain" \
+  --last-root "$TMPDIR/qwen3-last-prefill-chain" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --nm path/to/llvm-muon/bin/llvm-nm \
+  --out-dir "$TMPDIR/qwen3-prefill-device-compare" \
+  --out "$TMPDIR/qwen3-prefill-device-comparison.json"
+```
 
 The checkpoint file and binary image stay in the local task directory. To
 reproduce the build, use the pinned checkpoint from the linked check and

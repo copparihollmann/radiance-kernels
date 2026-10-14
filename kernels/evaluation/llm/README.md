@@ -298,8 +298,12 @@ and matches the last row of the full logits exactly, including the selected
 token. A separate [full-width checkpoint check](../../model_chain/evaluation/qwen3-prefill-last-logit-check.json)
 streams the packed FP16 tied table and reproduces the saved final prefill
 logit row within `1.43e-5`, with the same top token. These are graph and
-arithmetic checks; the optimized graph still needs reference execution and
-a compiled device check before these savings can be used in a Radiance result.
+arithmetic checks. A
+[connected reduced device comparison](../../model_chain/evaluation/qwen3-prefill-last-device-comparison.json)
+now passes Cyclotron and finds exact equality for the selected prefill row
+and two decode logit rows. The full-dimension checkpoint version still needs
+compilation and device execution before the long-context savings can be
+measured on Radiance.
 The [final-token selection kernel](../../select_last_token/README.md) has
 separately passed Cyclotron on the saved full-width Qwen3 hidden state, with
 exact equality for all 1,024 selected values. Its full-model binding remains

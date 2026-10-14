@@ -98,6 +98,28 @@ class DecoderCompilerTest(unittest.TestCase):
         self.assertIn("linear_f16_tied(", emit_stage(0, head, graph, "weight", "fp16"))
         self.assertIn("linear_f16(", emit_stage(0, projection, graph, "weight", "fp16"))
 
+    def test_qwen3_last_prefill_logit_maps_final_hidden_row(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = generate("qwen3_0_6b", 2, 3, 2, "greedy", root / "last",
+                              device_check_all_stages=True, stages_per_object=20,
+                              token_ids=[1, 2, 3], prefill_logits="last")
+            manifest = json.loads((target / "manifest.json").read_text())
+            self.assertEqual(manifest["prefill_logits_policy"], "last")
+            self.assertEqual(manifest["stages"], 126)
+            self.assertIn("errors=0", verify_native(target))
+            control = generate("qwen3_0_6b", 2, 3, 2, "greedy", root / "all",
+                               device_check_all_stages=True, stages_per_object=20,
+                               token_ids=[1, 2, 3])
+            self.assertEqual(json.loads((control / "manifest.json").read_text())
+                             ["stages"], 125)
+            header = (Path(__file__).parent / "pipeline_select_last.hpp").read_text()
+            self.assertEqual(header.count("tokens - 1"), 1)
+            (target / "pipeline_select_last.hpp").write_text(
+                header.replace("tokens - 1", "0"))
+            with self.assertRaises(subprocess.CalledProcessError):
+                verify_native(target)
+
     def test_qwen3_moe_sparse_stages_join_prefill_and_greedy_decode(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = generate("qwen3_30b_a3b", 2, 3, 2, "greedy",

@@ -69,6 +69,7 @@ def verify(result_path: Path, simulator: Path, config: Path,
          "portable device operations")
     for key, name in (("quantized_ops_sha256", "pipeline_int8.hpp"),
                       ("moe_ops_sha256", "pipeline_moe.hpp"),
+                      ("last_token_ops_sha256", "pipeline_select_last.hpp"),
                       ("tied_embedding_ops_sha256", "pipeline_tied.hpp"),
                       ("fp32_tied_ops_sha256", "pipeline_fp32_tied.hpp"),
                       ("packed_ops_sha256", "pipeline_packed.hpp")):
@@ -78,6 +79,8 @@ def verify(result_path: Path, simulator: Path, config: Path,
          result["numpy_reference_sha256"], "NumPy reference")
     for key, name in (("numpy_moe_graph_reference_sha256", "moe_graph_reference.py"),
                       ("numpy_moe_stage_ops_sha256", "moe_ops.py"),
+                      ("numpy_last_token_graph_reference_sha256",
+                       "last_token_graph_reference.py"),
                       ("graph_builder_sha256", "stitch.py")):
         if result.get(key):
             same(ROOT / "kernels/evaluation/llm" / name, result[key], name)
@@ -85,6 +88,12 @@ def verify(result_path: Path, simulator: Path, config: Path,
             "moe_ops_sha256", "numpy_moe_graph_reference_sha256",
             "numpy_moe_stage_ops_sha256", "graph_builder_sha256")):
         raise ValueError("Qwen3 MoE receipt lacks sparse-stage source hashes")
+    if result.get("prefill_logits_policy") == "last":
+        if manifest.get("prefill_logits_policy") != "last" or any(
+                not result.get(key) for key in
+                ("last_token_ops_sha256",
+                 "numpy_last_token_graph_reference_sha256")):
+            raise ValueError("last-logit receipt lacks its graph or device sources")
     same(ROOT / "kernels/evaluation/llm/pr1-models.json",
          result["model_specs_sha256"], "model specs")
     if source_config is not None:

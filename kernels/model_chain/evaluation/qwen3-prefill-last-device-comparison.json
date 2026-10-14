@@ -1,0 +1,42 @@
+{
+  "schema": "radiance.qwen3-prefill-device-comparison.v1",
+  "status": "passed",
+  "scope": "two-layer reduced synthetic FP32 Qwen3, 3 prefill and 2 greedy decode tokens",
+  "backend": "cyclotron",
+  "checked_float_elements": 224,
+  "float_max_abs_error": {
+    "prefill_final_hidden": 0.0,
+    "prefill_final_logits": 0.0,
+    "decode0_logits": 0.0,
+    "decode1_logits": 0.0
+  },
+  "greedy_token_ids_all_and_last": {
+    "decode0.token_ids": [
+      48,
+      48
+    ],
+    "decode1.token_ids": [
+      51,
+      51
+    ]
+  },
+  "wrong_first_prefill_logit_row_max_abs_delta": 0.597881555557251,
+  "all_logits": {
+    "elf_sha256": "13a8c88459223629145fc3994eacb8264c40266c0ab8eeaccb78718a646621df",
+    "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+    "log_sha256": "f367826e95f4f47129da5b389099bc1ba87fc9ad8c44d64313aec940dac5d693",
+    "gmem_sha256": "9335f77eea4c7e7012e9ffd139b5abbe008b9e91df5e28119248108986d83d0d",
+    "functional_cycles": 250062
+  },
+  "last_logits": {
+    "elf_sha256": "4cd2853feebeeb7331cda0e9f421ab0f545474934190dac5bc6f688285dd04d2",
+    "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+    "log_sha256": "e8ff1a0f191cac812fafa6e673b20a2569bfa1636fc6254b155f5f9bc1432816",
+    "gmem_sha256": "764d1b5823320ed3ea62fb0e9ecc97250f72145a76f9b7a5eac4669036934df5",
+    "functional_cycles": 246015
+  },
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "nm_sha256": "a732b03f1b0ae593f3483deeaa84b533c8cb167751ccd76dde8e15aa2d95a3e3",
+  "rtl_execution": false,
+  "performance_measurement": false
+}

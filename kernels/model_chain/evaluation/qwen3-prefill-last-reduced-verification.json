@@ -1,0 +1,17 @@
+{
+  "schema": "radiance.connected-functional-verification.v1",
+  "status": "passed",
+  "model": "qwen3_0_6b",
+  "layers": 2,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "checked_stages": 126,
+  "cycles_functional": 246015,
+  "weight_image_checked": false,
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "result_sha256": "43612d21f70f4f0cb332d136b2b710f37ea083fe08daaddddf5f13965b30b817",
+  "manifest_sha256": "c867e53525f4aba48d0d7104d342f9003161746ec4839521644a31af5691edde",
+  "elf_sha256": "4cd2853feebeeb7331cda0e9f421ab0f545474934190dac5bc6f688285dd04d2",
+  "log_sha256": "08186a8cf1c331dcdece691f2ac9aa7cebc8ae93a4417519f0ea37f09423b88d"
+}

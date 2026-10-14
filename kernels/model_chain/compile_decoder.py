@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT / "kernels/evaluation/llm"))
 import reference  # noqa: E402
 import stitch  # noqa: E402
 import moe_graph_reference  # noqa: E402
+import last_token_graph_reference  # noqa: E402
 from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
                         SafeTensorWeights, TiedFP16INT8GemmaWeights,
                         TiedINT8INT4GemmaWeights, TiedINT5INT6GemmaWeights)
@@ -186,6 +187,9 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
     elif op == "token_select":
         in_shape = graph.tensors[stage["reads"][0]]["shape"]
         body = f"token_select({ins[0]}, {out}, {batch}, {in_shape[1]}, {in_shape[2]}, tid, tpb)"
+    elif op == "select_last_token":
+        in_shape = graph.tensors[stage["reads"][0]]["shape"]
+        body = f"select_last_token({ins[0]}, {out}, {batch}, {in_shape[1]}, {in_shape[2]}, tid, tpb)"
     elif op == "softmax":
         body = f"moe_softmax({ins[0]}, {out}, {count // shape[-1]}, {shape[-1]}, tid, tpb)"
     elif op == "topk_indices":
@@ -231,7 +235,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              weight_image: Path | None = None,
              stage_limit: int | None = None,
              token_ids: list[int] | None = None,
-             batch_clusters: int = 1) -> Path:
+             batch_clusters: int = 1,
+             prefill_logits: str = "all") -> Path:
     if device_opt not in ("O1", "O2", "O3"):
         raise ValueError(f"unsupported device optimization level: {device_opt}")
     if stages_per_object < 0:
@@ -240,6 +245,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("batch clusters must be one or two")
     if batch_clusters == 2 and device_check_all_stages:
         raise ValueError("two-cluster builds use final and attention/activation checks")
+    if prefill_logits not in ("all", "last"):
+        raise ValueError("prefill logits must be all or last")
     external = checkpoint_dir is not None or weight_image is not None
     if external and (checkpoint_dir is None or weight_image is None):
         raise ValueError("checkpoint directory and weight image are both required")
@@ -267,7 +274,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("layer count exceeds the pinned model")
     spec["num_hidden_layers"] = layers
     graph = stitch.build(model, prefill=prefill, decode_steps=decode,
-                         specs={model: spec}, generation=generation)
+                         specs={model: spec}, generation=generation,
+                         prefill_logits=prefill_logits)
     if stage_limit is not None:
         if not 1 <= stage_limit <= len(graph.stages):
             raise ValueError("stage limit is outside the decoder graph")
@@ -344,15 +352,22 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                 raise ValueError(f"graph has no teacher-forced input {name}")
             inputs[name] = np.asarray([token_ids[prefill + step]],
                                       dtype=np.int32)[None]
-    values = (moe_graph_reference.execute(
-        graph, inputs, retain=tuple(stage["writes"] for stage in graph.stages))
-        if model == "qwen3_30b_a3b" else
-        reference.execute(graph, inputs, weights=provider))
+    def evaluate(weights):
+        if model == "qwen3_30b_a3b":
+            return moe_graph_reference.execute(
+                graph, inputs, retain=tuple(stage["writes"] for stage in graph.stages))
+        if prefill_logits == "last":
+            return last_token_graph_reference.execute(
+                graph, inputs, weights=weights,
+                retain=tuple(stage["writes"] for stage in graph.stages))
+        return reference.execute(graph, inputs, weights=weights)
+
+    values = evaluate(provider)
     quantization_comparison = None
     if external and image_manifest["dtype"] in ("mixed_fp16", "int8_scaled",
                                                  "int8_fp16_tied", "int4_int8_tied",
                                                  "int5_group64_int6_tied"):
-        unquantized = reference.execute(graph, inputs, weights=source_provider)
+        unquantized = evaluate(source_provider)
         quantization_comparison = {}
         for name in graph.outputs:
             actual = values[name].astype(np.float64)
@@ -441,6 +456,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                          parameter_dtype(stage) == "fp32" for stage in graph.stages)
     uses_moe = any(stage["op"] in moe_graph_reference.moe_ops.OPS
                    for stage in graph.stages)
+    uses_select_last = any(stage["op"] == "select_last_token"
+                           for stage in graph.stages)
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage),
@@ -483,6 +500,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
                       "#include <stdint.h>\n#include \"pipeline_math.hpp\"\n"
                       + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
+                      + ("#include \"pipeline_select_last.hpp\"\n"
+                         if uses_select_last else "")
                       + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
                       + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
                       + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -624,6 +643,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + ("#include \"model_cluster_id.h\"\n" if batch_clusters == 2 else "") +
            "#include \"pipeline_math.hpp\"\n"
            + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
+           + ("#include \"pipeline_select_last.hpp\"\n"
+              if uses_select_last else "")
            + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
            + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
            + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -659,6 +680,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     native = ("#include <stdint.h>\n#include <stdio.h>\n"
               "#include \"pipeline_math.hpp\"\n"
               + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
+              + ("#include \"pipeline_select_last.hpp\"\n"
+                 if uses_select_last else "")
               + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
               + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
               + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -691,6 +714,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         f"include {ROOT / 'kernels/common.mk'}\n"
         f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}"
         + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
+        + (f" {HERE / 'pipeline_select_last.hpp'}" if uses_select_last else "")
         + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
         + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
         + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
@@ -700,6 +724,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
            + f": {HERE / 'pipeline_math.hpp'}"
            + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
+           + (f" {HERE / 'pipeline_select_last.hpp'}" if uses_select_last else "")
            + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
            + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
            + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
@@ -737,6 +762,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "upstream_execution_equivalent": False,
         "buffers_cache_line_padded": True,
         "prefill_tokens": prefill, "decode_steps": decode,
+        "prefill_logits_policy": prefill_logits,
         "input_token_ids": {name: tensor.ravel().tolist()
                             for name, tensor in sorted(inputs.items())},
         "token_sequence_explicit": token_ids is not None,
@@ -832,6 +858,8 @@ def main() -> None:
     parser.add_argument("--decode-steps", type=int, default=1)
     parser.add_argument("--generation", choices=("teacher_forced", "greedy"),
                         default="teacher_forced")
+    parser.add_argument("--prefill-logits", choices=("all", "last"), default="all",
+                        help="project only the final prefill token in greedy Qwen3")
     parser.add_argument("--out-root", type=Path, default=HERE / "generated")
     parser.add_argument("--device-check-all-stages", action="store_true")
     parser.add_argument("--device-opt", choices=("O1", "O2", "O3"), default="O3")
@@ -855,7 +883,7 @@ def main() -> None:
                       args.device_check_all_stages, args.device_opt,
                       args.stages_per_object, args.checkpoint_dir,
                       args.weight_image, args.stage_limit, args.token_ids,
-                      args.batch_clusters)
+                      args.batch_clusters, args.prefill_logits)
     if args.verify_native and args.weight_image:
         parser.error("native C++ checking is not supported for external weight images")
     if args.verify_native or (args.build and args.weight_image is None):
