@@ -1,0 +1,50 @@
+{
+  "schema": "radiance.smolvla-all-cores-prefix.v1",
+  "status": "passed",
+  "scope": "exact-input first two vision stages against pinned PyTorch values",
+  "checked_output_elements_per_case": 786432,
+  "stage1_single_core_four_warp_cycles": 69556543,
+  "stage1_two_core_four_warp_cycles": 53195240,
+  "stage1_functional_cycle_reduction_percent": 23.522306161765407,
+  "stage2_two_core_four_warp_cycles": 53481701,
+  "stage2_golden_generator_sha256": "647eab6fe40b654510aa4544f96ea6afa2c6fa06dbc3940cafb81ca3390708ea",
+  "stage2_golden_recomputed_identically": true,
+  "cache_drain_header_sha256": "aaf1ebe502b9a31663f9918736629ccf2e20d181d6f16dfb6ea859f0aa7c307c",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "cases": [
+    {
+      "stages": 1,
+      "status": "passed",
+      "cycles_functional": 53195240,
+      "tohost": 0,
+      "elf_sha256": "84032287dadb7807c4d400dd38c1f101ce971d3eaee454ef5fb6ef587c167563",
+      "manifest_sha256": "78a9bd0b6ecb5d93f1d0bec135ad8a1d1cd25d39916145dbd01f5b497b258312",
+      "result_sha256": "35fd0b08ca88238abea66bd03faad434b68f3722b07c910c6e35c3b5173be4d9",
+      "log_sha256": "45109f50d872279e0024a104b567cce8c85cea28f541088bbc13d7255ca570ad",
+      "kernel_source_sha256": "f1663d2e8ca07141b79d9f783dd06e89dd8c60d870d9602fb4566b8e840f7323",
+      "stage_source_sha256": "4a8600a08f1fe40080fbdbd5c603b1438ea190b87790c7dad4f928984f89b207",
+      "weight_image_sha256": "cf887c06e7bc29b31cb0e837053de6ce813f2832aa09ed3cdc152b01ef1a8997",
+      "input_image_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea",
+      "golden_image_sha256": "d36104b6c61a4d080c5c047a77da7d852405aacb9da674f8926a9e17e7cdf767"
+    },
+    {
+      "stages": 2,
+      "status": "passed",
+      "cycles_functional": 53481701,
+      "tohost": 0,
+      "elf_sha256": "e2548929044b99666c18a00d3ea1e7eac75915fcdd6cd0d3eedffed434dc8603",
+      "manifest_sha256": "423c50b30b987e33c57c176a9f6cffd65a86c3ce1c63e42c4491a51f71fce4f8",
+      "result_sha256": "ad01afc522ff1c307a41942cd0b68e211a16fc39c080bce6153c0f2f362beccd",
+      "log_sha256": "2fe6be6f107ae311e5e6b865b4b52ec2ec1f390f5fb4d25554fc7bc848484785",
+      "kernel_source_sha256": "5a2f9f48a7f01af51c726d4f5f662dc21a8d834a65896c91b7c3515d8e496a89",
+      "stage_source_sha256": "593d48162d80febdcf0ff7a6507af14f40953f7f1364c8b0235b2eb5a8098aa1",
+      "weight_image_sha256": "66173e02bf55e918c37cc0bd94406aeb0c50d0ee1e52f866e8e06f7b395e9501",
+      "input_image_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea",
+      "golden_image_sha256": "8e8057fa59bdea710b22c88bcde523be43caf5107f9288b90e1d916021cea7b8"
+    }
+  ],
+  "full_action_chunk_device_execution": false,
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "source_sha256": "afdf118035881a0bdc8620f6e7139810708c7727d2de9d4c4cfdec866fa8a387"
+}

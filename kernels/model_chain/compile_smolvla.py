@@ -20,7 +20,7 @@ import numpy as np
 
 from compile_decoder import build_device, literal, symbol, write_if_changed
 from plan_buffers import plan as plan_buffers
-from split_decoder_weights import verify_image
+from split_decoder_weights import image_segments, verify_image
 
 
 HERE = Path(__file__).resolve().parent
@@ -33,7 +33,8 @@ def product(values) -> int:
     return math.prod(values)
 
 
-def emit_stage(stage: dict, graph, allocation: dict, addresses: dict) -> str:
+def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
+               all_cores: bool = False) -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
     reads = stage["reads"]
 
@@ -219,13 +220,18 @@ def emit_stage(stage: dict, graph, allocation: dict, addresses: dict) -> str:
         "timestep_constant", "multimodal_merge",
     }
     code = body if op in control_flow else "model_chain::" + body
+    core_map = ("" if all_cores else
+                "  if ((tid / MU_NUM_THREADS) % MU_NUM_CORES != 0) return;\n"
+                "  tid = (tid / (MU_NUM_THREADS * MU_NUM_CORES)) * MU_NUM_THREADS\n"
+                "      + tid % MU_NUM_THREADS;\n"
+                "  tpb /= MU_NUM_CORES;\n")
+    drain = ("  RAD_L0D_DRAIN(tid, tpb / MU_NUM_THREADS, 1, 2);\n"
+             if all_cores else "")
     return (
         f"void stage_{symbol(stage['id'])}(void*, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
-        "  if ((tid / MU_NUM_THREADS) % MU_NUM_CORES != 0) return;\n"
-        "  tid = (tid / (MU_NUM_THREADS * MU_NUM_CORES)) * MU_NUM_THREADS\n"
-        "      + tid % MU_NUM_THREADS;\n"
-        "  tpb /= MU_NUM_CORES;\n"
+        + core_map +
         f"  {code}\n"
+        + drain +
         "}\n")
 
 
@@ -235,7 +241,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              golden_output: Path | None = None,
              stage_golden_image: Path | None = None,
              stage_golden_sha256: str | None = None,
-             warps: int = 1) -> Path:
+             warps: int = 1,
+             all_cores: bool = False) -> Path:
     if stages_per_object <= 0:
         raise ValueError("stages per object must be positive")
     # Eight warps exhaust the current 256-entry global rename pool before
@@ -306,6 +313,18 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 stage_golden_manifest["image_sha256"] != stage_golden_sha256 or
                 stage_golden_manifest["image_size_bytes"] != expected_bytes):
             raise ValueError("stage golden does not match the pinned output")
+    if all_cores:
+        # rad_tapeout.h drains both private L0D caches through this 8 KiB
+        # scratch window. It must remain separate from all preloaded images.
+        drain_start, drain_end = 0x1F200000, 0x1F202000
+        for loaded in (image, input_manifest, stage_golden_manifest):
+            if loaded is None:
+                continue
+            for segment in image_segments(loaded):
+                start = segment["gpu_base_address"]
+                end = start + segment["image_size_bytes"]
+                if start < drain_end and end > drain_start:
+                    raise ValueError("preloaded image overlaps the L0D drain window")
     target = (out_root / "smolvla_base").resolve()
     target.mkdir(parents=True, exist_ok=True)
     allocation = storage["allocation"]
@@ -329,8 +348,9 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         return (f"alignas(64) __global float {name}[{len(values)}] = {{" +
                 ", ".join(literal(x) for x in values) + "};\n")
 
-    scratch_count = ("MU_NUM_THREADS * 1024" if warps == 1 else
-                     f"MU_NUM_THREADS * {warps} * 1024")
+    scratch_count = ("MU_NUM_THREADS * 1024" if warps == 1 and not all_cores else
+                     f"MU_NUM_THREADS * {warps} * "
+                     f"{'MU_NUM_CORES * ' if all_cores else ''}1024")
     data = ("#include <mu_intrinsics.h>\n#include <stdint.h>\n"
             f"alignas(64) __global unsigned char v_arena[{storage['arena_bytes']}] = {{0}};\n"
             f"alignas(64) __global float v_attention_scratch[{scratch_count}] = {{0}};\n"
@@ -346,12 +366,14 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         chunks.append(filename)
         source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
                   "#include <stdint.h>\n#include \"pipeline_smolvla.hpp\"\n"
-                  "extern __global unsigned char v_arena[];\n"
+                  + ("#include \"rad_tapeout.h\"\n" if all_cores else "")
+                  + "extern __global unsigned char v_arena[];\n"
                   "extern __global float v_attention_scratch[];\n"
                   "extern __global float v_rope_cos[];\n"
                   "extern __global float v_rope_sin[];\n"
                   "extern __global float v_time_embedding[];\n"
-                  + "\n".join(emit_stage(stage, graph, allocation, addresses)
+                  + "\n".join(emit_stage(stage, graph, allocation, addresses,
+                                          all_cores)
                               for stage in stages[first:first + stages_per_object]))
         write_if_changed(target / filename, source)
     inputs = []
@@ -391,11 +413,14 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
             inputs.append(f"  {{ __global {dtype}* data = (__global {dtype}*)(v_arena + {offset}u); "
                           f"for (uint32_t j = tid; j < {count}u; j += tpb) "
                           f"data[j] = {expression}; }}")
+    init_core_map = ("" if all_cores else
+                     "  if ((tid / MU_NUM_THREADS) % MU_NUM_CORES != 0) return;\n"
+                     "  tid = (tid / (MU_NUM_THREADS * MU_NUM_CORES)) * MU_NUM_THREADS\n"
+                     "      + tid % MU_NUM_THREADS; tpb /= MU_NUM_CORES;\n")
+    init_drain = ("\n  RAD_L0D_DRAIN(tid, tpb / MU_NUM_THREADS, 1, 2);"
+                  if all_cores else "")
     init = ("void init_inputs(void*, uint32_t tid, uint32_t tpb, uint32_t) {\n"
-            "  if ((tid / MU_NUM_THREADS) % MU_NUM_CORES != 0) return;\n"
-            "  tid = (tid / (MU_NUM_THREADS * MU_NUM_CORES)) * MU_NUM_THREADS\n"
-            "      + tid % MU_NUM_THREADS; tpb /= MU_NUM_CORES;\n"
-            + "\n".join(inputs) + "\n}\n")
+            + init_core_map + "\n".join(inputs) + init_drain + "\n}\n")
     final = stages[-1]["writes"]
     final_count = product(graph.tensors[final]["shape"])
     final_offset = allocation[final]["offset_bytes"]
@@ -409,7 +434,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         for stage in stages)
     kernel = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
               "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
-              f"extern \"C\" uint32_t __mu_num_warps = {warps};\n"
+              + ("#include \"rad_tapeout.h\"\n" if all_cores else "")
+              + f"extern \"C\" uint32_t __mu_num_warps = {warps};\n"
               "extern __global unsigned char v_arena[];\n"
               + ("extern __global float v_golden_output[];\n"
                  if golden_values is not None else "")
@@ -443,9 +469,13 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 f"LLVM_MUON ?= {ROOT / 'llvm/llvm-muon'}\n"
                 f"EXTRA_MU_CFLAGS += -I{HERE}\n"
                 f"include {ROOT / 'kernels/common.mk'}\n"
-                f"kernel.mu.o: {HERE / 'pipeline_smolvla.hpp'}\n"
+                f"kernel.mu.o: {HERE / 'pipeline_smolvla.hpp'}"
+                + (f" {ROOT / 'lib/include/rad_tapeout.h'}" if all_cores else "")
+                + "\n"
                 + " ".join(name.replace(".cpp", ".mu.o") for name in chunks)
-                + f": {HERE / 'pipeline_smolvla.hpp'}\n")
+                + f": {HERE / 'pipeline_smolvla.hpp'}"
+                + (f" {ROOT / 'lib/include/rad_tapeout.h'}" if all_cores else "")
+                + "\n")
     write_if_changed(target / "Makefile", makefile)
     result = {
         "model": "smolvla_base",
@@ -475,6 +505,10 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         "upstream_execution_equivalent": False,
         "stage_limit": stage_limit, "stages": len(stages),
         "scheduled_warps_per_stage": warps,
+        "use_all_cores": all_cores,
+        "cache_drain_header_sha256": (
+            hashlib.sha256((ROOT / "lib/include/rad_tapeout.h").read_bytes()).hexdigest()
+            if all_cores else None),
         "full_graph_stages": len(graph.stages),
         "execution_schedule_sha256": storage["execution_schedule_sha256"],
         "checkpoint_weight_format": "fp32",
@@ -504,12 +538,13 @@ def main() -> None:
     parser.add_argument("--stage-golden-image", type=Path)
     parser.add_argument("--stage-golden-sha256")
     parser.add_argument("--warps", type=int, default=1)
+    parser.add_argument("--all-cores", action="store_true")
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
     target = generate(args.weight_image, args.out_root, args.stage_limit,
                       args.stages_per_object, args.input_image,
                       args.golden_output, args.stage_golden_image,
-                      args.stage_golden_sha256, args.warps)
+                      args.stage_golden_sha256, args.warps, args.all_cores)
     if args.build:
         build_device(target)
     print(target)

@@ -1313,6 +1313,25 @@ input, upstream FP32 golden, execution schedule, and 92 unchanged stage source
 chunks as the previous one-warp build. This is a build and source comparison;
 the full four-warp action chunk has not yet passed a device run.
 
+An opt-in `--warps 4 --all-cores` mapping assigns stage work to both cores.
+Each stage drains its private L0D cache before the next stage reads shared
+output. The [two-core prefix check](evaluation/smolvla-all-cores-prefix.json)
+passed all 786,432 upstream patch outputs at 53,195,240 functional cycles,
+then passed all 786,432 first-layer-norm outputs at 53,481,701 cycles. The
+layer-norm golden comes from PyTorch's `layer_norm` with the pinned full-image
+checkpoint parameters and the upstream patch output; a separate regeneration
+produced byte-identical golden and manifest files. The verifier checks
+both ELFs and logs, regenerated source, preloaded image placement and hashes,
+and byte identity of the patch parameters in the compact and full images.
+The first-stage count is 23.5% below the four-warp core-0 count; these are
+functional ISA counts, not hardware latency or utilization. The full
+two-core action chunk and this cache-drain protocol on the target FPGA remain
+unverified. Regenerate the second golden with
+`generate_smolvla_stage2_golden.py`, compile its prefix with
+`compile_smolvla.py --stage-limit 2 --warps 4 --all-cores` plus the pinned
+`--weight-image`, `--input-image`, `--stage-golden-image`, and
+`--stage-golden-sha256` arguments, then run `run_smolvla_functional.py`.
+
 The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
 uses the generated C++ stage with real checkpoint weights and byte-exact
 camera input. Its 1024 by 768 patch tokens match a PyTorch convolution plus
