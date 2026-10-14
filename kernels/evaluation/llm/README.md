@@ -323,6 +323,44 @@ Nemotron still needs its Mamba and attention operations stitched together.
 All candidates need full checkpoint, input, and device checks before
 model-level performance comparisons.
 
+### Nemotron hybrid state capacity
+
+[`profile_nemotron_state.py`](profile_nemotron_state.py) reads the pinned
+Nemotron config and writes [three batch/context cases](nemotron-state-profiles.json).
+It follows the recorded 42-block order: 21 Mamba2, 4 attention, and 17
+MLP-only blocks. The revision-pinned [modeling code](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/modeling_nemotron_h.py)
+allocates an initial Mamba cache at `expand × hidden_size = 6,272` channels.
+The mixer itself has `96 × 80 = 7,680` inner channels and `9,728`
+convolution channels after adding two sets of eight 128-wide B/C groups.
+Prefill replaces the initial cache tensors with the mixer's convolution and
+SSM states; decode must carry these resulting shapes, not the constructor's
+initial allocation. The SSM state is constant per layer at
+`[batch, 96, 80, 128]`, while the four attention layers' K/V history grows
+with context. The profile includes separate BF16 and FP32 SSM storage cases
+because the retained state dtype depends on the executed path.
+
+| Batch × context | Initial Mamba cache, BF16 | Carried state, BF16 SSM | Carried state, FP32 SSM |
+| --- | ---: | ---: | ---: |
+| 1 × 128 | 33.16 MiB | 42.93 MiB | 82.31 MiB |
+| 8 × 128 | 265.29 MiB | 343.47 MiB | 658.47 MiB |
+| 1 × 8,192 | 33.16 MiB | 168.93 MiB | 208.31 MiB |
+
+The carried totals include BF16 convolution and attention KV storage.
+These are analytical resident bytes, not observed cache occupancy or HBM
+traffic. The source's cache update can replace its initial allocation, so
+the initial and carried columns are different moments rather than additive
+buffers. The KV term represents an intended cached-attention mapping. In the
+pinned `NemotronHBlock.forward`, the attention mixer is called without the
+hybrid cache argument, despite the mixer's own cache-update path. A reference
+run must settle this handoff before we claim that the pinned code performs
+cached attention across decode steps. A runnable Nemotron graph still needs
+the Mamba convolution and selective scan, attention, MLP-only stages, their
+ordered state handoff, and an upstream numerical check before any Radiance
+performance claim.
+
+Regenerate with `python3 kernels/evaluation/llm/profile_nemotron_state.py
+--out kernels/evaluation/llm/nemotron-state-profiles.json`.
+
 ### OLMo 3 local/global attention control
 
 [`verify_olmo3_reduced.py`](verify_olmo3_reduced.py) executes the emitted
