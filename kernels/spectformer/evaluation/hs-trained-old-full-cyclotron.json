@@ -1,8 +1,8 @@
 {
   "model": "spectformer_hierarchical_s",
   "phase": "before_device_fft_and_gelu_fix",
-  "scope": "trained_checkpoint_full_198_stages",
-  "stage_count": 198,
+  "scope": "trained_checkpoint_full_233_stages",
+  "stage_count": 233,
   "backend": "Cyclotron functional ISA simulation",
   "status": "failed",
   "failure_reason": "logit_mismatch",
