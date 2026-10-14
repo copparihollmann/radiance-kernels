@@ -1371,6 +1371,14 @@ stage source chunks match the uninstrumented two-core build. This full ELF
 has not completed the action chunk in Cyclotron. A progress marker establishes
 which stages finished; only the final output comparison establishes numerical
 correctness. Neither count measures FPGA latency or utilization.
+The [compiled progress map](evaluation/smolvla-progress-map.json) assigns
+stages 1–221, 222–442, and 443–663 to the three camera branches; 664–672
+form the language, robot-state, and attention-prefix inputs; 673–913 run the
+VLM. Ten denoising iterations follow, each with 276 stages: iteration `j`
+occupies stages `914 + 276j` through `1189 + 276j`, for `j = 0…9`. The map
+checks this order against the linked ELF's generated schedule and lists the
+first progress marker after each region. A marker can land inside the next
+region, so it reports completed stages rather than an exact phase boundary.
 
 The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
 uses the generated C++ stage with real checkpoint weights and byte-exact
