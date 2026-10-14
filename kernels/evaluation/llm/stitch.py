@@ -599,8 +599,13 @@ def _nemotron_pass(graph: Graph, spec: dict, phase: str, batch: int,
             conv_input = graph.add(f"{base}.conv_input", "mamba_projection_slice",
                                    (proj,), (batch, tokens, conv_channels),
                                    attrs={"part": "conv_input"})
-            dt = graph.add(f"{base}.dt", "mamba_projection_slice", (proj,),
-                           (batch, tokens, mh), attrs={"part": "dt"})
+            dt_raw = graph.add(f"{base}.dt", "mamba_projection_slice", (proj,),
+                               (batch, tokens, mh), attrs={"part": "dt"})
+            dt = graph.add(f"{base}.dt_activated", "mamba_dt_prepare", (dt_raw,),
+                           (batch, tokens, mh), attrs={
+                               "parameter": f"{mixer}.dt_bias",
+                               "activation": "softplus",
+                               "limit": "config_default"})
             old_conv, old_ssm = caches.get(layer, (None, None))
             conv_reads = ((conv_input,) if old_conv is None
                           else (old_conv, conv_input))
@@ -625,9 +630,11 @@ def _nemotron_pass(graph: Graph, spec: dict, phase: str, batch: int,
                           (batch, tokens, groups, state), attrs={"part": "C"})
             scan_reads = (x, b, c, dt) if old_ssm is None else (x, b, c, dt, old_ssm)
             scan = graph.add(f"{base}.selective_scan", "mamba_selective_scan",
-                             scan_reads, (batch, tokens, inner), attrs={
-                                 "parameters": [f"{mixer}.A_log", f"{mixer}.D",
-                                                f"{mixer}.dt_bias"],
+                             scan_reads, (batch, tokens, inner),
+                             "mamba_selective_scan", attrs={
+                                 "parameters": [f"{mixer}.A_log", f"{mixer}.D"],
+                                 "A_preprocessing": "negative_exp",
+                                 "dt_contract": "positive_after_bias_softplus",
                                  "chunk_size": spec["chunk_size"],
                                  "mode": "prefill" if past == 0 else "decode",
                                  "state_shape": [batch, mh, md, state]})

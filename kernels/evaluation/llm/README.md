@@ -363,17 +363,26 @@ Regenerate with `python3 kernels/evaluation/llm/profile_nemotron_state.py
 --out kernels/evaluation/llm/nemotron-state-profiles.json`.
 
 The [full-dimension hybrid schedule](nemotron3-nano-4b-graph.json) uses a
-128-token prefill followed by two greedy decode steps. Its 1,322 stages keep
+128-token prefill followed by two greedy decode steps. Its 1,385 stages keep
 the config's 42 blocks in order. Mamba blocks expose input projection,
 causal depthwise convolution, separate convolution-state carry, B/C and
-time-step slices, selective scan with its separate SSM-state output, gated
+time-step slices, bias/softplus time-step preparation, selective scan with its
+separate SSM-state output, gated
 RMSNorm, and output projection. Attention blocks keep Q/K/V, causal GQA,
 K/V append, and output projection without RoPE. MLP-only blocks use
 up projection, squared ReLU, and down projection. Every block has its own
 pre-norm and residual addition. The prefill LM head reads only the last
 hidden token, matching `num_logits_to_keep=1`. The graph assumes FP32 SSM
 storage and labels this choice in each state stage. It names existing
-standalone primitives for 534 stages; 788 still lack a named device stage.
+standalone primitives for 597 stages; 788 still lack a named device stage.
+The [selective scan primitive](../../mamba_selective_scan/README.md) covers
+the post-convolution recurrence and final-state carry on a small FP32 fixture.
+Its [Cyclotron check](../../mamba_selective_scan/evaluation/cyclotron.json)
+compares all 224 output and 128 final-state values with an independent NumPy
+golden. The graph now gives the 63 scan stages that primitive's name and
+keeps time-step preparation as a separate missing device stage. It still
+needs projection slicing, convolution, gate and norm, multi-output scan
+binding, and pinned-weight validation before network execution.
 Those names do not make the stages connected executables. The pinned source's
 attention cache handoff remains the main reference discrepancy, and this
 graph has neither an upstream numerical comparison nor a Radiance ELF.

@@ -232,6 +232,14 @@ class ModelStitchTest(unittest.TestCase):
                                  "fp32")
                 self.assertEqual(stages[f"{dec}.conv_state"]["reads"],
                                  [f"{pre}.conv_state", f"{dec}.conv_input"])
+                self.assertEqual(stages[f"{dec}.dt_activated"]["reads"],
+                                 [f"{dec}.dt"])
+                self.assertEqual(stages[f"{dec}.dt_activated"]["attrs"]["activation"],
+                                 "softplus")
+                self.assertEqual(stages[f"{dec}.selective_scan"]["kernel"],
+                                 "mamba_selective_scan")
+                self.assertIn(f"{dec}.dt_activated",
+                              stages[f"{dec}.selective_scan"]["reads"])
                 self.assertIn(f"{pre}.ssm_state",
                               stages[f"{dec}.selective_scan"]["reads"])
                 self.assertNotIn(f"{pre}.k_cache", stages)

@@ -1,0 +1,43 @@
+{
+  "schema": "radiance.mamba-selective-scan-device-check.v1",
+  "status": "passed",
+  "backend": "cyclotron",
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "functional_cycles": 9874,
+  "checked_output_elements": 224,
+  "checked_final_state_elements": 128,
+  "fixture": {
+    "schema": "radiance.mamba-selective-scan-fixture.v1",
+    "seed": 19,
+    "heads": 4,
+    "head_dim": 8,
+    "groups": 2,
+    "state_size": 4,
+    "tokens": 7,
+    "prefill_tokens": 5,
+    "input_sha256": {
+      "x": "ba134381498a73369fbd04059f2bc996123dc7e79a9cb3d730e83dd23283a00b",
+      "b": "099d5f4d7b4fa53a04783dbc095f4086893a61f7ff63341f4cb02b8125a60afb",
+      "c": "4e7c177caf7e97df1fae71bce9bc5702d5b5fac2f08be3c2535e46ab22deea78",
+      "dt": "7447127b51021e5a1ca0d89505ce2c26c19cdf9b02225d7393682474e49f5ef2",
+      "a": "0d6ed13eda3590b3eb5690ba6ce7d49015759ef2893534444015e13d4664fb8c",
+      "d": "5547cba7f2ffc21d3cfaeed57acb1f8ba8c83d549a2f9123de573e10dd01e8ec",
+      "initial_state": "b0e06ec04f8e63694088dd0f8b35e555ff8b61ec9af398bcf271a4e6a91421b6"
+    },
+    "gold_y_sha256": "d4227cec5a29b755012f2a09dfc2618486d0649415f4c5c8fac8bf9a7f36985b",
+    "gold_final_state_sha256": "110052306d53e4bd30b5559fbe9465f851fe6f32d33a82f88a38affbc4f2187d",
+    "reset_at_decode_max_output_delta": 0.024379074573516846,
+    "generated_header_sha256": "2461827cabd40efd6de1f5bdae0c159de19b16188e37c803b3ed960a78ec8b08"
+  },
+  "output_sha256": "a9ee42d712ed92f1399a20c85769f6292c1117514820aee677dbb503e6f8dbfd",
+  "final_state_sha256": "edb5cefbfb2b0626baeea2d6b717d44fb9428fd174428c5b56f4199643d98d92",
+  "kernel_source_sha256": "a4ce03267d1e3d02482cf59ca23fdc8dca2744d4cc9f0c1dd2a91882aadad344",
+  "generator_source_sha256": "cf5d4431b0dcae0cf13abe3600ea2c1f04a92604217044ac0d2cbae1cd201381",
+  "test_source_sha256": "4bbf268793caa1e2b23c75f390caab418355e02766c3067905a9664633b8728c",
+  "elf_sha256": "126d8f0deb2e6367c53b3f1a4f2e54bdcc1d89008d2d66c97245f952a7841304",
+  "config_sha256": "db92edd18930811087147251470cc12be4c62762db2eed176afabe61f830126b",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "build_log_sha256": "d041ccf8941d391cdf0d12c5a889e8c870acf74d961cc962f1010bf585f6a1b4",
+  "cyclotron_log_sha256": "f1d8b8cc349188e5397c6ca14f65046742bdc28e0547312d9aa4c988b2c5de29"
+}
