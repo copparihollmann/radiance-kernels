@@ -110,8 +110,8 @@ The [connected-model evaluation receipt](evaluation/connected-models.json) recor
 
 | Check | Result |
 | --- | --- |
-| Full-size ELF builds | Vanilla XS/S and hierarchical S/B/L built: 128/198/233/305/403 stages. |
-| Full-size generated C++ vs upstream PyTorch | All five variants pass on the host; maximum absolute logit error is at most `6.11e-5` on random-weight fixtures. |
+| Current full-size ELF builds | The [corrected build record](evaluation/current-variant-builds.json) hashes Radiance and SoC ELFs for vanilla XS/S and hierarchical S/B/L: 128/198/233/305/403 stages. Vanilla S uses an embedded random-weight fixture; the other four ELFs read runtime input. |
+| Current generated C++ vs upstream PyTorch | All five host runs pass all 1,000 logits and their 12/19/16/22/30 intermediate block checks. Maximum absolute logit error is `6.01e-5` across these runs. XS and hierarchical S use trained checkpoints; S, B, and L use pinned random-weight exports. |
 | Trained-weight held-out inputs | Vanilla XS: `1.67e-6`, `2.62e-6` maximum logit error. Hierarchical S: `5.01e-6`, `3.34e-6`. Each pair used one unchanged ELF and checkpoint with two distinct inputs. |
 | Corrected full-size trained host execution | The current 128-stage XS and 233-stage hierarchical S generated programs pass against the pinned upstream checkpoints on held-out input 0. All 1,000 logits are finite and within tolerance; maximum absolute errors are `2.38e-6` and `4.29e-6`. The [XS trace](evaluation/xs-trained-fixed-full-trace-native.json) checks all 12 blocks, and the [hierarchical S trace](evaluation/hs-trained-fixed-full-trace-native.json) checks all 16 blocks. Every block passes its upstream forward-hook comparison. These are host runs of generated stage code, with the device ELF hashes recorded in the receipts. |
 | Intermediate graph checks | Every upstream block output matched: 12/12 XS, 16/16 hierarchical S, 22/22 B, and 30/30 L. A deliberately altered hierarchical trace was rejected. |
