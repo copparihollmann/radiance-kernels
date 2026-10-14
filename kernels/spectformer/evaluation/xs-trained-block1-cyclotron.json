@@ -1,0 +1,31 @@
+{
+  "model": "spectformer_vanilla_xs",
+  "scope": "trained_checkpoint_block_1_23_stages",
+  "backend": "Cyclotron functional ISA simulation",
+  "input_sha256": "16cef85912c516ecddfdcf7475cc80bdcfd2e3f9394c5387c77e484c27e53509",
+  "checkpoint_sha256": "2ca40d05343b340fbb3c4fc8ec83ea1d0c5bd3a20c4066f4dbae767e50db9ee5",
+  "weights_sha256": "13a12a9a0dbf1930f2660d9f2e47be49d5bf09d241dc511462ca1bb3a287d181",
+  "elf_sha256": "aab8604c02cf9bf8c5bea6412ddec870d09da36bd85b547a0a9a23186afb0327",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "e935cce8acb14cddade1780d37ca2bf8e95d0f7237f36f87bdbc4a25850b7946",
+  "log_sha256": "5c09fc74ea25ce1075a947e7c20a3b06892906d8f0d8f21ad512172871f410c3",
+  "output_sha256": "3ff7109da5c0e4fc2954e898fb8e318674950c149ec5b623a54d013bd2b48771",
+  "reference_sha256": "5d8d76af5d03b1c41c9134eb0772953a8518e972a9924db13079cf7006625f49",
+  "reference_environment": {
+    "torch": "2.9.1+cpu",
+    "timm": "0.9.16",
+    "numpy": "2.2.6"
+  },
+  "output_count": 75264,
+  "all_finite": true,
+  "max_abs_error": 6.318092346191406e-06,
+  "rms_error": 9.059777688616478e-07,
+  "rtol": 0.005,
+  "atol": 0.001,
+  "out_of_tolerance": 0,
+  "cycles_functional": 431266859,
+  "device_completed": true,
+  "reference_checked": true,
+  "rtl_execution": false,
+  "performance_measurement": false
+}
