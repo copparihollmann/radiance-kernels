@@ -565,9 +565,13 @@ detects that mapping mistake. This is one random-weight FFN block, not the
 the same router, top-8 selection, selected-score normalization, expert
 projections, SiLU, and weighted reduction in one ELF. Its Cyclotron check
 passes all seven tokens; the full model and MX mapping remain open. Run the
-independent CPU check
-with `python3 kernels/evaluation/llm/verify_qwen3_moe_router.py` in the
-Transformers environment.
+independent CPU check with
+`python3 kernels/evaluation/llm/verify_qwen3_moe_router.py` in the
+Transformers environment. The [stage-level NumPy control](moe_ops.py)
+evaluates the eight sparse-FFN operations using the graph's actual tensor
+shapes and dependencies. Its [small test](test_moe_ops.py) compares those
+stages with the fused routing and expert equation; this is a CPU control,
+not a connected decoder run.
 
 `stitch.py --model qwen3_30b_a3b` now emits the
 [48-layer tensor dependency graph](qwen3-30b-a3b-graph.json). Its saved
