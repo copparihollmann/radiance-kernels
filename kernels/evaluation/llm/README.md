@@ -246,8 +246,9 @@ what its short Cyclotron run establishes.
 ## Shape traces for the pinned models
 
 Run `python3 profile_workloads.py --out-dir profiles` to regenerate the
-[13-case trace index](profiles/index.json). The cases include each fixed
-decoder handoff shape, 128-token prefill at batch 1 and 8, 1,024-token
+[17-case trace index](profiles/index.json). The cases include TinyLlama,
+DeepSeek, Gemma, and Qwen3 at each fixed decoder handoff shape, 128-token
+prefill at batch 1 and 8, 1,024-token
 prefill at batch 1, and one SmolVLA action-queue refill. Every trace records
 stage order, tensor dependencies, shapes, and per-phase operand sizes. Decoder
 prefill and cached decode remain separate phases. SmolVLA's trace retains
@@ -276,12 +277,25 @@ that bound. These shapes would need output tiling or another placement policy.
 These traces identify software mapping work; they are not utilization,
 latency, or performance results.
 
+The [Qwen3 fixed-shape trace](profiles/qwen3_0_6b-fixed_handoff_shape.json)
+matches the verified three-token prefill and two-step greedy schedule: 1,607
+stages, 2.98 billion linear MACs, and a 1,192,230,912-byte packed FP16 image.
+For batch 8 × 128 tokens and batch 1 × 1,024 tokens, the current graph
+materializes all prefill logits. Its estimated peak named-tensor footprint
+is about 862 MB in either case. The image plus that footprint is about
+2.05 GB, leaving under 94 MB of a 2 GiB region before program, scratch, and
+placement costs. These two shapes need a capacity check before device runs;
+projecting only the last prefill token's logits is one candidate software
+change, subject to an output-equivalence check.
+
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The
 [model source table](inputs/sources.csv) pins five official
 checkpoint revisions and SHA-256 hashes for their small `config.json` files;
-the files are retained under `inputs/`. The weights, tokenizer, example
-prompts, and quantization format have not yet been pinned or run.
+the files are retained under `inputs/`. Qwen3's checkpoint hash, FP16 device
+image, and one- and multi-token reference checks are now recorded above. The
+other architecture candidates still need weight, tokenizer, prompt, and
+precision controls before they can be treated as executable workloads.
 
 Run `python3 inventory.py` to regenerate
 [architecture-inventory.json](architecture-inventory.json). It verifies the
@@ -346,7 +360,8 @@ compares one-token prefill and greedy cached decode against Transformers
 agrees. A [three-token prefill, two-step greedy check](qwen3-checkpoint-multitoken-reference.json)
 also matches upstream with at most `2.10e-5` logit error and the same two
 selected tokens. An original-width, 28-layer Radiance ELF builds with a converted FP16
-weight image, and a seven-stage real-weight prefix passes Cyclotron; see the
+weight image for each of the one- and multi-token reference shapes, and a
+seven-stage real-weight prefix passes Cyclotron; see the
 [checkpoint-weight device record](../../model_chain/README.md#qwen3-checkpoint-weight-path).
 The complete full-weight device run remains pending.
 

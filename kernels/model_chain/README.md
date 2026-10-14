@@ -141,9 +141,12 @@ runs a 1,607-stage connected graph and compares its output logits with upstream
 execution. Both paths select
 tokens `[16, 8]`; the largest logit error across prefill and decode is
 `2.10e-5`, and upstream cached versus full causal output differs by at most
-`1.43e-5`. This is a full-weight software check. The full-dimension device
-program above still uses the shorter one-token case.
-The complete device run is still pending. Cyclotron functional cycles are
+`1.43e-5`. A [matching 1,607-stage Radiance ELF](evaluation/qwen3-full-depth-multitoken-fp16-build.json)
+now builds with the same three input IDs and two dependent greedy steps. Its
+checkpoint-backed reference also selects `[16, 8]`; FP16 storage conversion
+keeps the top token at every output, with at most `1.36e-5` logit difference.
+The one-token full-depth device run is in progress. Neither full-depth ELF has
+yet passed a complete device run. Cyclotron functional cycles are
 not hardware latency or utilization.
 
 The checkpoint file and binary image stay in the local task directory. To
@@ -160,6 +163,12 @@ python3 kernels/model_chain/compile_decoder.py \
   --device-check-all-stages --checkpoint-dir "$CHECKPOINT" \
   --weight-image "$WEIGHTS/qwen3_0_6b/weights-image.json" \
   --out-root "$BUILD" --build
+python3 kernels/model_chain/compile_decoder.py \
+  --model qwen3_0_6b --layers 28 --prefill 3 --decode-steps 2 \
+  --generation greedy --token-ids 5 6 7 --stages-per-object 20 \
+  --device-check-all-stages --checkpoint-dir "$CHECKPOINT" \
+  --weight-image "$WEIGHTS/qwen3_0_6b/weights-image.json" \
+  --out-root "$BUILD_MULTI" --build
 python3 kernels/evaluation/llm/verify_qwen3_checkpoint.py \
   --checkpoint-dir "$CHECKPOINT" --input-token 5 \
   --out "$BUILD/qwen3-checkpoint-reference.json"

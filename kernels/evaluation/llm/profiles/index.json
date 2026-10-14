@@ -1045,6 +1045,347 @@
       }
     },
     {
+      "model": "qwen3_0_6b",
+      "case": "fixed_handoff_shape",
+      "trace": "qwen3_0_6b-fixed_handoff_shape.json",
+      "trace_sha256": "2b3c906d3555a31718595de41454a6c5ea64aeeac37b7c56409172020e8af793",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 3,
+        "cached_decode_steps": 2,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "994f364b668753054a34fb3e15704169ece8171d6d361b06f483718274694bea",
+      "stage_count": 1607,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/qwen3-full-depth-fp16-image.json",
+        "manifest_sha256": "eb6e1f5f4674d676edc4e62265e45cd4f675a21f11fad549e8e4617f3cf36ca9",
+        "image_sha256": "d263d39dfebfffe83ac042039961a5f4e6c4dad18037cbea49f3a3c7cfd6eaaf",
+        "format": "mixed_fp16",
+        "image_size_bytes": 1192230912,
+        "used_logical_parameter_count": 310,
+        "used_packed_parameter_footprint_bytes": 1192230912,
+        "raw_image_bytes_verified_here": false
+      },
+      "totals": {
+        "linear_macs": 2979921920,
+        "logical_operand_bytes": 23247644,
+        "mapped_operand_bytes": 46495260,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 1823232,
+        "peak_live_mapped_tensor_bytes": 3389440,
+        "peak_live_stage": "decode1.layer00.k_cache",
+        "retained_output_bytes": 3038720,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1195620352,
+        "packed_image_plus_largest_tensor_bytes": 1194054144,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 535,
+          "linear_macs": 1787953152,
+          "logical_operand_bytes": 11774220,
+          "mapped_operand_bytes": 23548428,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 2523648,
+          "peak_live_stage": "prefill.lm_head"
+        },
+        "decode0": {
+          "stages": 536,
+          "linear_macs": 595984384,
+          "logical_operand_bytes": 5868552,
+          "mapped_operand_bytes": 11737096,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 3352576,
+          "peak_live_stage": "decode0.lm_head"
+        },
+        "decode1": {
+          "stages": 536,
+          "linear_macs": 595984384,
+          "logical_operand_bytes": 5604872,
+          "mapped_operand_bytes": 11209736,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 3389440,
+          "peak_live_stage": "decode1.layer00.k_cache"
+        }
+      }
+    },
+    {
+      "model": "qwen3_0_6b",
+      "case": "medium_context",
+      "trace": "qwen3_0_6b-medium_context.json",
+      "trace_sha256": "7768b7fd182da4d6c42191579466472def3b9c329b5159463f98fa1169e2abec",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "d1d1c9e362b545dcab9848c3dab267980d4c8e7aa640209e6820c5b8edf99fe9",
+      "stage_count": 1071,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/qwen3-full-depth-fp16-image.json",
+        "manifest_sha256": "eb6e1f5f4674d676edc4e62265e45cd4f675a21f11fad549e8e4617f3cf36ca9",
+        "image_sha256": "d263d39dfebfffe83ac042039961a5f4e6c4dad18037cbea49f3a3c7cfd6eaaf",
+        "format": "mixed_fp16",
+        "image_size_bytes": 1192230912,
+        "used_logical_parameter_count": 310,
+        "used_packed_parameter_footprint_bytes": 1192230912,
+        "raw_image_bytes_verified_here": false
+      },
+      "totals": {
+        "linear_macs": 76881985536,
+        "logical_operand_bytes": 589227272,
+        "mapped_operand_bytes": 1178454024,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 77791232,
+        "peak_live_mapped_tensor_bytes": 107700224,
+        "peak_live_stage": "decode0.layer00.k_cache",
+        "retained_output_bytes": 78398976,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 1299931136,
+        "packed_image_plus_largest_tensor_bytes": 1270022144,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 535,
+          "linear_macs": 76286001152,
+          "logical_operand_bytes": 502366720,
+          "mapped_operand_bytes": 1004732928,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 107675648,
+          "peak_live_stage": "prefill.lm_head"
+        },
+        "decode0": {
+          "stages": 536,
+          "linear_macs": 595984384,
+          "logical_operand_bytes": 86860552,
+          "mapped_operand_bytes": 173721096,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 107700224,
+          "peak_live_stage": "decode0.layer00.k_cache"
+        }
+      }
+    },
+    {
+      "model": "qwen3_0_6b",
+      "case": "high_batch",
+      "trace": "qwen3_0_6b-high_batch.json",
+      "trace_sha256": "a36f4aee541545c04be669b89bd470c314f8c0fb369eec7bb27b40b68073d739",
+      "scenario": {
+        "batch": 8,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "a7cad2593c54a7b72a39907cc6c32680b3133c956e1eb0fc194a35a6e443ba0a",
+      "stage_count": 1071,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/qwen3-full-depth-fp16-image.json",
+        "manifest_sha256": "eb6e1f5f4674d676edc4e62265e45cd4f675a21f11fad549e8e4617f3cf36ca9",
+        "image_sha256": "d263d39dfebfffe83ac042039961a5f4e6c4dad18037cbea49f3a3c7cfd6eaaf",
+        "format": "mixed_fp16",
+        "image_size_bytes": 1192230912,
+        "used_logical_parameter_count": 310,
+        "used_packed_parameter_footprint_bytes": 1192230912,
+        "raw_image_bytes_verified_here": false
+      },
+      "totals": {
+        "linear_macs": 615055884288,
+        "logical_operand_bytes": 4713818176,
+        "mapped_operand_bytes": 9427632192,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 622329856,
+        "peak_live_mapped_tensor_bytes": 861601792,
+        "peak_live_stage": "decode0.layer00.k_cache",
+        "retained_output_bytes": 627191808,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 2053832704,
+        "packed_image_plus_largest_tensor_bytes": 1814560768,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 535,
+          "linear_macs": 610288009216,
+          "logical_operand_bytes": 4018933760,
+          "mapped_operand_bytes": 8037863424,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 861405184,
+          "peak_live_stage": "prefill.lm_head"
+        },
+        "decode0": {
+          "stages": 536,
+          "linear_macs": 4767875072,
+          "logical_operand_bytes": 694884416,
+          "mapped_operand_bytes": 1389768768,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 861601792,
+          "peak_live_stage": "decode0.layer00.k_cache"
+        }
+      }
+    },
+    {
+      "model": "qwen3_0_6b",
+      "case": "long_context",
+      "trace": "qwen3_0_6b-long_context.json",
+      "trace_sha256": "eac5cf18ba44936877df503ada7eabba494417372f5582ebd5d41ac725807484",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 1024,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "695040ab5f2bcd4bc07382a36fd7274de04252158d4cc4f80e6b2660bbb7a469",
+      "stage_count": 1071,
+      "packed_weights": {
+        "manifest": "kernels/model_chain/evaluation/qwen3-full-depth-fp16-image.json",
+        "manifest_sha256": "eb6e1f5f4674d676edc4e62265e45cd4f675a21f11fad549e8e4617f3cf36ca9",
+        "image_sha256": "d263d39dfebfffe83ac042039961a5f4e6c4dad18037cbea49f3a3c7cfd6eaaf",
+        "format": "mixed_fp16",
+        "image_size_bytes": 1192230912,
+        "used_logical_parameter_count": 310,
+        "used_packed_parameter_footprint_bytes": 1192230912,
+        "raw_image_bytes_verified_here": false
+      },
+      "totals": {
+        "linear_macs": 610883993600,
+        "logical_operand_bytes": 4686344968,
+        "mapped_operand_bytes": 9372685832,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 622329856,
+        "peak_live_mapped_tensor_bytes": 861429760,
+        "peak_live_stage": "decode0.layer00.k_cache",
+        "retained_output_bytes": 622937600,
+        "packed_image_plus_peak_live_mapped_tensor_bytes": 2053660672,
+        "packed_image_plus_largest_tensor_bytes": 1814560768,
+        "packed_image_plus_largest_tensor_exceeds_2gib": false
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 535,
+          "linear_macs": 610288009216,
+          "logical_operand_bytes": 4018933760,
+          "mapped_operand_bytes": 8037863424,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 861405184,
+          "peak_live_stage": "prefill.lm_head"
+        },
+        "decode0": {
+          "stages": 536,
+          "linear_macs": 595984384,
+          "logical_operand_bytes": 667411208,
+          "mapped_operand_bytes": 1334822408,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 113,
+            "linear": 197,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          },
+          "unique_packed_parameter_count": 310,
+          "unique_packed_parameter_footprint_bytes": 1192230912,
+          "peak_live_mapped_tensor_bytes": 861429760,
+          "peak_live_stage": "decode0.layer00.k_cache"
+        }
+      }
+    },
+    {
       "model": "smolvla_base",
       "case": "one_action_queue_refill",
       "trace": "smolvla_base-one_action_queue_refill.json",

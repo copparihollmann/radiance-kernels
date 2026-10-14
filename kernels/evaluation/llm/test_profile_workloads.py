@@ -58,6 +58,20 @@ class WorkloadProfileTest(unittest.TestCase):
         self.assertGreaterEqual(large["totals"]["peak_live_mapped_tensor_bytes"],
                                 large["totals"]["largest_mapped_tensor_bytes"])
 
+    def test_qwen3_trace_retains_greedy_cache_and_tied_weight_footprint(self):
+        result = profile("qwen3_0_6b", batch=1, prefill=3, decode_steps=2)
+        self.assertEqual(result["stage_count"], 1607)
+        self.assertEqual(list(result["phase_summary"]),
+                         ["prefill", "decode0", "decode1"])
+        self.assertEqual(result["stages"][-1]["id"], "decode1.lm_head")
+        self.assertEqual(result["packed_weights"]["image_size_bytes"],
+                         1_192_230_912)
+        self.assertEqual(result["packed_weights"]["used_logical_parameter_count"],
+                         310)
+        self.assertEqual(len(result["execution_schedule"]["decode_loop"]), 2)
+        self.assertEqual(result["stages"][-1]["packed_parameter_names"],
+                         ["embed_tokens"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,6 +23,7 @@ WEIGHT_MANIFESTS = {
     "tinyllama": "tinyllama-2g-int8-image.json",
     "deepseek_r1_distill_qwen_1_5b": "deepseek-2g-int8-image.json",
     "gemma_2_2b_it": "gemma-2g-int5-int6-image.json",
+    "qwen3_0_6b": "qwen3-full-depth-fp16-image.json",
     "smolvla_base": "smolvla-2g-source-weights-image.json",
 }
 WEIGHT_ROOT = Path(__file__).resolve().parents[2] / "model_chain/evaluation"
@@ -133,7 +134,9 @@ def profile(model: str, batch: int, prefill: int, decode_steps: int) -> dict:
         mapped_write = tensor_bytes(writes, MAPPED_DTYPE_BYTES)
         macs = 0
         if stage["op"] == "linear":
-            k, n = stage["attrs"]["weight_shape"]
+            weight_shape = stage["attrs"]["weight_shape"]
+            k, n = (reversed(weight_shape) if stage["attrs"].get("weight_transposed")
+                    else weight_shape)
             if prod(writes["shape"][2:]) != n:
                 raise ValueError(f"{stage['id']}: linear output width differs from weight")
             macs = prod(writes["shape"]) * k
@@ -249,7 +252,7 @@ def matrix(out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     cases = []
     baseline = {"tinyllama": 2, "deepseek_r1_distill_qwen_1_5b": 1,
-                "gemma_2_2b_it": 2}
+                "gemma_2_2b_it": 2, "qwen3_0_6b": 3}
     for model, pinned_prefill in baseline.items():
         cases.extend((model, batch, prefill, decode, label) for
                      batch, prefill, decode, label in (
