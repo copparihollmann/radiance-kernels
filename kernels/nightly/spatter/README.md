@@ -51,7 +51,8 @@ running either ELF. `gen_data.py` caps generated blobs at 128 MiB by default;
 raise `--max-layout-mib` deliberately for a larger trace.
 
 [`evaluation/device-controls.json`](evaluation/device-controls.json) records
-12 smoke runs and ten original-size GPU STREAM runs. Each used Cyclotron to
+12 smoke runs, ten original-size GPU STREAM runs, and two fused GS composition
+runs. Each used Cyclotron to
 execute the shared device transfer body and compared the **entire** output
 byte for byte with the serial reference. The two-partition control applies
 the partitions sequentially on one simulated cluster; its cycle count is
@@ -59,7 +60,11 @@ not a two-SM performance measurement. For every original-size case, source
 and golden SHA-256 values also equal the existing [pinned upstream Spatter
 serial oracle](../../spatter/evaluation/upstream-golden-results.csv). The
 oracle uses the unmodified Spatter serial transfer loops at revision
-`ec8923711f8dc21eedff7189f12b02eb06845d2f`.
+`ec8923711f8dc21eedff7189f12b02eb06845d2f`. The fused GS output also
+matches the [independent upstream Gather→Scatter composition
+oracle](../../spatter/evaluation/upstream-golden-composition-results.csv),
+including its complete output SHA-256. This covers the `gather-final-wrap`
+case where the Gather result is reused across Scatter repetitions.
 
 [`evaluation/standard-gpu-stream-builds.json`](evaluation/standard-gpu-stream-builds.json)
 records the ten SoC ELF hashes, exact input and golden hashes, and checks
@@ -71,8 +76,9 @@ do not establish FPGA latency, bandwidth, utilization, or cache behavior.
 To reproduce the device checks, run `test_device.py` with an output directory
 under the current task, a Cyclotron build, a RISC-V toolchain, and Muon LLVM.
 The default uses all six smoke cases; pass `--suite` with the GPU STREAM JSON
-deck for the five original-size cases. `record_controls.py` checks and
-combines both sets of retained `results.json` files. `record_builds.py`
+deck for the five original-size cases, or with `inputs/composed-gpu-stream.json`
+for the fused chain. `record_controls.py` checks and combines all three sets
+of retained `results.json` files. `record_builds.py`
 checks the staged SoC ELFs against the upstream oracle before writing its
 receipt.
 
