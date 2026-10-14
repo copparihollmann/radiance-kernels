@@ -75,26 +75,33 @@ def run(generated_root: Path, simulator_root: Path, timeout: int,
         f"0x{item['gpu_base_address']:x}:{path.resolve()}"
         for item, path in zip(segments + input_segments + golden_segments,
                               image_paths + input_paths + stage_golden_paths))
-    try:
-        result = subprocess.run([str(simulator), str(config), "--binary-path",
-                                 str(elf), "--gen-trace", "false"],
-                                cwd=simulator_root, env=env,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, timeout=timeout)
-        output = result.stdout
-        exit_code = result.returncode
-    except subprocess.TimeoutExpired as error:
-        output = error.stdout or b""
-        if isinstance(output, bytes):
-            output = output.decode(errors="replace")
-        exit_code = 124
     log = target / "functional.log"
-    log.write_text(output)
+    with log.open("w") as stream:
+        try:
+            result = subprocess.run([str(simulator), str(config), "--binary-path",
+                                     str(elf), "--gen-trace", "false"],
+                                    cwd=simulator_root, env=env,
+                                    stdout=stream, stderr=subprocess.STDOUT,
+                                    text=True, timeout=timeout)
+            exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            exit_code = 124
+    output = log.read_text()
     cycles = re.findall(r"simulation finished after (\d+) cycles", output)
+    progress = [int(marker, 16) for marker in re.findall(
+        r"(?m)^S([0-9a-f]{4})$", output)]
+    progress_every = manifest.get("progress_every_stages", 0)
+    expected_progress = ([0, *range(progress_every, manifest["stages"] + 1,
+                                    progress_every)] if progress_every else [])
+    if progress_every and expected_progress[-1] != manifest["stages"]:
+        expected_progress.append(manifest["stages"])
+    progress_valid = progress == expected_progress[:len(progress)]
     failed_tohost = re.search(r"isa-test failed with tohost=(\d+)", output)
     tohost = int(failed_tohost.group(1)) if failed_tohost else None
     passed = (exit_code == 0 and "isa-test passed with tohost=0" in output
-              and len(cycles) == 1 and all(
+              and len(cycles) == 1 and progress_valid
+              and progress == expected_progress
+              and all(
                   f"preloaded {item['image_size_bytes']} bytes of weights "
                   f"@0x{item['gpu_base_address']:x}" in output
                   for item in segments + input_segments + golden_segments))
@@ -109,6 +116,10 @@ def run(generated_root: Path, simulator_root: Path, timeout: int,
         "cycles_functional": int(cycles[0]) if cycles else None,
         "tohost": 0 if passed else tohost,
         "failed_output_element_index": tohost >> 1 if tohost and tohost & 1 else None,
+        "progress_every_stages": progress_every,
+        "completed_stage_markers": progress,
+        "last_completed_stage_marker": progress[-1] if progress else None,
+        "progress_markers_valid": progress_valid,
         "output_validation": manifest["output_validation"],
         "golden_output_comparison": (
             manifest["output_validation"] in

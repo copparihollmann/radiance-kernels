@@ -1,0 +1,26 @@
+{
+  "schema": "radiance.smolvla-progress-control.v1",
+  "status": "passed",
+  "scope": "exact-input first vision stage with upstream PyTorch golden",
+  "checked_output_elements": 786432,
+  "baseline_cycles_functional": 53195240,
+  "progress_cycles_functional": 53195272,
+  "progress_cycle_difference": 32,
+  "progress_markers": [
+    0,
+    1
+  ],
+  "timeout_status": "wall_clock_timeout_as_expected",
+  "timeout_last_completed_stage_marker": 0,
+  "device_elf_sha256": "1017644cf58c1ac6e80d13bc920617c4d2b274eb8424e18a7b4f50d36eaf6b75",
+  "passing_result_sha256": "9014f956e7c798690cd14064e8410cfa5773355c7ee5fb2b520e9837044611af",
+  "passing_log_sha256": "35209250a8e41aa82f989a160662021c57eca189c83dfe97beffd1ef03b92c70",
+  "timeout_result_sha256": "9f969429dc336ac2a93abdb21c7cfecdc44b6df39a813f02a76e75bfd94f6d48",
+  "timeout_log_sha256": "f318fe7a034b9eab1366bde33457c98c32d6a30761d58ec9032c90528022ef6b",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "console_header_sha256": "76a0dfbcc8bd478621689adb62d5a07d220df0f8e67a51a0d933f18b9ac7efef",
+  "full_action_chunk_device_execution": false,
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "source_sha256": "09aa63a0f1902cec1c6631cc2ced8f03a29d2009dfb4f66f3574e570a42f1100"
+}

@@ -242,13 +242,16 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              stage_golden_image: Path | None = None,
              stage_golden_sha256: str | None = None,
              warps: int = 1,
-             all_cores: bool = False) -> Path:
+             all_cores: bool = False,
+             progress_every: int = 0) -> Path:
     if stages_per_object <= 0:
         raise ValueError("stages per object must be positive")
     # Eight warps exhaust the current 256-entry global rename pool before
     # this kernel reaches its first output check.
     if warps not in (1, 2, 4):
         raise ValueError("warps must be one of 1, 2, or 4")
+    if progress_every < 0:
+        raise ValueError("progress interval must be nonnegative")
     if golden_output is not None and stage_golden_image is not None:
         raise ValueError("choose the full-policy golden or a stage golden")
     if (stage_golden_image is None) != (stage_golden_sha256 is None):
@@ -300,6 +303,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     stages = graph.stages if stage_limit is None else graph.stages[:stage_limit]
     if not stages:
         raise ValueError("at least one graph stage is required")
+    if progress_every and len(stages) > 0xFFFF:
+        raise ValueError("progress marker supports at most 65535 stages")
     stage_golden_manifest = None
     if stage_golden_image is not None:
         if stage_limit is None:
@@ -426,20 +431,37 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     final_offset = allocation[final]["offset_bytes"]
     schedule = (f"  mu_schedule(init_inputs, nullptr, {warps});\n"
                 "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();\n")
-    for stage in stages:
+    if progress_every:
+        schedule += "  smolvla_progress(0u);\n"
+    for index, stage in enumerate(stages, 1):
         schedule += (f"  mu_schedule(stage_{symbol(stage['id'])}, nullptr, {warps});\n"
                      "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();\n")
+        if progress_every and (index % progress_every == 0 or index == len(stages)):
+            schedule += f"  smolvla_progress({index}u);\n"
     prototypes = "\n".join(
         f"void stage_{symbol(stage['id'])}(void*, uint32_t, uint32_t, uint32_t);"
         for stage in stages)
     kernel = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
               "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
               + ("#include \"rad_tapeout.h\"\n" if all_cores else "")
+              + ("#include <VX_config.h>\n" if progress_every else "")
               + f"extern \"C\" uint32_t __mu_num_warps = {warps};\n"
               "extern __global unsigned char v_arena[];\n"
               + ("extern __global float v_golden_output[];\n"
                  if golden_values is not None else "")
               + prototypes + "\n" + init +
+              ("void smolvla_putchar(uint32_t value) {\n"
+               "  *(volatile __global uint8_t*)IO_COUT_ADDR = (uint8_t)value;\n"
+               "}\n"
+               "void smolvla_progress(uint32_t stage) {\n"
+               "  if (mu_hart_id() != 0) return;\n"
+               "  smolvla_putchar('S');\n"
+               "  for (int32_t shift = 12; shift >= 0; shift -= 4) {\n"
+               "    uint32_t digit = (stage >> shift) & 15u;\n"
+               "    smolvla_putchar(digit < 10u ? '0' + digit : 'a' + digit - 10u);\n"
+               "  }\n"
+               "  smolvla_putchar('\\n');\n"
+               "}\n" if progress_every else "") +
               "\nint main() {\n" + schedule +
               "  if (mu_hart_id() != 0) { for (;;) {} }\n"
               f"  const __global float* output = (const __global float*)(v_arena + {final_offset}u);\n"
@@ -471,6 +493,7 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 f"include {ROOT / 'kernels/common.mk'}\n"
                 f"kernel.mu.o: {HERE / 'pipeline_smolvla.hpp'}"
                 + (f" {ROOT / 'lib/include/rad_tapeout.h'}" if all_cores else "")
+                + (f" {ROOT / 'lib/include/VX_config.h'}" if progress_every else "")
                 + "\n"
                 + " ".join(name.replace(".cpp", ".mu.o") for name in chunks)
                 + f": {HERE / 'pipeline_smolvla.hpp'}"
@@ -506,6 +529,10 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         "stage_limit": stage_limit, "stages": len(stages),
         "scheduled_warps_per_stage": warps,
         "use_all_cores": all_cores,
+        "progress_every_stages": progress_every,
+        "progress_console_header_sha256": (
+            hashlib.sha256((ROOT / "lib/include/VX_config.h").read_bytes()).hexdigest()
+            if progress_every else None),
         "cache_drain_header_sha256": (
             hashlib.sha256((ROOT / "lib/include/rad_tapeout.h").read_bytes()).hexdigest()
             if all_cores else None),
@@ -539,12 +566,14 @@ def main() -> None:
     parser.add_argument("--stage-golden-sha256")
     parser.add_argument("--warps", type=int, default=1)
     parser.add_argument("--all-cores", action="store_true")
+    parser.add_argument("--progress-every", type=int, default=0)
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
     target = generate(args.weight_image, args.out_root, args.stage_limit,
                       args.stages_per_object, args.input_image,
                       args.golden_output, args.stage_golden_image,
-                      args.stage_golden_sha256, args.warps, args.all_cores)
+                      args.stage_golden_sha256, args.warps, args.all_cores,
+                      args.progress_every)
     if args.build:
         build_device(target)
     print(target)

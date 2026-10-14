@@ -1342,6 +1342,27 @@ reach or check the action output. The generated schedule still contains
 354,131,264,512 scalar linear multiply-accumulates, including
 260,919,263,232 in the vision branches.
 
+Long SmolVLA runs can opt into `compile_smolvla.py --progress-every 10`.
+The resulting ELF writes `S0000` after input initialization, `S000a` after
+stage 10, and one marker every ten completed stages through `S0e59` for the
+final stage 3,673. The runner streams simulator output to `functional.log`
+and retains the completed marker prefix if a wall-clock timeout occurs.
+The [first-stage progress control](evaluation/smolvla-progress-control.json)
+passed all 786,432 upstream PyTorch output checks with markers 0 and 1 at
+53,195,272 functional cycles. That is 32 cycles above the same two-core
+first-stage build without markers. A five-second timeout control retained
+marker 0, recorded exit code 124, and did not claim a pass. The verifier
+checks the raw ELF, image, simulator, and log hashes against the
+[passing run](evaluation/smolvla-progress-stage1-functional.json) and
+[timeout run](evaluation/smolvla-progress-timeout.json).
+The [full progress build check](evaluation/smolvla-full-progress-build.json)
+confirms a linked two-core ELF with all 3,673 stages and 369 ordered markers.
+Its graph, checkpoint, input, golden output, model data, host code, and 92
+stage source chunks match the uninstrumented two-core build. This full ELF
+has not completed the action chunk in Cyclotron. A progress marker establishes
+which stages finished; only the final output comparison establishes numerical
+correctness. Neither count measures FPGA latency or utilization.
+
 The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
 uses the generated C++ stage with real checkpoint weights and byte-exact
 camera input. Its 1024 by 768 patch tokens match a PyTorch convolution plus
