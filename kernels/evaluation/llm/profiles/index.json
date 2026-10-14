@@ -1,0 +1,1078 @@
+{
+  "schema": "radiance.llm.shape_trace_matrix.v1",
+  "source_spec_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "scope": "shape-derived software schedules; no measured utilization, cache, memory, or latency",
+  "cases": [
+    {
+      "model": "tinyllama",
+      "case": "fixed_handoff_shape",
+      "trace": "tinyllama-fixed_handoff_shape.json",
+      "trace_sha256": "2e40b34d345c0583775ee0f5a3aac439d6bb2e5bc446ccd1259e555e79138ea2",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 2,
+        "cached_decode_steps": 2,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "441e30d88f644b7275ef025d59a3c329a2ecfce1f7913e4b110e473d7032b059",
+      "stage_count": 1133,
+      "totals": {
+        "linear_macs": 4137680896,
+        "logical_operand_bytes": 15539736,
+        "mapped_operand_bytes": 31079448,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 256000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 377,
+          "linear_macs": 2068840448,
+          "logical_operand_bytes": 7504904,
+          "mapped_operand_bytes": 15009800,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        },
+        "decode0": {
+          "stages": 378,
+          "linear_macs": 1034420224,
+          "logical_operand_bytes": 4015624,
+          "mapped_operand_bytes": 8031240,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        },
+        "decode1": {
+          "stages": 378,
+          "linear_macs": 1034420224,
+          "logical_operand_bytes": 4019208,
+          "mapped_operand_bytes": 8038408,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        }
+      }
+    },
+    {
+      "model": "tinyllama",
+      "case": "medium_context",
+      "trace": "tinyllama-medium_context.json",
+      "trace_sha256": "dc1307d474ef00008e83b16474dd0d04e2d9afe8c2d5c1581d632463a7a7e838",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "3d79ea134a653c95564f7abcc50ec06c21bd5168be87104de7e910cef78d0341",
+      "stage_count": 755,
+      "totals": {
+        "linear_macs": 133440208896,
+        "logical_operand_bytes": 500909064,
+        "mapped_operand_bytes": 1001817608,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 16384000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 377,
+          "linear_macs": 132405788672,
+          "logical_operand_bytes": 480313856,
+          "mapped_operand_bytes": 960627200,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        },
+        "decode0": {
+          "stages": 378,
+          "linear_macs": 1034420224,
+          "logical_operand_bytes": 20595208,
+          "mapped_operand_bytes": 41190408,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        }
+      }
+    },
+    {
+      "model": "tinyllama",
+      "case": "high_batch",
+      "trace": "tinyllama-high_batch.json",
+      "trace_sha256": "2d9c0e09c77e7122e2ec49e89aec595515a3b805ef27c244cd8f850f90e7129a",
+      "scenario": {
+        "batch": 8,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "01826fc84a47c075cdfb83f56764c023a4725435edac182a0c7fefa3c493c56c",
+      "stage_count": 755,
+      "totals": {
+        "linear_macs": 1067521671168,
+        "logical_operand_bytes": 4007272512,
+        "mapped_operand_bytes": 8014540864,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 131072000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 377,
+          "linear_macs": 1059246309376,
+          "logical_operand_bytes": 3842510848,
+          "mapped_operand_bytes": 7685017600,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        },
+        "decode0": {
+          "stages": 378,
+          "linear_macs": 8275361792,
+          "logical_operand_bytes": 164761664,
+          "mapped_operand_bytes": 329523264,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        }
+      }
+    },
+    {
+      "model": "tinyllama",
+      "case": "long_context",
+      "trace": "tinyllama-long_context.json",
+      "trace_sha256": "c988d875deab6cf9978c807d549fb162f02784a701fc153763ad11cf66328b53",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 1024,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "f81fa3287f8055a358a9c5d9f38e4693da5c97387e89f85f24fea4ec22b88055",
+      "stage_count": 755,
+      "totals": {
+        "linear_macs": 1060280729600,
+        "logical_operand_bytes": 3981005320,
+        "mapped_operand_bytes": 7962006536,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 131072000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 377,
+          "linear_macs": 1059246309376,
+          "logical_operand_bytes": 3842510848,
+          "mapped_operand_bytes": 7685017600,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        },
+        "decode0": {
+          "stages": 378,
+          "linear_macs": 1034420224,
+          "logical_operand_bytes": 138494472,
+          "mapped_operand_bytes": 276988936,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 45,
+            "linear": 155,
+            "rope": 44,
+            "kv_append": 44,
+            "causal_gqa": 22,
+            "add": 44,
+            "gated_activation": 22
+          }
+        }
+      }
+    },
+    {
+      "model": "deepseek_r1_distill_qwen_1_5b",
+      "case": "fixed_handoff_shape",
+      "trace": "deepseek_r1_distill_qwen_1_5b-fixed_handoff_shape.json",
+      "trace_sha256": "d6c8a6c23d92d1132397708f7ad50232f1e3661251defbc4bedab9babe61ce06",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 1,
+        "cached_decode_steps": 2,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "ffce6f7a27c1fbfdbf220647a3bc4e28d2d530590ab6a0cd6294906db2567232",
+      "stage_count": 1691,
+      "totals": {
+        "linear_macs": 4630708224,
+        "logical_operand_bytes": 17899284,
+        "mapped_operand_bytes": 35798548,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 607744
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 563,
+          "linear_macs": 1543569408,
+          "logical_operand_bytes": 5677828,
+          "mapped_operand_bytes": 11355652,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        },
+        "decode0": {
+          "stages": 564,
+          "linear_macs": 1543569408,
+          "logical_operand_bytes": 6067720,
+          "mapped_operand_bytes": 12135432,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        },
+        "decode1": {
+          "stages": 564,
+          "linear_macs": 1543569408,
+          "logical_operand_bytes": 6153736,
+          "mapped_operand_bytes": 12307464,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        }
+      }
+    },
+    {
+      "model": "deepseek_r1_distill_qwen_1_5b",
+      "case": "medium_context",
+      "trace": "deepseek_r1_distill_qwen_1_5b-medium_context.json",
+      "trace_sha256": "11bc0efbfdecd5229b8a0c403c600741b56aa26b79d4f42b6f4dae1604966f5b",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "3db89ca3a1c82a1d14d230aeb201c3ecfa482509611c8d5015e13b6503f72150",
+      "stage_count": 1127,
+      "totals": {
+        "linear_macs": 199120453632,
+        "logical_operand_bytes": 782345480,
+        "mapped_operand_bytes": 1564690440,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 77791232
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 563,
+          "linear_macs": 197576884224,
+          "logical_operand_bytes": 726761984,
+          "mapped_operand_bytes": 1453523456,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        },
+        "decode0": {
+          "stages": 564,
+          "linear_macs": 1543569408,
+          "logical_operand_bytes": 55583496,
+          "mapped_operand_bytes": 111166984,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        }
+      }
+    },
+    {
+      "model": "deepseek_r1_distill_qwen_1_5b",
+      "case": "high_batch",
+      "trace": "deepseek_r1_distill_qwen_1_5b-high_batch.json",
+      "trace_sha256": "ff6060b25d752001e7f9f78eba9a6318e3008ad36793d9f0a29a9124a772d5b8",
+      "scenario": {
+        "batch": 8,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "ac7b561a702d0fe3752b0dbf7dede1cca24298965ae356fd02f26eba58a39415",
+      "stage_count": 1127,
+      "totals": {
+        "linear_macs": 1592963629056,
+        "logical_operand_bytes": 6258763840,
+        "mapped_operand_bytes": 12517523520,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 622329856
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 563,
+          "linear_macs": 1580615073792,
+          "logical_operand_bytes": 5814095872,
+          "mapped_operand_bytes": 11628187648,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        },
+        "decode0": {
+          "stages": 564,
+          "linear_macs": 12348555264,
+          "logical_operand_bytes": 444667968,
+          "mapped_operand_bytes": 889335872,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        }
+      }
+    },
+    {
+      "model": "deepseek_r1_distill_qwen_1_5b",
+      "case": "long_context",
+      "trace": "deepseek_r1_distill_qwen_1_5b-long_context.json",
+      "trace_sha256": "3b011ab1b065dd2e806667f4bac678681cd2396409b9db746603829d2ed530bb",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 1024,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "b02341649097acf51f4e8d70cc52a3724a0101abb85cdf3683c7dcf3c6c26efa",
+      "stage_count": 1127,
+      "totals": {
+        "linear_macs": 1582158643200,
+        "logical_operand_bytes": 6219019016,
+        "mapped_operand_bytes": 12438033928,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 622329856
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 563,
+          "linear_macs": 1580615073792,
+          "logical_operand_bytes": 5814095872,
+          "mapped_operand_bytes": 11628187648,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        },
+        "decode0": {
+          "stages": 564,
+          "linear_macs": 1543569408,
+          "logical_operand_bytes": 404923144,
+          "mapped_operand_bytes": 809846280,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 57,
+            "linear": 197,
+            "bias_add": 84,
+            "rope": 56,
+            "kv_append": 56,
+            "causal_gqa": 28,
+            "add": 56,
+            "gated_activation": 28
+          }
+        }
+      }
+    },
+    {
+      "model": "gemma_2_2b_it",
+      "case": "fixed_handoff_shape",
+      "trace": "gemma_2_2b_it-fixed_handoff_shape.json",
+      "trace_sha256": "4a0e16cf9e94ac88a22e5dac422afb641afb4193bfc65e7d9e4e42bfceb15837",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 2,
+        "cached_decode_steps": 2,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "f1935b8aa580e4972411b17641fbf7c57e510400d146dc4c9c484bbc6240ecc3",
+      "stage_count": 1496,
+      "totals": {
+        "linear_macs": 10456399872,
+        "logical_operand_bytes": 35602456,
+        "mapped_operand_bytes": 71204888,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 2048000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 498,
+          "linear_macs": 5228199936,
+          "logical_operand_bytes": 16234504,
+          "mapped_operand_bytes": 32469000,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        },
+        "decode0": {
+          "stages": 499,
+          "linear_macs": 2614099968,
+          "logical_operand_bytes": 9780232,
+          "mapped_operand_bytes": 19560456,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        },
+        "decode1": {
+          "stages": 499,
+          "linear_macs": 2614099968,
+          "logical_operand_bytes": 9587720,
+          "mapped_operand_bytes": 19175432,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        }
+      }
+    },
+    {
+      "model": "gemma_2_2b_it",
+      "case": "medium_context",
+      "trace": "gemma_2_2b_it-medium_context.json",
+      "trace_sha256": "dfd5c54ee74ef57a7f7c144482ee03594b67b6fe907f681ee6464e88eb6e139e",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "048d64257bf305f1ee5df26b23b67dcaa47f440567308d9049b383a45d94d831",
+      "stage_count": 997,
+      "totals": {
+        "linear_macs": 337218895872,
+        "logical_operand_bytes": 1153555976,
+        "mapped_operand_bytes": 2307111432,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 131072000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 498,
+          "linear_macs": 334604795904,
+          "logical_operand_bytes": 1039008256,
+          "mapped_operand_bytes": 2078016000,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        },
+        "decode0": {
+          "stages": 499,
+          "linear_macs": 2614099968,
+          "logical_operand_bytes": 114547720,
+          "mapped_operand_bytes": 229095432,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        }
+      }
+    },
+    {
+      "model": "gemma_2_2b_it",
+      "case": "high_batch",
+      "trace": "gemma_2_2b_it-high_batch.json",
+      "trace_sha256": "c0137ee94b8a6c33d6fa85c64a2557d394f6fc495f48ceb743f5376bf8ff6ea5",
+      "scenario": {
+        "batch": 8,
+        "prefill_tokens": 128,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "4527990510d681cb4b0d3425d48001787a7e19e70cfc851b64a49b82098a9235",
+      "stage_count": 997,
+      "totals": {
+        "linear_macs": 2697751166976,
+        "logical_operand_bytes": 9228447808,
+        "mapped_operand_bytes": 18456891456,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 1048576000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 498,
+          "linear_macs": 2676838367232,
+          "logical_operand_bytes": 8312066048,
+          "mapped_operand_bytes": 16624128000,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        },
+        "decode0": {
+          "stages": 499,
+          "linear_macs": 20912799744,
+          "logical_operand_bytes": 916381760,
+          "mapped_operand_bytes": 1832763456,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        }
+      }
+    },
+    {
+      "model": "gemma_2_2b_it",
+      "case": "long_context",
+      "trace": "gemma_2_2b_it-long_context.json",
+      "trace_sha256": "ce7dcee1d5f92fb1b72e5cde2ab0c1b3a87517400c4afeab1a64913929621848",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": 1024,
+        "cached_decode_steps": 1,
+        "scope": "one_prefill_plus_cached_greedy_decode"
+      },
+      "graph_sha256": "b323f85afbcdeb0afe2cd599320211214829476ab1d227b0249394b2b6810183",
+      "stage_count": 997,
+      "totals": {
+        "linear_macs": 2679452467200,
+        "logical_operand_bytes": 9171627016,
+        "mapped_operand_bytes": 18343249928,
+        "largest_mapped_tensor": "prefill.lm_head",
+        "largest_mapped_tensor_bytes": 1048576000
+      },
+      "phase_summary": {
+        "prefill": {
+          "stages": 498,
+          "linear_macs": 2676838367232,
+          "logical_operand_bytes": 8312066048,
+          "mapped_operand_bytes": 16624128000,
+          "ops": {
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        },
+        "decode0": {
+          "stages": 499,
+          "linear_macs": 2614099968,
+          "logical_operand_bytes": 859560968,
+          "mapped_operand_bytes": 1719121928,
+          "ops": {
+            "token_select": 1,
+            "embedding": 1,
+            "rmsnorm": 105,
+            "linear": 183,
+            "rope": 52,
+            "kv_append": 52,
+            "causal_gqa": 26,
+            "add": 52,
+            "gated_activation": 26,
+            "softcap": 1
+          }
+        }
+      }
+    },
+    {
+      "model": "smolvla_base",
+      "case": "one_action_queue_refill",
+      "trace": "smolvla_base-one_action_queue_refill.json",
+      "trace_sha256": "229745e09cf7647950a8702a00e05cf349c2cc7b46b9fa053e110f7316083015",
+      "scenario": {
+        "batch": 1,
+        "prefill_tokens": null,
+        "cached_decode_steps": null,
+        "scope": "one_action_queue_refill"
+      },
+      "graph_sha256": "d9ebbd7181e084a602d2cb0b0c2685667d80ab117abb2d16e6df8910b58feee8",
+      "stage_count": 3673,
+      "totals": {
+        "linear_macs": 354131264512,
+        "logical_operand_bytes": 4297734185,
+        "mapped_operand_bytes": 8596728664,
+        "largest_mapped_tensor": "camera0.vision.layer00.fc1.linear",
+        "largest_mapped_tensor_bytes": 12582912
+      },
+      "phase_summary": {
+        "prefix": {
+          "stages": 913,
+          "linear_macs": 301090240512,
+          "logical_operand_bytes": 3629693185,
+          "mapped_operand_bytes": 7251894904,
+          "ops": {
+            "patch_embed": 3,
+            "layernorm": 75,
+            "linear": 332,
+            "bias_add": 217,
+            "bidirectional_mha": 36,
+            "add": 104,
+            "gelu_tanh": 36,
+            "pixel_shuffle": 3,
+            "embedding_scale": 4,
+            "embedding": 1,
+            "multimodal_merge": 1,
+            "prefix_pad_mask": 1,
+            "prefix_attention_groups": 1,
+            "prefix_attention_mask": 1,
+            "prefix_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 32,
+            "masked_gqa": 16,
+            "gated_activation": 16
+          }
+        },
+        "denoise0": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66809860,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise1": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise2": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise3": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise4": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise5": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise6": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise7": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise8": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        },
+        "denoise9": {
+          "stages": 276,
+          "linear_macs": 5304102400,
+          "logical_operand_bytes": 66803460,
+          "mapped_operand_bytes": 134483376,
+          "ops": {
+            "timestep_constant": 1,
+            "linear": 116,
+            "bias_add": 4,
+            "sinusoidal_time_embedding": 1,
+            "broadcast_tokens": 1,
+            "concat_features": 1,
+            "silu": 1,
+            "suffix_pad_mask": 1,
+            "suffix_attention_groups": 1,
+            "suffix_attention_mask": 1,
+            "suffix_position_ids": 1,
+            "suffix_local_position_ids": 1,
+            "rmsnorm": 33,
+            "rope_with_positions": 24,
+            "suffix_kv_append": 16,
+            "masked_gqa": 16,
+            "add": 32,
+            "gated_activation": 16,
+            "prefix_attention_slice": 8,
+            "euler_step": 1
+          }
+        }
+      }
+    }
+  ]
+}

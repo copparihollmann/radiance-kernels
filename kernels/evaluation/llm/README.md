@@ -243,6 +243,28 @@ still open. The [bounded runtime diagnostic](../../model_chain/evaluation/smolvl
 records why the current one-warp scalar mapping is expensive to interpret and
 what its short Cyclotron run establishes.
 
+## Shape traces for the pinned models
+
+Run `python3 profile_workloads.py --out-dir profiles` to regenerate the
+[13-case trace index](profiles/index.json). The cases include each fixed
+decoder handoff shape, 128-token prefill at batch 1 and 8, 1,024-token
+prefill at batch 1, and one SmolVLA action-queue refill. Every trace records
+stage order, tensor dependencies, shapes, and per-phase operand sizes. Decoder
+prefill and cached decode remain separate phases. SmolVLA's trace retains
+the one-time vision/VLM prefix, all ten denoising iterations, and the
+50-action queue semantics; the listed stages represent one refill.
+
+These are shape-derived traces. The operand byte totals sum tensor sizes at
+stage boundaries using model logical dtypes and the current FP32/32-bit
+software buffer mapping. They exclude weights and scratch space and do not
+predict cache misses or DRAM transactions. The MAC totals cover linear
+stages only. The 128- and 1,024-token cases are **not compiled device
+programs**. For example, Gemma's largest mapped tensor in the long-context
+case is a 1,048,576,000-byte prefill logit tensor, so a 2 GiB target with
+the current 2,019,513,344-byte packed weight image would need output tiling
+or another placement policy. These traces identify software mapping work;
+they are not utilization, latency, or performance results.
+
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The
 [model source table](inputs/sources.csv) pins five official
