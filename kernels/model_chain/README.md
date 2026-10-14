@@ -145,9 +145,16 @@ tokens `[16, 8]`; the largest logit error across prefill and decode is
 now builds with the same three input IDs and two dependent greedy steps. Its
 checkpoint-backed reference also selects `[16, 8]`; FP16 storage conversion
 keeps the top token at every output, with at most `1.36e-5` logit difference.
-The one-token full-depth device run is in progress. Neither full-depth ELF has
-yet passed a complete device run. Cyclotron functional cycles are
-not hardware latency or utilization.
+The [one-token full-depth device run](evaluation/qwen3-full-depth-fp16-functional.json)
+now passes all 1,071 ordered stages in Cyclotron with `tohost=0` after
+2,950,225,579 functional cycles. The [saved-artifact verification](evaluation/qwen3-full-depth-fp16-functional-verification.json)
+rechecks the ELF, all generated device sources, reference, simulator,
+configuration, completion log, and 1,192,230,912-byte checkpoint image by
+hash. This is a full-dimension FP16 checkpoint mapping with one prefill token
+and one dependent greedy decode step. Its FP16 arithmetic is not bit-for-bit
+upstream FP32 execution. The three-token/two-step ELF is running separately;
+it has no completed device result yet. Cyclotron functional cycles are not
+hardware latency or utilization.
 
 The checkpoint file and binary image stay in the local task directory. To
 reproduce the build, use the pinned checkpoint from the linked check and
@@ -175,6 +182,16 @@ python3 kernels/evaluation/llm/verify_qwen3_checkpoint.py \
 python3 kernels/evaluation/llm/verify_qwen3_checkpoint.py \
   --checkpoint-dir "$CHECKPOINT" --prefill-ids 5 6 7 --decode-steps 2 \
   --out "$BUILD/qwen3-checkpoint-multitoken-reference.json"
+python3 kernels/model_chain/run_functional.py --models qwen3_0_6b \
+  --generated-root "$BUILD" --cyclotron-root "$CYCLOTRON" \
+  --sim-cycles 12000000000 --timeout 21600 \
+  --out "$BUILD/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$BUILD/qwen3_0_6b/functional-result.json" \
+  --simulator "$CYCLOTRON/target/release/cyclotron" \
+  --config "$BUILD/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/qwen3-0.6b.json \
+  --out "$BUILD/qwen3_0_6b/verification.json"
 ```
 
 The upstream FP32 comparison reused the same checkpoint file and reached
