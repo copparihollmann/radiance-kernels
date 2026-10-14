@@ -345,6 +345,77 @@ functional ISA cycles; no RTL timing, utilization, power, or FPGA result is
 inferred. The full-depth task-local build occupied about 25 MiB and peaked at
 283 MiB RSS with one Muon build job.
 
+### 128-token prefill control
+
+The pinned workload schedule starts with 128 tokens. A separate reduced-width
+control uses that prompt length and the same 42-block order, then makes two
+greedy decode calls. The prompt repeats token IDs 1 through 63 so every ID is
+valid in the reduced vocabulary. The
+[one-block build](evaluation/nemotron-context128-one-layer-build.json) passed
+all 59 native and [Cyclotron](evaluation/nemotron-context128-one-layer-functional.json)
+checks; its [verifier](evaluation/nemotron-context128-one-layer-verification.json)
+records `tohost=0` after 2,439,980 functional ISA cycles.
+
+The [42-block build](evaluation/nemotron-context128-full-build.json) passed
+all 1,322 native stages with maximum absolute difference `4.01e-5`, selecting
+greedy IDs `[11, 52]`. At the default `rtol=1e-4, atol=1e-5` threshold,
+10 values in later prefill residual tensors failed. The
+[diagnostic](evaluation/nemotron-context128-native-diagnostic.json) records
+every value; all checks pass with the explicitly recorded `atol=2e-5`, still
+below the device check's `5e-4` absolute threshold. The pattern is consistent
+with accumulated FP32 evaluation-order differences, but does not prove their
+cause. The [Cyclotron run](evaluation/nemotron-context128-full-functional.json)
+passed all 1,322 stages with `tohost=0` after 76,352,905 functional ISA
+cycles; [artifact verification](evaluation/nemotron-context128-full-verification.json)
+passed. The single-job build peaked at 621 MiB RSS. Its task-local directory
+used 127 MiB, including the diagnostic C++ copy; the functional runner peaked
+at 74 MiB RSS.
+
+The [independent upstream mixer check](../evaluation/llm/nemotron-context128-mixer-reference.json)
+uses a separate seeded random-weight fixture. Its 128-token prefill and two
+cached decode calls agree with Transformers 5.3.0's CPU fallback to `2.76e-6`
+maximum mixer-output difference. Final convolution and SSM state differences
+are at most `2.39e-7` and `5.97e-8`. This comparison covers one Mamba mixer,
+not the 42-block network. Both Radiance controls use synthetic FP32 weights,
+reduced widths, and an eight-token scan chunk; the pinned model has different
+widths and a 256-token chunk. These checks do not supply checkpoint fidelity,
+RTL latency, FPGA performance, or a full upstream network comparison.
+
+To reproduce the 128-token build, set `TMPDIR` to a writable task directory,
+`LLVM_MUON` to the Muon toolchain, and `RADIANCE_BUILD_JOBS=1`. The last
+command uses an environment with Transformers 5.3.0 and PyTorch 2.9.1:
+
+```sh
+python3 - <<'PY'
+import os
+import sys
+from pathlib import Path
+sys.path.insert(0, 'kernels/model_chain')
+from compile_decoder import build_device, generate, verify_native
+
+target = generate('nemotron3_nano_4b', 42, 128, 2, 'greedy',
+                  Path(os.environ['TMPDIR']) / 'nemotron-context128-full',
+                  device_check_all_stages=True, stages_per_object=20,
+                  token_ids=[1 + i % 63 for i in range(128)],
+                  native_rtol=1e-4, native_atol=2e-5)
+print(verify_native(target))
+build_device(target)
+PY
+python3 kernels/model_chain/run_functional.py --models nemotron3_nano_4b \
+  --generated-root "$TMPDIR/nemotron-context128-full" \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 500000000 --timeout 1200 \
+  --out "$TMPDIR/nemotron-context128-full/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$TMPDIR/nemotron-context128-full/nemotron3_nano_4b/functional-result.json" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --config "$TMPDIR/nemotron-context128-full/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/nemotron3-nano-4b.json \
+  --out "$TMPDIR/nemotron-context128-full/nemotron3_nano_4b/verification.json"
+python3 kernels/evaluation/llm/verify_nemotron_graph_reduced.py \
+  --prefill 128 --out "$TMPDIR/nemotron-context128-mixer-reference.json"
+```
+
 Reproduce with task-local `TMPDIR` and the Muon and Cyclotron paths set:
 
 ```sh

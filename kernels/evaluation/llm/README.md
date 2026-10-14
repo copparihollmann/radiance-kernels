@@ -470,6 +470,19 @@ dimensions. The 3,629,544 Cyclotron cycles are functional ISA cycles, not
 timed hardware performance. The kernel path does not validate the pinned
 checkpoint or settle the upstream attention-cache behavior.
 
+At the pinned graph's 128-token prompt length, a
+[reduced one-layer mixer comparison](nemotron-context128-mixer-reference.json)
+passes against the Transformers 5.3.0 CPU fallback over prefill and two cached
+decode calls. It uses an eight-token scan chunk and a separate seeded weight
+fixture; maximum mixer-output difference is `2.76e-6`. The connected
+[42-block Radiance control](../../model_chain/evaluation/nemotron-context128-full-functional.json)
+also passes all 1,322 Cyclotron stage checks for 128 prefill tokens and two
+greedy decode steps. The [native diagnostic](../../model_chain/evaluation/nemotron-context128-native-diagnostic.json)
+records 10 sparse later-residual mismatches at the strict default tolerance
+and the explicitly calibrated `2e-5` absolute tolerance used for the passing
+build. Widths, weights, and scan chunk size remain reduced; this is still not
+the pinned checkpoint or hardware performance.
+
 Reproduce these controls with task-local `TMPDIR` and a Python environment
 containing Transformers 5.3.0 and PyTorch 2.9.1:
 

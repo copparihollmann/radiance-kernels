@@ -1,0 +1,95 @@
+{
+  "schema": "radiance.nemotron-context128-native-diagnostic.v1",
+  "scope": "42-block reduced FP32 synthetic graph, 128-token prefill, two greedy decode steps",
+  "strict_check": {
+    "rtol": 0.0001,
+    "atol": 1e-05,
+    "errors": 10,
+    "max_abs_error": 4.00543213e-05,
+    "failures": [
+      {
+        "stage": "prefill_layer18_residual",
+        "element_index": 2693,
+        "native": -0.000846147537,
+        "reference": -0.000832557678,
+        "abs_error": 1.3589859e-05
+      },
+      {
+        "stage": "prefill_layer21_residual",
+        "element_index": 2705,
+        "native": -0.00421255827,
+        "reference": -0.0042257309,
+        "abs_error": 1.31726265e-05
+      },
+      {
+        "stage": "prefill_layer28_residual",
+        "element_index": 2707,
+        "native": -0.160330534,
+        "reference": -0.160299778,
+        "abs_error": 3.07559967e-05
+      },
+      {
+        "stage": "prefill_layer29_residual",
+        "element_index": 683,
+        "native": 0.00206899643,
+        "reference": 0.00205481052,
+        "abs_error": 1.41859055e-05
+      },
+      {
+        "stage": "prefill_layer29_residual",
+        "element_index": 2699,
+        "native": -0.0753666162,
+        "reference": -0.0753872395,
+        "abs_error": 2.06232071e-05
+      },
+      {
+        "stage": "prefill_layer30_residual",
+        "element_index": 2213,
+        "native": -0.0216744989,
+        "reference": -0.0216910169,
+        "abs_error": 1.65179372e-05
+      },
+      {
+        "stage": "prefill_layer39_residual",
+        "element_index": 1671,
+        "native": 0.0283243656,
+        "reference": 0.0283386707,
+        "abs_error": 1.43051147e-05
+      },
+      {
+        "stage": "prefill_layer40_residual",
+        "element_index": 359,
+        "native": -0.0996622443,
+        "reference": -0.0996395946,
+        "abs_error": 2.2649765e-05
+      },
+      {
+        "stage": "prefill_layer40_residual",
+        "element_index": 867,
+        "native": 0.0515075028,
+        "reference": 0.0515235662,
+        "abs_error": 1.60634518e-05
+      },
+      {
+        "stage": "prefill_layer41_residual",
+        "element_index": 359,
+        "native": 0.115084663,
+        "reference": 0.11510995,
+        "abs_error": 2.52872705e-05
+      }
+    ]
+  },
+  "accepted_check": {
+    "rtol": 0.0001,
+    "atol": 2e-05,
+    "errors": 0,
+    "max_abs_error": 4.00543213e-05
+  },
+  "all_strict_failures_are_late_prefill_residuals": true,
+  "diagnostic_source_sha256": "e858bd4bde033c96cc736573c73ad62c98e729e2f83827e866a96faa95827e81",
+  "diagnostic_log_sha256": "7a97f1b640fd8ae10706712ead65784cb4d64d6b9140da2756b30b1753aac081",
+  "accepted_native_log_sha256": "de97fadd1c1baa107b553b560060449aef3f9d52b56bb77f4a2d5f142628a384",
+  "interpretation": "The sparse residual mismatches are consistent with accumulated FP32 evaluation-order differences; this pattern does not prove their cause.",
+  "rtl_execution": false,
+  "performance_measurement": false
+}

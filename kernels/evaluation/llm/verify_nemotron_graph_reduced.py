@@ -20,7 +20,9 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def compare() -> dict:
+def compare(prefill: int = 3) -> dict:
+    if prefill < 1:
+        raise ValueError("prefill must be positive")
     import torch
     import transformers
     from transformers.models.nemotron_h import modeling_nemotron_h
@@ -69,14 +71,14 @@ def compare() -> dict:
 
     pinned = stitch.model_specs()["nemotron3_nano_4b"]
     spec = nemotron_graph_reference.control_spec(pinned, 1)
-    graph = stitch.build("nemotron3_nano_4b", prefill=3, decode_steps=2,
+    graph = stitch.build("nemotron3_nano_4b", prefill=prefill, decode_steps=2,
                          generation="teacher_forced",
                          specs={"nemotron3_nano_4b": spec})
-    ids = np.array([[1, 2, 3, 4, 5]], dtype=np.int32)
+    ids = np.array([[1 + i % 63 for i in range(prefill + 2)]], dtype=np.int32)
     values = nemotron_graph_reference.execute(graph, {
-        "prefill.token_ids": ids[:, :3],
-        "decode0.token_ids": ids[:, 3:4],
-        "decode1.token_ids": ids[:, 4:5],
+        "prefill.token_ids": ids[:, :prefill],
+        "decode0.token_ids": ids[:, prefill:prefill + 1],
+        "decode1.token_ids": ids[:, prefill + 1:prefill + 2],
     }, weights=Weights())
     differences: dict[str, float] = {}
     with torch.no_grad():
@@ -100,7 +102,9 @@ def compare() -> dict:
             raise AssertionError(f"{name}: upstream difference {error}")
     return {
         "schema": "radiance.nemotron-graph-mixer-reference.v1",
-        "status": "passed", "scope": "one reduced random-weight Mamba layer, three-token prefill and two cached decode calls",
+        "status": "passed", "scope": ("one reduced random-weight Mamba layer, "
+                                      f"{'three' if prefill == 3 else prefill}-token "
+                                      "prefill and two cached decode calls"),
         "pinned_model": pinned["name"],
         "pinned_config_sha256": pinned["source_sha256"],
         "graph_stage_count": len(graph.stages),
@@ -120,8 +124,9 @@ def compare() -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--prefill", type=int, default=3)
     args = parser.parse_args()
-    result = compare()
+    result = compare(args.prefill)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     print("matched one stitched Mamba layer to Transformers CPU fallback")
