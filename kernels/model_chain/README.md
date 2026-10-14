@@ -234,6 +234,21 @@ the standard nightly `kernel_cycles` field is 32-bit and should not be used
 for these long model chains. This depends on the target image implementing
 the `mcycleh` CSR present in the current Radiance source.
 
+After a FireSim run, `collect_firesim_result.py` can hash the staged ELF,
+its packer receipt, the matching full-model HBM build manifest, HWDB and
+workload files, UART log, and any counter files. It accepts a result only if
+the manifest identifies the complete model, the receipt binds it to that
+source ELF, FireSim exited zero, and exactly one UART report contains the
+device PASS status with consistent 64-bit cycle stamps. The compact source
+manifests are [TinyLlama](evaluation/tinyllama-2g-hbm-build.json),
+[DeepSeek/Qwen](evaluation/deepseek-2g-hbm-build.json),
+[Gemma](evaluation/gemma-2g-hbm-build.json), and
+[SmolVLA](evaluation/smolvla-2g-hbm-build.json). The collector preserves raw
+cycle counts and artifact hashes; it does not infer seconds, utilization,
+power, or agreement between a supplied HWDB file and the physical bitstream.
+Its [controls](test_collect_firesim_result.py) use synthetic UART text; no
+full-model FPGA result is recorded here yet.
+
 For the 2 GiB GPU map in the public HBM configuration, SmolVLA's FP32 image
 fits if its two weight segments and exact input image are moved below the warp
 stacks. `relocate_images.py` verifies the original bytes and rejects overlaps
