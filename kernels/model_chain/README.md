@@ -184,9 +184,10 @@ source bundle with `prepare_hbm.py`. It copies all scheduled stage sources and
 changes only the launch, completion, and verification reporting paths. The
 resulting SoC ELF still needs the checkpoint images:
 
-The current adapter launches cluster 0 only. It can run on a two-SM image,
-but the second SM stays idle; this is a one-SM baseline, not a two-SM
-scaling measurement. A two-SM model mapping needs separate per-cluster
+The current adapter launches cluster 0 only and schedules the dependent stages
+on core 0 of that cluster. The other core and the second SM on a two-SM image
+stay idle. Its cycles describe a single-core software mapping within the
+one-SM baseline. A two-SM model mapping needs separate per-cluster
 activations and outputs, shared weights, and synchronization at dependent
 stage boundaries before a speedup comparison is meaningful.
 
