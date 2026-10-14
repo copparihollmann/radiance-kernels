@@ -133,7 +133,7 @@ The next execution step is to run the corrected full-size 224×224 ELF and compa
 
 ## FPGA handoff artifacts
 
-`package_handoff.py` copies a built runtime-input ELF, its separate weight and input images, an upstream output vector, and a completed Cyclotron receipt when available. It validates the hashes and writes a per-case `load-map.json` with the exact GPU addresses and output readback location. For example:
+`package_handoff.py` copies a built runtime-input ELF, its separate weight and input images, an upstream output vector, and a numerically checked Cyclotron receipt when available. Pass `verification.json` after a `--no-reference` run, or a `result.json` produced with the reference check enabled. A completion-only receipt is rejected as a simulator pass. The packager verifies hashes before copying the large weight image and writes a per-case `load-map.json` with the exact GPU addresses and output readback location. For example:
 
 ```sh
 python kernels/spectformer/package_handoff.py --out "$TMPDIR/spectformer/fpga-handoff" \

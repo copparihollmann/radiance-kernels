@@ -43,6 +43,33 @@ def verify(root: Path) -> int:
         if "reference.bin" in case["files"] and (
                 case["files"]["reference.bin"]["bytes"] != case["output"]["bytes"]):
             raise ValueError(f"{name}: reference length differs from output")
+        if case["simulator_status"] == "passed":
+            raw_path = case_dir / "simulator-result.json"
+            raw = json.loads(raw_path.read_text())
+            if "simulator-verification.json" in case["files"]:
+                verification = json.loads((case_dir / "simulator-verification.json").read_text())
+                if (verification.get("status") != "passed" or
+                        verification.get("reference_checked") is not True or
+                        verification.get("all_finite") is not True or
+                        verification.get("out_of_tolerance") != 0 or
+                        verification.get("run_result_sha256") != sha256(raw_path) or
+                        raw.get("status") != "passed" or
+                        raw.get("reference_checked") is not False or
+                        raw.get("output_kind") != case["output_kind"] or
+                        verification.get("scope") != case["output_kind"] or
+                        verification.get("output_count") != case["output"]["elements"] or
+                        any(verification.get(key) != raw.get(key) for key in
+                            ("elf_sha256", "weights_sha256", "input_sha256")) or
+                        verification.get("reference_sha256") !=
+                        case["files"]["reference.bin"]["sha256"]):
+                    raise ValueError(f"{name}: invalid checked simulator pass")
+            else:
+                comparison = raw.get("output_comparison")
+                if (raw.get("status") != "passed" or
+                        raw.get("reference_checked") is not True or
+                        not isinstance(comparison, dict) or
+                        comparison.get("all_close") is not True):
+                    raise ValueError(f"{name}: simulator pass lacks a reference check")
         loads = case["gmem_loads"]
         intervals = sorted((int(item["gpu_address"], 16),
                             int(item["gpu_address"], 16) + item["bytes"])
