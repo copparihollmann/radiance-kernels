@@ -199,6 +199,62 @@ class ModelStitchTest(unittest.TestCase):
                          "lm_head")
         self.assertFalse(graph.report()["device_execution"])
 
+    def test_nemotron_carries_distinct_mamba_and_attention_state(self):
+        spec = model_specs()["nemotron3_nano_4b"]
+        self.assertEqual((spec["layer_kinds"].count("mamba2"),
+                          spec["layer_kinds"].count("full_attention"),
+                          spec["layer_kinds"].count("mlp_only")), (21, 4, 17))
+        graph = build("nemotron3_nano_4b", prefill=3, decode_steps=2,
+                      generation="greedy")
+        stages = {stage["id"]: stage for stage in graph.stages}
+        self.assertEqual(len(graph.outputs), 3)
+        self.assertEqual(graph.execution_schedule["layer_kinds"],
+                         spec["layer_kinds"])
+        self.assertEqual(graph.report()["pinned_attention_cache_handoff"],
+                         "missing_in_block_call")
+        self.assertEqual(len(graph.execution_schedule["decode_loop"][0]
+                             ["previous_cache"]), 25)
+        for layer, kind in enumerate(spec["layer_kinds"]):
+            pre = f"prefill.layer{layer:02d}"
+            dec = f"decode0.layer{layer:02d}"
+            self.assertEqual(stages[f"{dec}.pre_norm"]["reads"],
+                             [f"decode0.embedding" if layer == 0 else
+                              f"decode0.layer{layer-1:02d}.residual"])
+            if kind == "mamba2":
+                self.assertEqual(stages[f"{pre}.in_proj"]["attrs"]["weight_shape"],
+                                 [3136, 17504])
+                self.assertEqual(graph.tensors[f"{pre}.conv_state"]["shape"],
+                                 [1, 9728, 4])
+                self.assertEqual(graph.tensors[f"{pre}.ssm_state"]["shape"],
+                                 [1, 96, 80, 128])
+                self.assertEqual(graph.tensors[f"{pre}.ssm_state"]["dtype"],
+                                 "fp32")
+                self.assertEqual(stages[f"{dec}.conv_state"]["reads"],
+                                 [f"{pre}.conv_state", f"{dec}.conv_input"])
+                self.assertIn(f"{pre}.ssm_state",
+                              stages[f"{dec}.selective_scan"]["reads"])
+                self.assertNotIn(f"{pre}.k_cache", stages)
+            elif kind == "full_attention":
+                self.assertEqual(stages[f"{pre}.q_proj"]["attrs"]["weight_shape"],
+                                 [3136, 40 * 128])
+                self.assertEqual(stages[f"{dec}.k_cache"]["reads"],
+                                 [f"{pre}.k_cache", f"{dec}.k_proj"])
+                self.assertEqual(graph.tensors[f"{dec}.k_cache"]["shape"],
+                                 [1, 4, 8, 128])
+                self.assertFalse(stages[f"{dec}.attention"]["attrs"]["rotary"])
+                self.assertNotIn(f"{pre}.ssm_state", stages)
+            else:
+                self.assertEqual(stages[f"{pre}.activation"]["op"],
+                                 "relu_squared")
+                self.assertNotIn(str(layer),
+                                 graph.execution_schedule["decode_loop"][0]
+                                 ["previous_cache"])
+        self.assertEqual(stages["decode1.token_ids"]["reads"],
+                         ["decode0.lm_head"])
+        self.assertEqual(stages["prefill.last_hidden"]["shape"], [1, 1, 3136])
+        self.assertEqual(stages["prefill.lm_head"]["shape"], [1, 1, 131072])
+        self.assertFalse(graph.report()["device_execution"])
+
     def test_qwen3_order_head_norm_rope_and_tied_head(self):
         spec = model_specs()["qwen3_0_6b"]
         graph = build("qwen3_0_6b", prefill=3, decode_steps=1)

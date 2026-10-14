@@ -14,6 +14,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from inventory import layer_kinds
+
 
 HERE = Path(__file__).resolve().parent
 KERNELS = HERE.parents[1]
@@ -120,6 +122,32 @@ def model_specs() -> dict:
         "activation": config["hidden_act"], "qkv_bias": False,
         "tied_lm_head": False,
     }
+    source = sources["nemotron3-nano-4b"]
+    raw = (HERE / "inputs" / source["config_file"]).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != source["config_sha256"]:
+        raise ValueError("pinned Nemotron config changed")
+    config = json.loads(raw)
+    if (config["model_type"] != "nemotron_h" or config["attention_bias"]
+            or config["mlp_bias"] or config["use_bias"]
+            or config["tie_word_embeddings"] or config["sliding_window"] is not None
+            or config["mlp_hidden_act"] != "relu2"
+            or config["mamba_hidden_act"] != "silu"
+            or config["num_logits_to_keep"] != 1
+            or config["num_attention_heads"] % config["num_key_value_heads"]
+            or config["mamba_num_heads"] % config["n_groups"]):
+        raise ValueError("unsupported Nemotron hybrid configuration")
+    specs["nemotron3_nano_4b"] = {
+        "name": source["model"], "family": "nemotron_h",
+        "source": source["source_url"], "source_sha256": source["config_sha256"],
+        "checkpoint_revision": source["revision"],
+        **{key: config[key] for key in (
+            "hidden_size", "intermediate_size", "num_hidden_layers",
+            "num_attention_heads", "num_key_value_heads", "head_dim",
+            "vocab_size", "layer_norm_epsilon", "mamba_num_heads",
+            "mamba_head_dim", "n_groups", "ssm_state_size", "conv_kernel",
+            "chunk_size", "num_logits_to_keep")},
+        "layer_kinds": layer_kinds(config), "tied_lm_head": False,
+    }
     return specs
 
 
@@ -172,8 +200,11 @@ class Graph:
             "execution_schedule": self.execution_schedule,
             "tensors": self.tensors, "stages": self.stages,
         }
-        if self.spec["family"] in {"qwen3", "olmo3", "qwen3_moe", "mistral"}:
+        if self.spec["family"] in {"qwen3", "olmo3", "qwen3_moe", "mistral",
+                                   "nemotron_h"}:
             result["source_sha256"] = self.spec["source_sha256"]
+        if self.spec["family"] == "nemotron_h":
+            result["pinned_attention_cache_handoff"] = "missing_in_block_call"
         return result
 
 
@@ -184,6 +215,8 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
         return _olmo3_pass(graph, spec, phase, batch, tokens, past, caches, token_ids)
     if spec["family"] == "qwen3_moe":
         return _qwen3_moe_pass(graph, spec, phase, batch, tokens, past, caches, token_ids)
+    if spec["family"] == "nemotron_h":
+        return _nemotron_pass(graph, spec, phase, batch, tokens, past, caches, token_ids)
     h, f = spec["hidden_size"], spec["intermediate_size"]
     qh, kvh, d = (spec[key] for key in
                   ("num_attention_heads", "num_key_value_heads", "head_dim"))
@@ -513,6 +546,151 @@ def _qwen3_moe_pass(graph: Graph, spec: dict, phase: str, batch: int,
     return logits, next_caches
 
 
+def _nemotron_pass(graph: Graph, spec: dict, phase: str, batch: int,
+                   tokens: int, past: int, caches: dict[int, tuple[str, str]],
+                   token_ids: str | None = None) -> tuple[str, dict]:
+    """Schedule the intended Mamba/attention/MLP chain in pinned block order."""
+    h, f = spec["hidden_size"], spec["intermediate_size"]
+    qh, kvh, d = (spec[key] for key in
+                  ("num_attention_heads", "num_key_value_heads", "head_dim"))
+    mh, md, groups, state = (spec[key] for key in
+                             ("mamba_num_heads", "mamba_head_dim", "n_groups",
+                              "ssm_state_size"))
+    inner = mh * md
+    conv_channels = inner + 2 * groups * state
+    projected = inner + conv_channels + mh
+    ids = token_ids or graph.input(f"{phase}.token_ids", (batch, tokens), "int32")
+    if graph.tensors[ids]["shape"] != [batch, tokens]:
+        raise ValueError(f"{phase}: invalid token input shape")
+    hidden = graph.add(f"{phase}.embedding", "embedding", (ids,),
+                       (batch, tokens, h), attrs={
+                           "parameter": "backbone.embeddings.weight",
+                           "vocab_size": spec["vocab_size"]})
+    next_caches = {}
+
+    def linear(name: str, source: str, out_shape: tuple[int, ...],
+               parameter: str) -> str:
+        in_width = graph.tensors[source]["shape"][-1]
+        out_width = 1
+        for width in out_shape[2:]:
+            out_width *= width
+        source_tokens = graph.tensors[source]["shape"][1]
+        return graph.add(name, "linear", (source,), out_shape,
+                         "gemm_mxgemmini", {
+                             "parameter": parameter,
+                             "weight_shape": [in_width, out_width],
+                             "checkpoint_shape": [out_width, in_width],
+                             "macs": batch * source_tokens * in_width * out_width,
+                         })
+
+    for layer, kind in enumerate(spec["layer_kinds"]):
+        base = f"{phase}.layer{layer:02d}"
+        params = f"backbone.layers.{layer}"
+        normalized = graph.add(f"{base}.pre_norm", "rmsnorm", (hidden,),
+                               (batch, tokens, h), "rmsnorm_qkv_fused", {
+                                   "parameter": f"{params}.norm.weight",
+                                   "epsilon": spec["layer_norm_epsilon"]})
+        mixer = f"{params}.mixer"
+        if kind == "mamba2":
+            proj = linear(f"{base}.in_proj", normalized,
+                          (batch, tokens, projected), f"{mixer}.in_proj.weight")
+            gate = graph.add(f"{base}.gate", "mamba_projection_slice", (proj,),
+                             (batch, tokens, inner), attrs={"part": "gate"})
+            conv_input = graph.add(f"{base}.conv_input", "mamba_projection_slice",
+                                   (proj,), (batch, tokens, conv_channels),
+                                   attrs={"part": "conv_input"})
+            dt = graph.add(f"{base}.dt", "mamba_projection_slice", (proj,),
+                           (batch, tokens, mh), attrs={"part": "dt"})
+            old_conv, old_ssm = caches.get(layer, (None, None))
+            conv_reads = ((conv_input,) if old_conv is None
+                          else (old_conv, conv_input))
+            conv_state = graph.add(f"{base}.conv_state", "mamba_conv_state",
+                                   conv_reads,
+                                   (batch, conv_channels, spec["conv_kernel"]),
+                                   attrs={"kernel_width": spec["conv_kernel"],
+                                          "mode": "prefill" if past == 0 else "decode"})
+            conv = graph.add(f"{base}.depthwise_conv", "mamba_depthwise_conv",
+                             (conv_input, conv_state),
+                             (batch, tokens, conv_channels), attrs={
+                                 "parameters": {
+                                     f"{mixer}.conv1d.weight":
+                                         [conv_channels, 1, spec["conv_kernel"]],
+                                     f"{mixer}.conv1d.bias": [conv_channels]},
+                                 "activation": "silu", "causal": True})
+            x = graph.add(f"{base}.scan_input", "mamba_channel_slice", (conv,),
+                          (batch, tokens, mh, md), attrs={"part": "x"})
+            b = graph.add(f"{base}.B", "mamba_channel_slice", (conv,),
+                          (batch, tokens, groups, state), attrs={"part": "B"})
+            c = graph.add(f"{base}.C", "mamba_channel_slice", (conv,),
+                          (batch, tokens, groups, state), attrs={"part": "C"})
+            scan_reads = (x, b, c, dt) if old_ssm is None else (x, b, c, dt, old_ssm)
+            scan = graph.add(f"{base}.selective_scan", "mamba_selective_scan",
+                             scan_reads, (batch, tokens, inner), attrs={
+                                 "parameters": [f"{mixer}.A_log", f"{mixer}.D",
+                                                f"{mixer}.dt_bias"],
+                                 "chunk_size": spec["chunk_size"],
+                                 "mode": "prefill" if past == 0 else "decode",
+                                 "state_shape": [batch, mh, md, state]})
+            ssm_state = graph.add(f"{base}.ssm_state", "mamba_scan_state",
+                                  (*scan_reads, scan), (batch, mh, md, state),
+                                  attrs={"paired_scan": scan,
+                                         "storage_dtype_assumption": "fp32"},
+                                  dtype="fp32")
+            next_caches[layer] = (conv_state, ssm_state)
+            gated = graph.add(f"{base}.gated_norm", "mamba_gated_rmsnorm",
+                              (scan, gate), (batch, tokens, inner), attrs={
+                                  "parameter": f"{mixer}.norm.weight",
+                                  "epsilon": spec["layer_norm_epsilon"],
+                                  "group_size": inner // groups,
+                                  "norm_before_gate": False})
+            mixed = linear(f"{base}.out_proj", gated,
+                           (batch, tokens, h), f"{mixer}.out_proj.weight")
+        elif kind == "full_attention":
+            q = linear(f"{base}.q_proj", normalized, (batch, tokens, qh, d),
+                       f"{mixer}.q_proj.weight")
+            k = linear(f"{base}.k_proj", normalized, (batch, tokens, kvh, d),
+                       f"{mixer}.k_proj.weight")
+            v = linear(f"{base}.v_proj", normalized, (batch, tokens, kvh, d),
+                       f"{mixer}.v_proj.weight")
+            old_k, old_v = caches.get(layer, (None, None))
+            k_cache = graph.add(f"{base}.k_cache", "kv_append",
+                                (k,) if old_k is None else (old_k, k),
+                                (batch, past + tokens, kvh, d))
+            v_cache = graph.add(f"{base}.v_cache", "kv_append",
+                                (v,) if old_v is None else (old_v, v),
+                                (batch, past + tokens, kvh, d))
+            next_caches[layer] = (k_cache, v_cache)
+            attention = graph.add(f"{base}.attention", "causal_gqa",
+                                  (q, k_cache, v_cache),
+                                  (batch, tokens, qh * d), attrs={
+                                      "query_start": past, "q_heads": qh,
+                                      "kv_heads": kvh, "head_dim": d,
+                                      "window": None, "softcap": None,
+                                      "rotary": False})
+            mixed = linear(f"{base}.o_proj", attention,
+                           (batch, tokens, h), f"{mixer}.o_proj.weight")
+        elif kind == "mlp_only":
+            up = linear(f"{base}.up_proj", normalized, (batch, tokens, f),
+                        f"{mixer}.up_proj.weight")
+            activated = graph.add(f"{base}.activation", "relu_squared", (up,),
+                                  (batch, tokens, f))
+            mixed = linear(f"{base}.down_proj", activated, (batch, tokens, h),
+                           f"{mixer}.down_proj.weight")
+        else:
+            raise ValueError(f"unknown Nemotron layer kind {kind}")
+        hidden = graph.add(f"{base}.residual", "add", (hidden, mixed),
+                           (batch, tokens, h), "vecadd")
+    hidden = graph.add(f"{phase}.final_norm", "rmsnorm", (hidden,),
+                       (batch, tokens, h), "rmsnorm_qkv_fused", {
+                           "parameter": "backbone.norm_f.weight",
+                           "epsilon": spec["layer_norm_epsilon"]})
+    last = graph.add(f"{phase}.last_hidden", "select_last_token", (hidden,),
+                     (batch, 1, h))
+    logits = linear(f"{phase}.lm_head", last,
+                    (batch, 1, spec["vocab_size"]), "lm_head.weight")
+    return logits, next_caches
+
+
 def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
                   decode_steps: int, generation: str = "teacher_forced") -> Graph:
     if min(batch, prefill) <= 0 or decode_steps < 0:
@@ -527,7 +705,8 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
     graph.generation = generation
     logits, caches = _decoder_pass(graph, spec, "prefill", batch, prefill, 0, {})
     graph.outputs.append(logits)
-    if spec["family"] in {"qwen3", "olmo3", "qwen3_moe", "mistral"}:
+    if spec["family"] in {"qwen3", "olmo3", "qwen3_moe", "mistral",
+                          "nemotron_h"}:
         graph.execution_schedule = {
             "entrypoint": "causal_generate",
             "prefill_stages": [stage["id"] for stage in graph.stages],
@@ -536,8 +715,15 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
                 "append rotated K and projected V; retain logical KV and apply "
                 "each layer's local or full mask at attention"
                 if spec["family"] == "olmo3" else
+                "carry each Mamba layer's convolution and SSM state; append "
+                "K/V only at attention layers in pinned block order"
+                if spec["family"] == "nemotron_h" else
                 "append each layer's rotated K and projected V before its attention"),
         }
+        if spec["family"] == "nemotron_h":
+            graph.execution_schedule["layer_kinds"] = spec["layer_kinds"]
+            graph.execution_schedule["pinned_attention_cache_handoff"] = (
+                "missing_in_block_call")
     for step in range(decode_steps):
         previous_caches = caches
         first_stage = len(graph.stages)
@@ -555,10 +741,10 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
                 "step": step,
                 "token_input": token_ids or f"decode{step}.token_ids",
                 "greedy_source_logits": previous_logits if token_ids else None,
-                "previous_cache": {str(layer): list(previous_caches[layer])
-                                   for layer in range(spec["num_hidden_layers"])},
-                "updated_cache": {str(layer): list(caches[layer])
-                                  for layer in range(spec["num_hidden_layers"])},
+                "previous_cache": {str(layer): list(state)
+                                   for layer, state in sorted(previous_caches.items())},
+                "updated_cache": {str(layer): list(state)
+                                  for layer, state in sorted(caches.items())},
                 "stages": [stage["id"] for stage in graph.stages[first_stage:]],
                 "output_logits": logits,
             })

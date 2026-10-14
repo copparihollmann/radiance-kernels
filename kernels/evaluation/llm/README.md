@@ -319,7 +319,8 @@ Qwen3-MoE uses the config's expert count, top-k, sparse step, and explicit
 dense-FFN exceptions according to its [decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py);
 the pinned model has an MoE FFN in every layer. OLMo, Qwen3-MoE, and Mistral
 now have ordered software schedules and reduced reference controls below.
-Nemotron still needs its Mamba and attention operations stitched together.
+Nemotron has an ordered hybrid software schedule below; its reduced reference
+and device stages remain open.
 All candidates need full checkpoint, input, and device checks before
 model-level performance comparisons.
 
@@ -360,6 +361,29 @@ performance claim.
 
 Regenerate with `python3 kernels/evaluation/llm/profile_nemotron_state.py
 --out kernels/evaluation/llm/nemotron-state-profiles.json`.
+
+The [full-dimension hybrid schedule](nemotron3-nano-4b-graph.json) uses a
+128-token prefill followed by two greedy decode steps. Its 1,322 stages keep
+the config's 42 blocks in order. Mamba blocks expose input projection,
+causal depthwise convolution, separate convolution-state carry, B/C and
+time-step slices, selective scan with its separate SSM-state output, gated
+RMSNorm, and output projection. Attention blocks keep Q/K/V, causal GQA,
+K/V append, and output projection without RoPE. MLP-only blocks use
+up projection, squared ReLU, and down projection. Every block has its own
+pre-norm and residual addition. The prefill LM head reads only the last
+hidden token, matching `num_logits_to_keep=1`. The graph assumes FP32 SSM
+storage and labels this choice in each state stage. It names existing
+standalone primitives for 534 stages; 788 still lack a named device stage.
+Those names do not make the stages connected executables. The pinned source's
+attention cache handoff remains the main reference discrepancy, and this
+graph has neither an upstream numerical comparison nor a Radiance ELF.
+Regenerate with:
+
+```sh
+python3 kernels/evaluation/llm/stitch.py --model nemotron3_nano_4b \
+  --batch 1 --prefill 128 --decode-steps 2 --generation greedy --compact \
+  --out kernels/evaluation/llm/nemotron3-nano-4b-graph.json
+```
 
 ### OLMo 3 local/global attention control
 
