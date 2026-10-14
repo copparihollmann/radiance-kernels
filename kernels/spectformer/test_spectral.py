@@ -44,11 +44,25 @@ extern "C" void run_spectral(const float* input, const float* filter,
                                         channels, tid, 32);
   delete[] a; delete[] b;
 }
+extern "C" void run_attention(const float* qkv, float* output,
+                                unsigned tokens, unsigned channels,
+                                unsigned heads) {
+  const unsigned threads = 4;
+  float* scratch = new float[threads * tokens];
+  for (unsigned tid = 0; tid < threads; ++tid)
+    spectformer::attention_qkv(qkv, output, scratch, tokens, channels,
+                                heads, tid, threads);
+  delete[] scratch;
+}
 ''')
         subprocess.run(["g++", "-O2", "-shared", "-fPIC", "-I", str(HERE),
+                        "-I", str(HERE.parent / "model_chain"),
                         str(source), "-o", str(library)], check=True)
         cls.function = ctypes.CDLL(str(library)).run_spectral
         cls.function.argtypes = [ctypes.POINTER(ctypes.c_float)] * 7 + [
+            ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
+        cls.attention = ctypes.CDLL(str(library)).run_attention
+        cls.attention.argtypes = [ctypes.POINTER(ctypes.c_float)] * 2 + [
             ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
 
     @classmethod
@@ -78,6 +92,27 @@ extern "C" void run_spectral(const float* input, const float* filter,
                         for a in arrays]
                 self.function(*ptrs, h, w, c)
                 np.testing.assert_allclose(actual, expected, rtol=3e-5, atol=3e-5)
+
+    def test_attention_softmax_matches_numpy(self):
+        rng = np.random.default_rng(8421)
+        tokens, channels, heads = 7, 8, 2
+        qkv = (rng.normal(size=(tokens, 3, channels)) * 2).astype(np.float32)
+        expected = np.empty((tokens, channels), dtype=np.float32)
+        width = channels // heads
+        for head in range(heads):
+            span = slice(head * width, (head + 1) * width)
+            q, k, v = (qkv[:, index, span].astype(np.float64)
+                       for index in range(3))
+            scores = q @ k.T / np.sqrt(width)
+            scores -= scores.max(axis=1, keepdims=True)
+            weights = np.exp(scores)
+            weights /= weights.sum(axis=1, keepdims=True)
+            expected[:, span] = weights @ v
+        actual = np.empty_like(expected)
+        ptr = ctypes.POINTER(ctypes.c_float)
+        self.attention(qkv.ctypes.data_as(ptr), actual.ctypes.data_as(ptr),
+                       tokens, channels, heads)
+        np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=2e-5)
 
 
 if __name__ == "__main__":

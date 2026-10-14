@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "pipeline_math.hpp"
 
 #ifdef RADIANCE_DEVICE
 #define SF_GLOBAL __global
@@ -265,7 +266,7 @@ inline void attention_qkv(const SF_GLOBAL float* qkv, SF_GLOBAL float* output,
     }
     float denominator = 0.0f;
     for (uint32_t key = 0; key < tokens; ++key) {
-      scores[key] = __builtin_expf(scores[key] - maximum);
+      scores[key] = model_chain::exponential(scores[key] - maximum);
       denominator += scores[key];
     }
     for (uint32_t d = 0; d < head_width; ++d) {
