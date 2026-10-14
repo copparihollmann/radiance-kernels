@@ -11,6 +11,13 @@ import re
 PASS_STATUS = 0x600D0000
 FIELDS = ("model_status", "gpu_start_cycle64", "gpu_end_cycle64",
           "kernel_cycles64")
+EXPECTED_MODELS = {
+    "tinyllama": (1133, "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933"),
+    "deepseek_r1_distill_qwen_1_5b": (
+        1691, "58858233513d76b8703e72eed6ce16807b523328188e13329257fb9594462945"),
+    "gemma_2_2b_it": (1496, "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a"),
+    "smolvla_base": (3673, "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb"),
+}
 
 
 def sha256(path: Path) -> str:
@@ -85,6 +92,42 @@ def parse_uart(log) -> dict:
             "fail_markers": markers["FAIL"]}
 
 
+def check_source(model: str, source: dict) -> list[str]:
+    stages, checkpoint = EXPECTED_MODELS[model]
+    problems = []
+    if (source.get("model") != model or source.get("stages") != stages or
+            source.get("checkpoint_sha256") != checkpoint or
+            source.get("stage_limit") is not None or
+            not source.get("device_elf_built") or
+            source.get("target_protocol") != "nightly_hbm_printbuf_cluster0" or
+            source.get("hbm_launch_clusters") != 1):
+        problems.append("source manifest is not the pinned full model HBM build")
+    transform = source.get("hbm_transform") or {}
+    if model == "smolvla_base":
+        if (source.get("scope") != "full_checkpoint_action_chunk" or
+                source.get("output_validation") != "all_elements_vs_upstream_policy" or
+                source.get("output_check_tolerance") !=
+                {"rtol": 1e-3, "atol": 1e-3} or
+                not re.fullmatch(r"[0-9a-f]{64}",
+                                 str(source.get("golden_output_sha256"))) or
+                transform.get("scheduled_calls") != stages + 1 or
+                transform.get("status_return_sites", 0) < 2):
+            problems.append("SmolVLA build lacks its final-action reference check")
+    else:
+        if (source.get("scope") != "full_dimension_checkpoint_decoder" or
+                source.get("device_check_all_stages") is not True or
+                len(source.get("verified_tensors", [])) != stages or
+                source.get("native_verified_float_stages", 0) +
+                source.get("native_verified_integer_stages", 0) != stages or
+                source.get("hbm_verifier_files", 0) <= 0 or
+                transform.get("chunk_return_sites") !=
+                source.get("hbm_verifier_files") or
+                transform.get("scheduled_calls") != stages or
+                transform.get("status_return_sites", 0) < 1):
+            problems.append("decoder build does not check every scheduled stage")
+    return problems
+
+
 def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
             elf: Path, receipt: Path, source_manifest: Path, hwdb_config: Path,
             workload_config: Path, uart_log: Path,
@@ -100,14 +143,7 @@ def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
         problems.append("ELF receipt has no SHA-256")
     elif elf_digest != receipt_digest:
         problems.append("staged ELF differs from its receipt")
-    if (source_data.get("model") != model or
-            source_data.get("stage_limit") is not None or
-            source_data.get("scope") not in
-            ("full_dimension_checkpoint_decoder", "full_checkpoint_action_chunk") or
-            not source_data.get("device_elf_built") or
-            not source_data.get("stages") or
-            source_data.get("target_protocol") != "nightly_hbm_printbuf_cluster0"):
-        problems.append("source manifest is not the requested full model HBM build")
+    problems.extend(check_source(model, source_data))
     if source_data.get("soc_elf_sha256") != receipt_data.get("source_elf_sha256"):
         problems.append("packaged ELF receipt differs from the model source build")
     if firesim_exit_code != 0:
@@ -141,6 +177,8 @@ def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
         "source_elf_sha256": source_data.get("soc_elf_sha256"),
         "source_stage_count": source_data.get("stages"),
         "source_scope": source_data.get("scope"),
+        "source_output_check": ("final_action_chunk" if model == "smolvla_base"
+                                else "every_decoder_stage"),
         "checkpoint_sha256": source_data.get("checkpoint_sha256"),
         "hwdb_config_sha256": sha256(hwdb_config),
         "workload_config_sha256": sha256(workload_config),
@@ -158,8 +196,7 @@ def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True,
-                        choices=("tinyllama", "deepseek_r1_distill_qwen_1_5b",
-                                 "gemma_2_2b_it", "smolvla_base"))
+                        choices=tuple(EXPECTED_MODELS))
     parser.add_argument("--sm-count", type=int, required=True)
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--bitstream-id", required=True)

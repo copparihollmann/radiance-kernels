@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from collect_firesim_result import collect, parse_uart
+from collect_firesim_result import check_source, collect, parse_uart
 
 
 VALID_UART = """model_chain_hbm: launch cluster 0
@@ -32,12 +32,10 @@ class CollectFiresimResultTest(unittest.TestCase):
         self.receipt.write_text(json.dumps({
             "firesim_elf_sha256": hashlib.sha256(self.elf.read_bytes()).hexdigest(),
             "source_elf_sha256": source_hash}))
-        self.source.write_text(json.dumps({
-            "model": "tinyllama", "stage_limit": None, "stages": 1133,
-            "scope": "full_dimension_checkpoint_decoder",
-            "device_elf_built": True,
-            "target_protocol": "nightly_hbm_printbuf_cluster0",
-            "soc_elf_sha256": source_hash}))
+        source = json.loads((Path(__file__).resolve().parent /
+                             "evaluation/tinyllama-2g-hbm-build.json").read_text())
+        source["soc_elf_sha256"] = source_hash
+        self.source.write_text(json.dumps(source))
         self.hwdb = self.root / "hwdb.yaml"
         self.hwdb.write_text("test HWDB identity\n")
         self.workload = self.root / "workload.json"
@@ -84,8 +82,24 @@ class CollectFiresimResultTest(unittest.TestCase):
         source = json.loads(self.source.read_text())
         source["stage_limit"] = 1
         self.source.write_text(json.dumps(source))
-        self.assertIn("source manifest is not the requested full model HBM build",
+        self.assertIn("source manifest is not the pinned full model HBM build",
                       self.collect()["problems"])
+
+    def test_partial_decoder_check_is_rejected(self):
+        source = json.loads(self.source.read_text())
+        source["device_check_all_stages"] = False
+        self.source.write_text(json.dumps(source))
+        self.assertIn("decoder build does not check every scheduled stage",
+                      self.collect()["problems"])
+
+    def test_smolvla_requires_final_action_reference(self):
+        path = (Path(__file__).resolve().parent /
+                "evaluation/smolvla-2g-hbm-build.json")
+        source = json.loads(path.read_text())
+        self.assertEqual(check_source("smolvla_base", source), [])
+        source["output_validation"] = "finite_range_only"
+        self.assertIn("SmolVLA build lacks its final-action reference check",
+                      check_source("smolvla_base", source))
 
 
 if __name__ == "__main__":

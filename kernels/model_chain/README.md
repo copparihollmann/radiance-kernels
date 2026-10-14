@@ -239,7 +239,9 @@ its packer receipt, the matching full-model HBM build manifest, HWDB and
 workload files, UART log, and any counter files. It accepts a result only if
 the manifest identifies the complete model, the receipt binds it to that
 source ELF, FireSim exited zero, and exactly one UART report contains the
-device PASS status with consistent 64-bit cycle stamps. The compact source
+device PASS status with consistent 64-bit cycle stamps. It also requires the
+pinned checkpoint and every-stage checks for the three decoders, or the final
+action-reference check for SmolVLA. The compact source
 manifests are [TinyLlama](evaluation/tinyllama-2g-hbm-build.json),
 [DeepSeek/Qwen](evaluation/deepseek-2g-hbm-build.json),
 [Gemma](evaluation/gemma-2g-hbm-build.json), and
