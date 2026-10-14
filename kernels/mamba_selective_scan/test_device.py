@@ -36,13 +36,20 @@ def run(args: argparse.Namespace) -> dict:
     generator = "gen_upstream_data.py" if args.source == "upstream" else "gen_data.py"
     if args.source == "upstream" and args.reference_python is None:
         raise ValueError("--reference-python is required for the upstream fixture")
+    if (args.conv_output is None) != (args.conv_result is None):
+        raise ValueError("--conv-output and --conv-result must be supplied together")
+    if args.conv_output is not None and args.source != "upstream":
+        raise ValueError("convolution handoff requires --source upstream")
     for name in ("kernel.cpp", "gen_data.py", generator):
         shutil.copy2(HERE / name, out / name)
     receipt = out / "fixture.json"
-    subprocess.run([str(args.reference_python or sys.executable),
-                    str(HERE / generator),
-                    "--out", str(out / "data"), "--receipt", str(receipt)],
-                   check=True)
+    command = [str(args.reference_python or sys.executable),
+               str(HERE / generator), "--out", str(out / "data"),
+               "--receipt", str(receipt)]
+    if args.conv_output is not None:
+        command += ["--conv-output", str(args.conv_output),
+                    "--conv-result", str(args.conv_result)]
+    subprocess.run(command, check=True)
     (out / "Makefile").write_text(f"""PROJECT = kernel
 MU_SRCS = kernel.cpp
 RADIANCE_LIB_PATH := {ROOT / 'lib'}
@@ -141,6 +148,7 @@ kernel.mu.o: data
         "status": "passed", "backend": "cyclotron", "rtl_execution": False,
         "performance_measurement": False,
         "fixture_source": args.source,
+        "host_mediated_input": args.conv_output is not None,
         "functional_cycles": int(cycle_matches[0]),
         "checked_output_elements": y_bytes // 4,
         "checked_final_state_elements": state_bytes // 4,
@@ -170,6 +178,8 @@ def main() -> None:
     parser.add_argument("--source", choices=("synthetic", "upstream"),
                         default="synthetic")
     parser.add_argument("--reference-python", type=Path)
+    parser.add_argument("--conv-output", type=Path)
+    parser.add_argument("--conv-result", type=Path)
     parser.add_argument("--toolchain", type=Path, default=DEFAULT_TOOLCHAIN)
     parser.add_argument("--llvm-muon", type=Path, default=DEFAULT_LLVM)
     parser.add_argument("--cyclotron", type=Path, default=DEFAULT_CYCLOTRON)

@@ -5,6 +5,7 @@
   "rtl_execution": false,
   "performance_measurement": false,
   "fixture_source": "synthetic",
+  "host_mediated_input": false,
   "functional_cycles": 10481,
   "checked_output_elements": 224,
   "checked_final_state_elements": 128,
@@ -45,10 +46,10 @@
   "kernel_source_sha256": "5675855aa2eb453df1bde354b6afbbbffb3b6214e3d672c8afc82b253e9cf925",
   "generator_source_sha256": "6e5f2e53567bd38edb964b10cc5ebfa96cd9044ff6a19d1d60bbe6d287a54c9f",
   "fixture_helper_source_sha256": "6e5f2e53567bd38edb964b10cc5ebfa96cd9044ff6a19d1d60bbe6d287a54c9f",
-  "test_source_sha256": "4422e4f3c7f35aef93bf6bdb80c643dd3e6a22adc077496624e1854133584d0c",
+  "test_source_sha256": "533c12fbd95c96d77a91e1b8e8bc94f974b42da9cf1ed74ac852e52b15b0f18a",
   "elf_sha256": "3108b2ca1334d0e6e0fffa46864fe6e560f4a8153011273c521eb6c6dcc18c11",
   "config_sha256": "db92edd18930811087147251470cc12be4c62762db2eed176afabe61f830126b",
   "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
-  "build_log_sha256": "9edf1044eb6039191c628c4daeb31d4ff8643a41de02d263f54bd79d0c16cd0c",
+  "build_log_sha256": "693cd192e3b77fec3cb5799167b70a7d4cc1d1b1c1696aed8bbdcc8c5e2ea130",
   "cyclotron_log_sha256": "02a86415d4935a68b6f4bf5ae87241850d7a9336f1c78cf6a384471568791608"
 }

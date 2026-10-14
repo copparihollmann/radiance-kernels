@@ -603,20 +603,23 @@ def _nemotron_pass(graph: Graph, spec: dict, phase: str, batch: int,
                            (batch, tokens, mh), attrs={"part": "dt"})
             old_conv, old_ssm = caches.get(layer, (None, None))
             conv_reads = ((conv_input,) if old_conv is None
-                          else (old_conv, conv_input))
-            conv_state = graph.add(f"{base}.conv_state", "mamba_conv_state",
-                                   conv_reads,
-                                   (batch, conv_channels, spec["conv_kernel"]),
-                                   attrs={"kernel_width": spec["conv_kernel"],
-                                          "mode": "prefill" if past == 0 else "decode"})
+                          else (conv_input, old_conv))
             conv = graph.add(f"{base}.depthwise_conv", "mamba_depthwise_conv",
-                             (conv_input, conv_state),
-                             (batch, tokens, conv_channels), attrs={
+                             conv_reads, (batch, tokens, conv_channels),
+                             "mamba_depthwise_conv", attrs={
                                  "parameters": {
                                      f"{mixer}.conv1d.weight":
                                          [conv_channels, 1, spec["conv_kernel"]],
                                      f"{mixer}.conv1d.bias": [conv_channels]},
-                                 "activation": "silu", "causal": True})
+                                 "activation": "silu", "causal": True,
+                                 "kernel_width": spec["conv_kernel"],
+                                 "mode": "prefill" if past == 0 else "decode"})
+            conv_state = graph.add(f"{base}.conv_state", "mamba_conv_state",
+                                   (*conv_reads, conv),
+                                   (batch, conv_channels, spec["conv_kernel"]),
+                                   attrs={"paired_conv": conv,
+                                          "kernel_width": spec["conv_kernel"],
+                                          "mode": "prefill" if past == 0 else "decode"})
             x = graph.add(f"{base}.scan_input", "mamba_channel_slice", (conv,),
                           (batch, tokens, mh, md), attrs={"part": "x"})
             b = graph.add(f"{base}.B", "mamba_channel_slice", (conv,),

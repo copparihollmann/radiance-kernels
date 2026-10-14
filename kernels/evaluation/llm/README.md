@@ -374,20 +374,28 @@ up projection, squared ReLU, and down projection. Every block has its own
 pre-norm and residual addition. The prefill LM head reads only the last
 hidden token, matching `num_logits_to_keep=1`. The graph assumes FP32 SSM
 storage and labels this choice in each state stage. It names existing
-standalone primitives for 597 stages; 725 still lack a named device stage.
+standalone primitives for 660 stages; 662 still lack a named device stage.
+The [depthwise convolution primitive](../../mamba_depthwise_conv/README.md)
+handles the causal four-tap filter and carries its raw-sample cache through
+prefill and decode on a reduced fixture. The graph now binds its 63 convolution
+stages to that primitive; the paired state output still needs buffer binding.
 The [selective scan primitive](../../mamba_selective_scan/README.md) covers
 time-step preparation, the post-convolution recurrence, and final-state
 carry on a small FP32 fixture.
 Its [Cyclotron check](../../mamba_selective_scan/evaluation/cyclotron.json)
 compares all 224 output and 128 final-state values with an independent NumPy
 golden. The graph now gives the 63 scan stages that primitive's name. It still
-needs projection slicing, convolution, gate and norm, multi-output scan
+needs projection slicing, gate and norm, multi-output convolution and scan
 binding, and pinned-weight validation before network execution.
 The [reduced upstream mixer check](../../mamba_selective_scan/evaluation/transformers-reduced-cyclotron.json)
 also extracts seven tokens of intermediate scan inputs from Transformers 5.3,
 checks NumPy against its cached CPU fallback, and passes the resulting device
 fixture on Cyclotron. This is random-weight, reduced-width evidence rather
 than a pinned-checkpoint or full-model validation.
+The [two-kernel handoff check](../../mamba_selective_scan/evaluation/conv-scan-handoff-cyclotron.json)
+feeds the verified convolution device output into a separately built scan ELF
+through a host file. It checks the `x/B/C` split and scan result on one reduced
+mixer, without claiming connected execution or full-model performance.
 Those names do not make the stages connected executables. The pinned source's
 attention cache handoff remains the main reference discrepancy, and this
 full graph has neither a pinned-checkpoint numerical comparison nor a

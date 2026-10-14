@@ -230,8 +230,13 @@ class ModelStitchTest(unittest.TestCase):
                                  [1, 96, 80, 128])
                 self.assertEqual(graph.tensors[f"{pre}.ssm_state"]["dtype"],
                                  "fp32")
+                self.assertEqual(stages[f"{dec}.depthwise_conv"]["reads"],
+                                 [f"{dec}.conv_input", f"{pre}.conv_state"])
+                self.assertEqual(stages[f"{dec}.depthwise_conv"]["kernel"],
+                                 "mamba_depthwise_conv")
                 self.assertEqual(stages[f"{dec}.conv_state"]["reads"],
-                                 [f"{pre}.conv_state", f"{dec}.conv_input"])
+                                 [f"{dec}.conv_input", f"{pre}.conv_state",
+                                  f"{dec}.depthwise_conv"])
                 self.assertEqual(stages[f"{dec}.selective_scan"]["kernel"],
                                  "mamba_selective_scan")
                 self.assertEqual(stages[f"{dec}.selective_scan"]["attrs"]

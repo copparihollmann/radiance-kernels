@@ -1,0 +1,45 @@
+{
+  "schema": "radiance.mamba-depthwise-conv-device-check.v1",
+  "status": "passed",
+  "backend": "cyclotron",
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "fixture_source": "synthetic",
+  "functional_cycles": 15159,
+  "checked_output_elements": 336,
+  "checked_final_state_elements": 192,
+  "output_max_abs_error": 4.6938657760620117e-07,
+  "final_state_max_abs_error": 0.0,
+  "fixture": {
+    "schema": "radiance.mamba-depthwise-conv-fixture.v1",
+    "source": "numpy_synthetic",
+    "provenance": {
+      "seed": 23
+    },
+    "channels": 48,
+    "kernel_width": 4,
+    "tokens": 7,
+    "prefill_tokens": 5,
+    "input_sha256": {
+      "x": "242ba18c0e1bf35f3cfe7933413e5450f2365520aa9cbb425ff0e1d2c6958151",
+      "weight": "309d0bdb1ad70c1b885566885b12147c09858a6248de20c29eb3fac6a4c3c8fc",
+      "bias": "6a7dcddd77b119ea6cc1e337b59710518802d3dc143eb9d93df6e7df3bd95bb6",
+      "initial_state": "2351b70b4b4cea36202e3ec1adfe311eb6384cf115e4945357431f107475f1d9"
+    },
+    "gold_y_sha256": "a3de92e931027f6e8e09d93379144b427917488b08dfb7bacf1eaa434323879e",
+    "gold_final_state_sha256": "a914486341e409c9767addb2d5a752fb5ea28302a03bdf0a6dea96226b349fb6",
+    "reset_at_decode_max_output_delta": 0.0753219798207283,
+    "generated_header_sha256": "cc36d1412caf5b661d6f1c94d8db8dcc1bcf387dbf096b280582dee4ee0d98eb"
+  },
+  "output_sha256": "09d4551d8fbb5811e192e2d75b4601c911e860a8a0d39bc8a3754ff163c021e2",
+  "final_state_sha256": "a914486341e409c9767addb2d5a752fb5ea28302a03bdf0a6dea96226b349fb6",
+  "kernel_source_sha256": "8c5916674d8b21013f594cba4eefa00c068a370275a6027e6225a876daaceefa",
+  "generator_source_sha256": "8e0accfaf55ff8a88811a678a87a7882c4d4a0d511fd44db3df2feb2518b4e4c",
+  "fixture_helper_source_sha256": "8e0accfaf55ff8a88811a678a87a7882c4d4a0d511fd44db3df2feb2518b4e4c",
+  "test_source_sha256": "74c08a53ff80db7650082907822d3a29ea07c61159653cda59365dc4765e6b61",
+  "elf_sha256": "64b78a695783473564ab6903df2c1ee551a6627c808229cfb0b11891dd3bc4ee",
+  "config_sha256": "db92edd18930811087147251470cc12be4c62762db2eed176afabe61f830126b",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "build_log_sha256": "02b63a9c192de97781aa0c7e7b708cca22737907a9696c0dd389c372e161c4d4",
+  "cyclotron_log_sha256": "2b359ee4f9d585f134bf9ad403b39bf5816f7fdf680180a90004c4f213681ffb"
+}
