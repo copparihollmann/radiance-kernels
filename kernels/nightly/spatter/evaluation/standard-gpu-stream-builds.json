@@ -1,0 +1,186 @@
+{
+  "schema": "radiance.nightly.spatter.hbm-builds.v1",
+  "backend": "nightly HBM SoC ELF build",
+  "memory_hash": {
+    "gpu_size_bytes": 2147483648,
+    "unit_bytes": 32,
+    "slices": 4,
+    "load_path": "direct LoadMem"
+  },
+  "source_sha256": {
+    "kernels/nightly/spatter/kernel.cpp": "f09867119b45c34d8ea8f9b48e1c4766b4b31e23a44cca105081993b51654815",
+    "kernels/nightly/spatter/host.cpp": "6d9d30c4ba0839bb304fa009052e7dffa4c28103ca5f54f4211b7f432fd756e2",
+    "kernels/nightly/spatter/spatter_body.hpp": "6b26b88f9d8bd728d5b18d419e50fb015050d7e3dc56719b646477656b536ccc",
+    "kernels/nightly/spatter/gen_data.py": "98ee9a4e02fd116387ff60a950c826f347aad6a56ea8eb989431ad1d62d48c94",
+    "kernels/nightly/spatter/Makefile": "5ecd49185ce2f7df9a3c6c803e5e7ca67e6ff70a8134037439f0078f4ddc508c",
+    "kernels/nightly/nightly.mk": "cc364f130dabfd465c4bf59905b6eb92aad511bd2973ffae2e4e93274b4d1215",
+    "kernels/spatter/run.py": "a3483b202f3898db3b2bba4676540ec7207d0c80a5a889bb15e95ae1cf252290",
+    "kernels/spatter/plan.py": "ca7fcc1bdceb6d01c49cf1e67c530aad1ffc0f9a6b588bde7e2efa5d9f59d173",
+    "kernels/spatter/spatter_ops.hpp": "3e6ffe70d27f0afbbc4d38ba62c8a5f997d07b76f51a29d7a34a0f4a9688e24b",
+    "soc/scramble_gpu_elf.py": "48bbbb1d431fb2fa2745f00ea7a46767fd1f07af263af34939007ba622816740"
+  },
+  "upstream_revision": "ec8923711f8dc21eedff7189f12b02eb06845d2f",
+  "upstream_table_sha256": "206ab87a20a6986eb5e383e2dec7c39fbe917b8c10545164d01d636557b0aeca",
+  "compiled_cores_per_cluster": 2,
+  "local_checks": [
+    "all ten SoC ELFs linked with address hash metadata",
+    "GPU load segments fit the declared 2 GiB map without overlap",
+    "source and full golden hashes match pinned upstream serial oracle",
+    "one-SM and two-SM ELF hashes differ for every case"
+  ],
+  "rtl_execution": false,
+  "fpga_execution": false,
+  "performance_measurement": false,
+  "cases": [
+    {
+      "case": 0,
+      "kind": "gather",
+      "pattern_length": 256,
+      "count": 1024,
+      "output_elements": 256,
+      "logical_payload_bytes": 4194304,
+      "data_receipt_sha256": "a667ce2d2543e9ab54bf20aa081b2c97ff925d3ec7f6fe55eec3bbe6822003b1",
+      "source_sha256": "19480e363229871170de566bde6c5d37f22fde23dcc73e1302d83a0e7546ccc9",
+      "golden_sha256": "ae045c96df63f02fbef30afcb638284b42a35fe2fa8c36a2e867fe96d593b5be",
+      "upstream_run": "rebuild-gpu-stream-0",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 2215808,
+          "sha256": "f577ff32611398664914e149ddff86820497b5f22f1166456dfb02a3eb76dfaa",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 2109932,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 2215808,
+          "sha256": "b35ea61b20c032d105ba641d644d0fa58623db2bc9ebc9e6f46ba73492b5a592",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 2109940,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "case": 1,
+      "kind": "scatter",
+      "pattern_length": 256,
+      "count": 1024,
+      "output_elements": 262144,
+      "logical_payload_bytes": 4194304,
+      "data_receipt_sha256": "98461ef14721564e6bb70a1a78f083135b15d679edc9e6c06798df056728f02a",
+      "source_sha256": "5560384b9f2b7fba0b3ad2bd6d5e9a6cd99685b27df9ffe40af6d1daae6d9454",
+      "golden_sha256": "9b1cd06f5b30f9b0b9ab5a4d18ed2a70045c76bdb1093bcde2cb6ebaa463bd7f",
+      "upstream_run": "rebuild-gpu-stream-1",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 4283776,
+          "sha256": "59b04a7843aa5462cdc10b28764c2dc78d3df326aa3d1a66f699602b8a783754",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 4205052,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 4283776,
+          "sha256": "76fbc3b1a3023e4fdedd32c41755504e667a64c2a3ae264b5eb636ef07084c20",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 4205060,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "case": 2,
+      "kind": "gs",
+      "pattern_length": 256,
+      "count": 1024,
+      "output_elements": 262144,
+      "logical_payload_bytes": 4194304,
+      "data_receipt_sha256": "bf59020e20679b8d9658c70e05ad6ada267ba58892be4935762bb48c96f71d63",
+      "source_sha256": "bae2caeace30c53cf8f1e40c3687f0e3c2298a45cf3ccd46ce3c236fdb7418af",
+      "golden_sha256": "bae2caeace30c53cf8f1e40c3687f0e3c2298a45cf3ccd46ce3c236fdb7418af",
+      "upstream_run": "rebuild-gpu-stream-2",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 6380928,
+          "sha256": "2cd245213252e32e236732e48b995910fde5f7155a0ce4ba4e19e969b3d06dfa",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 6300948,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 6380928,
+          "sha256": "862d9866d66386d120aa0ce41832f47fbf1c2ee0d013ad49d8476d0f2eb34454",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 6300956,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "case": 3,
+      "kind": "multiscatter",
+      "pattern_length": 256,
+      "count": 1024,
+      "output_elements": 262144,
+      "logical_payload_bytes": 4194304,
+      "data_receipt_sha256": "991e32491bc28d922835ac3b6cd9b012bb35938aecec94500cf110fbb78843e6",
+      "source_sha256": "5560384b9f2b7fba0b3ad2bd6d5e9a6cd99685b27df9ffe40af6d1daae6d9454",
+      "golden_sha256": "9b1cd06f5b30f9b0b9ab5a4d18ed2a70045c76bdb1093bcde2cb6ebaa463bd7f",
+      "upstream_run": "rebuild-gpu-stream-3",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 4283776,
+          "sha256": "4f7ff4b33277fe4ccb1dba5fefbd48525d2cc89cccd857dfd3b34c19907afab6",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 4205852,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 4283776,
+          "sha256": "928c5c395cbf3b0d83422376e1f28ef0bb6e30f016335be6a7e4a46eb271d4b1",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 4205860,
+          "gpu_region_in_bounds": true
+        }
+      }
+    },
+    {
+      "case": 4,
+      "kind": "multigather",
+      "pattern_length": 256,
+      "count": 1024,
+      "output_elements": 256,
+      "logical_payload_bytes": 4194304,
+      "data_receipt_sha256": "7c9e95b3ec058d0dda8e1496578a3c6bca03f3e0dbf877f62eeeeb032b55b129",
+      "source_sha256": "19480e363229871170de566bde6c5d37f22fde23dcc73e1302d83a0e7546ccc9",
+      "golden_sha256": "ae045c96df63f02fbef30afcb638284b42a35fe2fa8c36a2e867fe96d593b5be",
+      "upstream_run": "rebuild-gpu-stream-4",
+      "elfs": {
+        "1sm": {
+          "file_size_bytes": 2215808,
+          "sha256": "98d21266964013b14ebe67e664dc64dab250f3867eaaff206142c07ed293b7a3",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 2110732,
+          "gpu_region_in_bounds": true
+        },
+        "2sm": {
+          "file_size_bytes": 2215808,
+          "sha256": "0c07de8d521f0a7cef2c1aa78542b6c2bef99110c8d72f007468fb1c665c123e",
+          "address_hash_section_present": true,
+          "gpu_load_segments": 27,
+          "gpu_loaded_bytes": 2110740,
+          "gpu_region_in_bounds": true
+        }
+      }
+    }
+  ]
+}

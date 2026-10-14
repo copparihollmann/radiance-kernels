@@ -26,6 +26,10 @@ work, not measured results in this report.
 - [Spatter](spatter/README.md): Gather, Scatter, GatherScatter (GS),
   MultiGather, and MultiScatter. Each original GPU STREAM suite case has 256
   pattern entries and 1,024 repetitions.
+- [Nightly HBM Spatter](nightly/spatter/README.md): the five original-size GPU
+  STREAM cases compiled for one or two SMs. Complete device-body outputs match
+  the pinned upstream serial oracle in Cyclotron; XB10 correctness and timing
+  remain to be measured.
 - Spatter address plans, a materialized Gather→Scatter chain, and a fused GS
   version of that chain.
 - Original-size [LANL xRAGE asteroid patterns 5 and 9](https://lanl.github.io/benchmarks/09_Microbenchmarks/M2_SPATTER/SPATTER.html)
