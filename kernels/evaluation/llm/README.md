@@ -283,6 +283,30 @@ checkpoint revisions and SHA-256 hashes for their small `config.json` files;
 the files are retained under `inputs/`. The weights, tokenizer, example
 prompts, and quantization format have not yet been pinned or run.
 
+Run `python3 inventory.py` to regenerate
+[architecture-inventory.json](architecture-inventory.json). It verifies the
+five config hashes and retains **each layer in execution order**, so an
+alternating attention pattern is not flattened into a layer count. The counts
+below are derived from those configs:
+
+| Candidate | Ordered layer structure | Mapping consequence |
+| --- | --- | --- |
+| Qwen3-0.6B | 28 full-attention, dense-FFN layers | Dense prefill and cached decode baseline. |
+| OLMo-3-7B | Repeat 3 sliding-attention layers then 1 full-attention layer, 8 times | Keep the 4,096-token local window distinct from the full-context KV layers. Its config disables caching, so cached decode needs an upstream reference check. |
+| Qwen3-30B-A3B | 48 full-attention layers with MoE FFNs | Route each token to 8 of 128 experts, then combine their outputs in layer order. |
+| Nemotron-3-Nano-4B | 21 Mamba2 blocks, 4 full-attention blocks, 17 MLP-only blocks in the recorded sequence | Carry Mamba state and attention KV with their separate lifetimes. |
+| Mistral-7B-v0.3 | 32 full-attention, dense-FFN layers | Reserve as the held-out dense model. |
+
+The inventory names block types from config fields; it does not claim that
+these models are compiled, numerically checked, or timed on Radiance. The
+Nemotron `M`, `*`, and `-` symbols respectively denote Mamba2, attention,
+and MLP-only blocks in its [official pinned configuration code](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/configuration_nemotron_h.py).
+Qwen3-MoE uses the config's expert count, top-k, sparse step, and explicit
+dense-FFN exceptions according to its [decoder implementation](https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3_moe/modeling_qwen3_moe.py);
+the pinned model has an MoE FFN in every layer. A device schedule still needs
+the operations within each block, checkpoints, token inputs, and a reference
+run before any model-level performance comparison.
+
 Run `python3 estimate_kv.py` to regenerate [kv-working-set.csv](kv-working-set.csv).
 The script verifies each local config against its recorded hash before
 calculating BF16 resident KV bytes for a 256-token prompt at batch 1 and 8
