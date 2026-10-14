@@ -50,6 +50,8 @@ def main():
     parser.add_argument("--hash-size", type=lambda value: int(value, 0), required=True)
     parser.add_argument("--hash-unit", type=int, required=True)
     parser.add_argument("--hash-slices", type=int, required=True)
+    parser.add_argument("--compact-hash", action="store_true",
+                        help="store only occupied physical GPU load regions")
     parser.add_argument("--config-file", type=Path,
                         help="optional bitstream/HWDB config to hash into the report")
     parser.add_argument("--bitstream-id",
@@ -70,7 +72,8 @@ def main():
         "bundle_manifest_sha256": digest(bundle / "bundle.json"),
         "declared_memory_map": {"hash_size": args.hash_size,
                                 "unit": args.hash_unit,
-                                "slices": args.hash_slices},
+                                "slices": args.hash_slices,
+                                "compact_file_layout": args.compact_hash},
         "bitstream_id": args.bitstream_id,
         "config_file_sha256": config_hash,
         "config_match": "caller supplied; not checked against RTL or bitstream",
@@ -102,7 +105,7 @@ def main():
         receipt = bundle / (item["donor_elf"] + ".json")
         package_hashed(bundle / item["source_elf"], [], target,
                        args.hash_size, args.hash_unit, args.hash_slices,
-                       receipts=[receipt])
+                       receipts=[receipt], compact=args.compact_hash)
         checked = verify_package(target.with_suffix(target.suffix + ".json"))
         item["target_elf"] = target.name
         item["target_elf_sha256"] = checked["sha256"]

@@ -101,6 +101,33 @@ class PackageFireSimTest(unittest.TestCase):
             source.seek(physical_base + 0x3000)
             self.assertEqual(source.read(32), b"\0" * 32)
 
+    def test_compact_hashed_layout_omits_unused_physical_gaps(self):
+        self.image.write_bytes(bytes(range(64)))
+        manifest = json.loads(self.manifest.read_text())
+        manifest["gpu_base_address"] = 0x1000
+        self.manifest.write_text(json.dumps(manifest))
+        result = package_hashed(self.elf, [self.manifest], self.output,
+                                0x40000, 32, 4, compact=True)
+        self.assertLess(self.output.stat().st_size, 0x40000)
+        self.assertEqual(verify_package(
+            self.output.with_suffix(".elf.json"))["hashed_images_present"], 1)
+        layout = result["hash_layout"]
+        address_hash = AddressHash(0, 0x40000, 32, 4)
+        with self.output.open("rb") as source:
+            for logical, expected in enumerate(self.image.read_bytes(), 0x1000):
+                physical = address_hash.forward(logical)
+                region = next(item for item in layout["load_regions"]
+                              if item["physical_offset"] <= physical <
+                              item["physical_offset"] + item["size_bytes"])
+                source.seek(region["file_offset"] + physical -
+                            region["physical_offset"])
+                self.assertEqual(source.read(1), bytes((expected,)))
+        with self.output.open("r+b") as output:
+            output.seek(layout["load_regions"][0]["file_offset"])
+            output.write(b"!")
+        with self.assertRaisesRegex(ValueError, "ELF hash differs"):
+            verify_package(self.output.with_suffix(".elf.json"))
+
     def test_hashed_layout_rejects_image_past_capacity(self):
         image_manifest = json.loads(self.manifest.read_text())
         image_manifest["gpu_base_address"] = 0x4000

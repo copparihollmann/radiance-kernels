@@ -180,8 +180,47 @@ def write_at(fd, data, offset):
         offset += written
 
 
+def file_regions_from_layout(layout):
+    if layout.get("compact"):
+        return [(item["physical_offset"],
+                 item["physical_offset"] + item["size_bytes"],
+                 item["file_offset"]) for item in layout["load_regions"]]
+    return [(0, layout["size"], layout["file_offset"])]
+
+
+def write_physical(fd, data, physical, file_regions):
+    view = memoryview(data)
+    while view:
+        region = next(((start, end, offset) for start, end, offset in file_regions
+                       if start <= physical < end), None)
+        if region is None:
+            raise ValueError(f"hashed write at {physical:#x} has no load region")
+        start, end, offset = region
+        amount = min(len(view), end - physical)
+        write_at(fd, view[:amount], offset + physical - start)
+        physical += amount
+        view = view[amount:]
+
+
+def read_physical(fd, size, physical, file_regions):
+    result = bytearray()
+    while len(result) < size:
+        region = next(((start, end, offset) for start, end, offset in file_regions
+                       if start <= physical < end), None)
+        if region is None:
+            raise ValueError(f"hashed read at {physical:#x} has no load region")
+        start, end, offset = region
+        amount = min(size - len(result), end - physical)
+        data = os.pread(fd, amount, offset + physical - start)
+        if len(data) != amount:
+            raise ValueError("truncated hashed GPU image")
+        result.extend(data)
+        physical += amount
+    return bytes(result)
+
+
 def scatter_hashed(source, source_offset, address, size, output, region_offset,
-                   hash_size, unit, slices, folds):
+                   hash_size, unit, slices, folds, file_regions=None):
     """Place a logical GPU byte range into the direct-load physical hash image."""
     logical = address - GPU_HOST_ALIAS
     if logical < 0 or logical + size > hash_size:
@@ -208,8 +247,11 @@ def scatter_hashed(source, source_offset, address, size, output, region_offset,
                     banks[lane ^ fold][dst_at:dst_at + unit] = data[
                         src_at + lane * unit:src_at + (lane + 1) * unit]
             for lane, bank in enumerate(banks):
-                write_at(output.fileno(), bank,
-                         region_offset + lane * slice_size + group_start * unit)
+                physical = lane * slice_size + group_start * unit
+                if file_regions is None:
+                    write_at(output.fileno(), bank, region_offset + physical)
+                else:
+                    write_physical(output.fileno(), bank, physical, file_regions)
             consumed += len(data)
         else:
             amount = min(unit - current % unit, remaining)
@@ -220,7 +262,10 @@ def scatter_hashed(source, source_offset, address, size, output, region_offset,
             lane = (current // unit) % slices
             physical = ((lane ^ folds[group]) * slice_size
                         + group * unit + current % unit)
-            write_at(output.fileno(), data, region_offset + physical)
+            if file_regions is None:
+                write_at(output.fileno(), data, region_offset + physical)
+            else:
+                write_physical(output.fileno(), data, physical, file_regions)
             consumed += amount
 
 
@@ -233,6 +278,7 @@ def digest_hashed_image(output, address, size, layout, folds):
     if logical < 0 or logical + size > layout["size"]:
         raise ValueError("image lies outside recorded hash region")
     result = hashlib.sha256()
+    file_regions = file_regions_from_layout(layout)
     with output.open("rb") as source:
         consumed = 0
         while consumed < size:
@@ -241,9 +287,9 @@ def digest_hashed_image(output, address, size, layout, folds):
             if current % group_bytes == 0 and remaining >= group_bytes:
                 groups = min(8192, remaining // group_bytes)
                 group_start = current // group_bytes
-                banks = [os.pread(source.fileno(), groups * unit,
-                                  layout["file_offset"] + lane * slice_size
-                                  + group_start * unit)
+                banks = [read_physical(source.fileno(), groups * unit,
+                                       lane * slice_size + group_start * unit,
+                                       file_regions)
                          for lane in range(slices)]
                 if any(len(bank) != groups * unit for bank in banks):
                     raise ValueError("truncated hashed GPU image")
@@ -264,8 +310,8 @@ def digest_hashed_image(output, address, size, layout, folds):
                 lane = (current // unit) % slices
                 physical = ((lane ^ folds[group]) * slice_size
                             + group * unit + current % unit)
-                data = os.pread(source.fileno(), amount,
-                                layout["file_offset"] + physical)
+                data = read_physical(source.fileno(), amount, physical,
+                                     file_regions)
                 if len(data) != amount:
                     raise ValueError("truncated hashed GPU image")
                 result.update(data)
@@ -274,7 +320,7 @@ def digest_hashed_image(output, address, size, layout, folds):
 
 
 def package_hashed(elf, image_manifests, output, hash_size, unit, slices,
-                   receipts=()):
+                   receipts=(), compact=False):
     """Build one LoadMem ELF for the specified Radiance address hash."""
     folds = hash_folds(hash_size, unit, slices)
     header, _, existing = read_elf(elf)
@@ -327,27 +373,39 @@ def package_hashed(elf, image_manifests, output, hash_size, unit, slices,
         with elf.open("rb") as source, partial.open("wb+") as target:
             shutil.copyfileobj(source, target, 8 * 1024 * 1024)
             region_offset = align(target.tell())
-            target.seek(region_offset + hash_size - 1)
-            target.write(b"\0")
+            file_regions = []
+            if compact:
+                for first, end in load_ranges:
+                    offset = align(target.tell())
+                    target.seek(offset + end - first - 1)
+                    target.write(b"\0")
+                    file_regions.append((first, end, offset))
+            else:
+                target.seek(region_offset + hash_size - 1)
+                target.write(b"\0")
+                file_regions = [(first, end, region_offset + first)
+                                for first, end in load_ranges]
             target.flush()
             for offset, address, size in hashed_source:
                 scatter_hashed(source, offset, address, size, target,
-                               region_offset, hash_size, unit, slices, folds)
+                               region_offset, hash_size, unit, slices, folds,
+                               file_regions if compact else None)
             for address, size, path, expected_hash, source_offset in lower:
                 with path.open("rb") as image:
                     scatter_hashed(image, source_offset, address, size, target,
-                                   region_offset, hash_size, unit, slices, folds)
+                                   region_offset, hash_size, unit, slices, folds,
+                                   file_regions if compact else None)
                 result_images.append({"source": str(path.resolve()),
                                       "source_sha256": expected_hash,
                                       "gpu_address": address - GPU_HOST_ALIAS,
                                       "cpu_address": address,
                                       "size_bytes": size,
                                       "layout": "hashed"})
-            for first, end in load_ranges:
-                kept.append((PT_LOAD, 6, region_offset + first,
+            for first, end, offset in file_regions:
+                kept.append((PT_LOAD, 6, offset,
                              GPU_HOST_ALIAS + first, GPU_HOST_ALIAS + first,
                              end - first, end - first, ALIGN))
-            target.seek(region_offset + hash_size)
+            target.seek(align(target.tell()))
             phoff = align(target.tell())
             target.write(b"\0" * (phoff - target.tell()))
             for segment in kept:
@@ -371,12 +429,13 @@ def package_hashed(elf, image_manifests, output, hash_size, unit, slices,
               "hash_layout": {"gpu_base": 0, "cpu_base": GPU_HOST_ALIAS,
                               "size": hash_size, "unit": unit,
                               "slices": slices, "file_offset": region_offset,
+                              "compact": compact,
                               "load_regions": [
                                   {"physical_offset": first,
-                                   "file_offset": region_offset + first,
+                                   "file_offset": offset,
                                    "cpu_address": GPU_HOST_ALIAS + first,
                                    "size_bytes": end - first}
-                                  for first, end in load_ranges]},
+                                  for first, end, offset in file_regions]},
               "load_method": "direct LoadMem, physically hashed GPU region",
               "validation": "ELF structure and source image hashes; target execution pending"}
     output.with_suffix(output.suffix + ".json").write_text(
@@ -520,11 +579,14 @@ def main():
                         help="GPU hash range size for direct FireSim LoadMem")
     parser.add_argument("--hash-unit", type=int, default=32)
     parser.add_argument("--hash-slices", type=int, default=4)
+    parser.add_argument("--compact-hash", action="store_true",
+                        help="omit unused physical hash gaps from the ELF file")
     parser.add_argument("--verify", type=Path,
                         help="verify a packaged ELF using its .elf.json receipt")
     args = parser.parse_args()
     if args.verify:
-        if args.elf or args.image or args.receipt or args.output or args.hash_size:
+        if (args.elf or args.image or args.receipt or args.output or
+                args.hash_size or args.compact_hash):
             parser.error("--verify cannot be combined with packaging arguments")
         result = verify_package(args.verify)
     else:
@@ -535,8 +597,11 @@ def main():
         if args.hash_size:
             result = package_hashed(args.elf, args.image or (), args.output,
                                     args.hash_size, args.hash_unit,
-                                    args.hash_slices, args.receipt or ())
+                                    args.hash_slices, args.receipt or (),
+                                    args.compact_hash)
         else:
+            if args.compact_hash:
+                parser.error("--compact-hash requires --hash-size")
             result = package(args.elf, args.image or (), args.output,
                              args.receipt or ())
     print(json.dumps(result, indent=2))

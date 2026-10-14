@@ -262,12 +262,16 @@ python3 kernels/model_chain/package_firesim.py \
   --image /path/to/compact-images/image-0.json \
   --image /path/to/compact-images/image-1.json \
   --hash-size 0x80000000 --hash-unit 32 --hash-slices 4 \
+  --compact-hash \
   --output /path/to/smolvla-base-2g-hbm.soc.elf
 ```
 
 This placement ends at GPU offset `0x74052680`. Check the generated device
 ELF's load segments against the relocated manifests again after rebuilding,
-and verify the packaged ELF with `package_firesim.py --verify`. The October 11
+and verify the packaged ELF with `package_firesim.py --verify`. The optional
+`--compact-hash` lays the same physical GPU load regions into consecutive
+ELF file offsets. It avoids a sparse 2 GiB file and leaves each segment's
+physical load address unchanged. The October 11
 XB10 bitstream's exact HWDB and FPGA execution remain to be checked.
 
 ### Full-depth checkpoint builds
