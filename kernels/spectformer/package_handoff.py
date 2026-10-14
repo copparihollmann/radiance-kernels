@@ -51,7 +51,8 @@ def checked_receipt_sources(name: str, receipt_path: Path, build: dict,
         raw = json.loads(raw_path.read_text())
         if sha256(raw_path) != receipt["run_result_sha256"]:
             raise ValueError(f"{name}: raw simulator run differs from verification")
-        if (raw.get("status") != "passed" or raw.get("reference_checked") or
+        if (raw.get("status") not in ("passed", "completed_unverified") or
+                raw.get("reference_checked") or
                 raw.get("elf_sha256") != receipt["elf_sha256"] or
                 raw.get("weights_sha256") != receipt["weights_sha256"] or
                 raw.get("input_sha256") != receipt["input_sha256"]):

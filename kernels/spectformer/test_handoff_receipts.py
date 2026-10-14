@@ -49,9 +49,14 @@ class HandoffReceiptTest(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_no_reference_run_cannot_be_packaged_as_pass(self):
-        with self.assertRaisesRegex(ValueError, "lacks a checked numerical pass"):
-            checked_receipt_sources("case", self.raw_path, self.build,
-                                    self.export, "logits", 2)
+        for status in ("passed", "completed_unverified"):
+            raw = json.loads(self.raw_path.read_text())
+            raw["status"] = status
+            self.raw_path.write_text(json.dumps(raw))
+            with self.subTest(status=status), self.assertRaisesRegex(
+                    ValueError, "lacks a checked numerical pass"):
+                checked_receipt_sources("case", self.raw_path, self.build,
+                                        self.export, "logits", 2)
 
     def test_checked_receipt_is_bound_to_raw_run_and_reference(self):
         sources = checked_receipt_sources("case", self.verified_path,
@@ -138,7 +143,7 @@ class HandoffReceiptTest(unittest.TestCase):
         (export_dir / "manifest.json").write_text(json.dumps(export))
         raw = json.loads(self.raw_path.read_text())
         raw.update(elf_sha256=elf_hash, weights_sha256=weight_hash,
-                   input_sha256=input_hash)
+                   input_sha256=input_hash, status="completed_unverified")
         self.raw_path.write_text(json.dumps(raw))
         checked = json.loads(self.verified_path.read_text())
         checked.update(elf_sha256=elf_hash, weights_sha256=weight_hash,

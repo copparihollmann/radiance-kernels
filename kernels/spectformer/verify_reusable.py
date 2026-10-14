@@ -26,7 +26,8 @@ def verify(target: Path, input_path: Path, out: Path,
     run = json.loads(run_path.read_text())
     if not build.get("runtime_input") or not build.get("device_elf_built"):
         raise ValueError("expected a built runtime-input program")
-    if run.get("reference_checked") or run.get("status") != "passed":
+    if run.get("reference_checked") or run.get("status") not in (
+            "passed", "completed_unverified"):
         raise ValueError("expected a completed no-reference run")
     if run.get("exit_code") != 0 or run.get("cycles_functional") is None:
         raise ValueError("run did not complete successfully")

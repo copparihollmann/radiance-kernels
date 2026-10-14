@@ -53,7 +53,7 @@ def verify(root: Path) -> int:
                         verification.get("all_finite") is not True or
                         verification.get("out_of_tolerance") != 0 or
                         verification.get("run_result_sha256") != sha256(raw_path) or
-                        raw.get("status") != "passed" or
+                        raw.get("status") not in ("passed", "completed_unverified") or
                         raw.get("reference_checked") is not False or
                         raw.get("output_kind") != case["output_kind"] or
                         verification.get("scope") != case["output_kind"] or

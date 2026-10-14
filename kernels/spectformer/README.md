@@ -76,7 +76,7 @@ python kernels/spectformer/run_reusable.py \
   --cyclotron-root /path/to/cyclotron --timeout 1800
 ```
 
-The runner writes `logits.bin`, the reference vector, Cyclotron log, and a JSON receipt with input, weight, ELF, simulator, and output hashes. `--no-reference` runs inference and dumps logits without PyTorch; its receipt says `reference_checked: false`. To check that saved run later, without repeating the device simulation, use `verify_reusable.py` with the same target, input, output directory, and Cyclotron root. It verifies the run hashes and completion log, computes the pinned upstream output, and writes `verification.json` plus `verified-reference.bin`. A no-reference run is only a completion check until this verification passes.
+The runner writes `logits.bin`, the reference vector, Cyclotron log, and a JSON receipt with input, weight, ELF, simulator, and output hashes. `--no-reference` runs inference and dumps logits without PyTorch; its receipt says `status: completed_unverified` and `reference_checked: false`. Older no-reference receipts use `status: passed` with `reference_checked: false`; that status records simulator completion only. To check a saved run without repeating the device simulation, use `verify_reusable.py` with the same target, input, output directory, and Cyclotron root. It verifies the run hashes and completion log, computes the pinned upstream output, and writes `verification.json` plus `verified-reference.bin`. A no-reference run is only a completion check until this verification passes.
 
 The runner streams Cyclotron output directly to `cyclotron.log` and scans
 completion and preload markers one line at a time with bounded memory. A new

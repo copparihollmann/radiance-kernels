@@ -192,12 +192,13 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
                             if finite and output_kind == "logits" else None),
             "logits_sha256": sha256(dump),
         }
-    passed = complete and (comparison is None if not check_reference else
-                           comparison is not None and comparison["all_close"])
+    passed = complete and check_reference and comparison is not None and comparison["all_close"]
+    status = ("passed" if passed else "completed_unverified" if complete and
+              not check_reference else "failed")
     record = {
-        "model": build["model"], "status": "passed" if passed else "failed",
+        "model": build["model"], "status": status,
         "output_kind": output_kind, "output_count": output_count,
-        "failure_reason": None if passed else ("wall_clock_timeout" if exit_code == 124 else
+        "failure_reason": None if status != "failed" else ("wall_clock_timeout" if exit_code == 124 else
             "logit_mismatch" if complete else "simulator_or_program_failure"),
         "variant": image.get("variant", "vanilla"),
         "variant_depth": image.get("depth"), "image_size": image["image_size"],
@@ -238,7 +239,7 @@ def main() -> None:
     result = run(args.target, args.input, args.out, args.cyclotron_root,
                  args.timeout, args.sim_cycles, not args.no_reference)
     print(json.dumps(result, indent=2))
-    if result["status"] != "passed":
+    if result["status"] not in ("passed", "completed_unverified"):
         raise SystemExit(1)
 
 
