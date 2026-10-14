@@ -921,6 +921,11 @@ The collector accepts one-SM and two-SM reports only. A four-SM result needs
 its own source manifest and UART protocol before it can be accepted.
 Both accepted report formats are parsed from the UART stream without loading
 the whole log into memory.
+Radiance's `mcycle` register is local to each core. A two-SM report therefore
+keeps each cluster's duration but leaves aggregate makespan unset; the
+collector has no evidence that the two counters share a synchronized epoch.
+Use a shared FireSim or host timing source for cross-cluster makespan before
+calculating a two-SM speedup.
 
 For the 2 GiB GPU map in the public HBM configuration, SmolVLA's FP32 image
 fits if its two weight segments and exact input image are moved below the warp

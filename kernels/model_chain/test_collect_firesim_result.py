@@ -73,6 +73,7 @@ class CollectFiresimResultTest(unittest.TestCase):
         self.assertEqual(result["kernel_cycles64"], 20)
         self.assertEqual(result["gpu_start_cycle64"], 4294967290)
         self.assertEqual(result["gpu_end_cycle64"], 4294967310)
+        self.assertIsNone(result["cross_sm_counter_alignment_verified"])
         self.assertEqual(parse_uart(VALID_UART.replace(
             "model_status=600d0000", "model_status=0x600d0000"))["status"], "passed")
 
@@ -114,6 +115,8 @@ class CollectFiresimResultTest(unittest.TestCase):
         result = collect_two()
         self.assertEqual(result["status"], "passed")
         self.assertIsNone(result["kernel_cycles64"])
+        self.assertIsNone(result["two_sm_makespan_cycles"])
+        self.assertFalse(result["cross_sm_counter_alignment_verified"])
         self.assertEqual(result["cluster_timings"][1]["kernel_cycles64"], 55)
         self.assertIn("two-cluster native check receipt is required",
                       collect_two(None)["problems"])
