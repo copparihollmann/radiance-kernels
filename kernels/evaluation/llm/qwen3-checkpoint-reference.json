@@ -1,0 +1,71 @@
+{
+  "status": "passed",
+  "scope": "full_checkpoint_fp32_software_reference",
+  "model": "Qwen/Qwen3-0.6B",
+  "layers": 28,
+  "prefill_tokens": 1,
+  "decode_steps": 1,
+  "generation": "greedy",
+  "input_token": 5,
+  "graph_selected_token": 9,
+  "upstream_selected_token": 9,
+  "checkpoint_config_sha256": "660db3b73d788119c04535e48cf9be5f55bc3100841a718637ae695b442f27dd",
+  "checkpoint_weight_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+  "saved_tied_head_check": {
+    "embedding_key": "model.embed_tokens.weight",
+    "head_key": "lm_head.weight",
+    "shape": [
+      151936,
+      1024
+    ],
+    "compared_elements": 155582464,
+    "equal": true
+  },
+  "upstream_storage_tied": false,
+  "torch_version": "2.9.1+cpu",
+  "transformers_version": "5.3.0",
+  "graph_stages": 1071,
+  "comparisons": {
+    "prefill": {
+      "shape": [
+        1,
+        1,
+        151936
+      ],
+      "max_abs_error": 2.956390380859375e-05,
+      "rms_error": 6.46457257056913e-06,
+      "allclose_atol_1e-4_rtol_1e-4": true,
+      "top1_equal": true,
+      "graph_sha256": "f835b1f61b3afae710ac06c1c1d10c0b6a6535a367eddc08f54e9c0be8d18451",
+      "upstream_sha256": "b9cea89f37dcc530594568aaca7e101a61577088180cc19d451a9d4e9c70f48a"
+    },
+    "decode0": {
+      "shape": [
+        1,
+        1,
+        151936
+      ],
+      "max_abs_error": 2.86102294921875e-05,
+      "rms_error": 5.471322613978796e-06,
+      "allclose_atol_1e-4_rtol_1e-4": true,
+      "top1_equal": true,
+      "graph_sha256": "c466f28fe2af1fea0534a09f510a1bf9bde49d7db7d17618fad395562e2bd05a",
+      "upstream_sha256": "3cdc82534387a6a4a2020a8bed4fa7f1d3db8b0c33e26693bb1cf4230b609c6c"
+    },
+    "upstream_cached_vs_full": {
+      "shape": [
+        1,
+        1,
+        151936
+      ],
+      "max_abs_error": 2.491474151611328e-05,
+      "rms_error": 5.205108973468199e-06,
+      "allclose_atol_1e-4_rtol_1e-4": true,
+      "top1_equal": true,
+      "graph_sha256": "3cdc82534387a6a4a2020a8bed4fa7f1d3db8b0c33e26693bb1cf4230b609c6c",
+      "upstream_sha256": "7cc28e7c334eef30b87a37530ff7661b40c3de6bb0cf4d48a2fa36bb5eeb0bdd"
+    }
+  },
+  "radiance_execution": false,
+  "hardware_timing": false
+}

@@ -340,11 +340,13 @@ query norm in the stitched path changes final logits by `0.0332`. Run
 `verify_qwen3_reduced.py` to reproduce the check. These controls establish
 the reduced decoder operation order and cache handoff. The original Qwen3
 checkpoint's saved embedding and output head were then compared element by
-element. A full-width, 28-layer Radiance ELF builds with a converted FP16
+element. The [full-checkpoint upstream check](qwen3-checkpoint-reference.json)
+compares one-token prefill and greedy cached decode against Transformers
+5.3.0 in FP32: the largest logit error is `2.96e-5`, and the selected token
+agrees. An original-width, 28-layer Radiance ELF builds with a converted FP16
 weight image, and a seven-stage real-weight prefix passes Cyclotron; see the
 [checkpoint-weight device record](../../model_chain/README.md#qwen3-checkpoint-weight-path).
-The complete full-weight device run and independent full-weight upstream
-comparison remain separate checks.
+The complete full-weight device run remains pending.
 
 Run `python3 estimate_kv.py` to regenerate [kv-working-set.csv](kv-working-set.csv).
 The script verifies each local config against its recorded hash before

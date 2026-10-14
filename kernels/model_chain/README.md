@@ -129,10 +129,15 @@ not exercise the tied output projection. A [28-layer ELF](evaluation/qwen3-full-
 also builds for one-token prefill and one greedy decode step, with 1,071
 ordered stages and the tied FP16 projection. Its checkpoint-backed NumPy
 reference selects the same top token before and after FP16 storage conversion
-on both steps; the largest final-logit difference is `1.01e-5`. A complete
-device result and independent full-weight Transformers comparison are still
-pending. The Cyclotron cycles above are functional execution counts, not
-hardware latency or utilization.
+on both steps; the largest final-logit difference is `1.01e-5`. The
+[independent checkpoint comparison](../evaluation/llm/qwen3-checkpoint-reference.json)
+checks all 28 layers against Transformers 5.3.0 with FP32 arithmetic:
+prefill and greedy decode logits differ by at most `2.96e-5`, and both select
+the same token. The upstream cached decode also agrees with an upstream full
+causal pass to `2.49e-5`. Transformers loads its two saved matrices as
+separate storage, while their values are exactly equal as checked above.
+The complete device run is still pending. Cyclotron functional cycles are
+not hardware latency or utilization.
 
 The checkpoint file and binary image stay in the local task directory. To
 reproduce the build, use the pinned checkpoint from the linked check and
@@ -148,7 +153,14 @@ python3 kernels/model_chain/compile_decoder.py \
   --device-check-all-stages --checkpoint-dir "$CHECKPOINT" \
   --weight-image "$WEIGHTS/qwen3_0_6b/weights-image.json" \
   --out-root "$BUILD" --build
+python3 kernels/evaluation/llm/verify_qwen3_checkpoint.py \
+  --checkpoint-dir "$CHECKPOINT" --input-token 5 \
+  --out "$BUILD/qwen3-checkpoint-reference.json"
 ```
+
+The upstream FP32 comparison reused the same checkpoint file and reached
+about 4.55 GiB peak RSS on the recorded single-threaded run. The FP16 image
+export reached about 0.79 GiB peak RSS.
 
 ## Checkpoint-weight device path
 
