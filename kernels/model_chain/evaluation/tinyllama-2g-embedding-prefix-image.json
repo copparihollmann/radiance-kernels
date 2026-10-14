@@ -1,0 +1,93 @@
+{
+  "model": "tinyllama",
+  "family": "llama",
+  "layers": 22,
+  "pinned_model_layers": 22,
+  "graph_stages": 754,
+  "parameter_uses": 2,
+  "distinct_parameters": 2,
+  "dtype": "int8_scaled",
+  "linear_layout": "row_major_in_out",
+  "alignment_bytes": 64,
+  "gpu_base_address": 335544320,
+  "gpu_end_address_exclusive": 401216512,
+  "image_size_bytes": 65672192,
+  "fits_32_bit_address_space": true,
+  "warp_stack_reserved_range": [
+    2128609280,
+    2130706432
+  ],
+  "stack_overlap_parameters": [],
+  "segments": [
+    {
+      "index": 0,
+      "image_file": "weights-parameter.bin",
+      "gpu_base_address": 335544320,
+      "image_size_bytes": 65672192,
+      "image_sha256": "b31e5b984702d462ad1ab54953f201b086b9bba940cc926cc77203fee4d970f4"
+    }
+  ],
+  "parameters": [
+    {
+      "logical_name": "embed_tokens",
+      "operation": "embedding",
+      "shape": [
+        32000,
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "int8_scaled",
+      "weight_size_bytes": 65536000,
+      "scale_count": 32000,
+      "size_bytes": 65664000,
+      "segment_index": 0,
+      "offset_bytes": 0,
+      "gpu_address": 335544320,
+      "scale_offset_bytes": 65536000,
+      "scale_gpu_address": 401080320,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 65417152,
+      "roundtrip_max_abs_error": 0.000588245689868927,
+      "checkpoint_key": "model.embed_tokens.weight",
+      "packed_sha256": "ea383ecfbcc8ebfaa8c9ac3c120842a2a7ee3eacfbf822b7e6482f3713fa021b"
+    },
+    {
+      "logical_name": "layers.0.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2048
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "fp32",
+      "weight_size_bytes": 8192,
+      "scale_count": 0,
+      "size_bytes": 8192,
+      "segment_index": 0,
+      "offset_bytes": 65664000,
+      "gpu_address": 401208320,
+      "scale_offset_bytes": null,
+      "scale_gpu_address": null,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.0.input_layernorm.weight",
+      "packed_sha256": "5a1b3fea19a3c45363b83168115ecdfdfef2f8cad5bcf5b48b255c6a12bcf561"
+    }
+  ],
+  "checkpoint_weights": true,
+  "device_execution": false,
+  "checkpoint_config_sha256": "486bedda3a6988332e60d9638a09ca4b260d34ebcf1b19e22cf3b140b63d8fe9",
+  "checkpoint_weight_sha256": "6e6001da2106d4757498752a021df6c2bdc332c650aae4bae6b0c004dcf14933",
+  "image_sha256": "b31e5b984702d462ad1ab54953f201b086b9bba940cc926cc77203fee4d970f4",
+  "roundtrip_changed_elements": 1097927656,
+  "roundtrip_max_abs_error": 0.012215200811624527,
+  "physical_parameters": 2,
+  "probe_subset": {
+    "parameters": [
+      "embed_tokens",
+      "layers.0.attn_norm"
+    ],
+    "source_zip": "tinyllama-int8-2g-handoff.zip",
+    "source_elf_sha256": "8abd3bc5d6bdc579eeffce107c63df96f247e42bb0b6d330772f70d06d6cbf4b"
+  }
+}

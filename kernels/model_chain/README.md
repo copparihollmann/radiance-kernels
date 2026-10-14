@@ -291,6 +291,24 @@ Radiance and nightly HBM source ELFs compile and the 2 GiB compact-hash
 FireSim packages pass local reconstruction checks. Hardware correctness and
 performance remain unmeasured for these builds.
 
+The first two stages were also run in Cyclotron with INT8 bytes recovered
+directly from each compact FireSim ZIP. In each case, the recovered embedding
+and first attention-norm parameter hashes matched the exporter. The generated
+device program checked both stage outputs against its checkpoint-backed INT8
+reference and returned `tohost=0`:
+
+| Model | Recovered image | Two-stage build | Cyclotron result | Functional cycles |
+| --- | --- | --- | --- | ---: |
+| TinyLlama | [65,672,192 bytes](evaluation/tinyllama-2g-embedding-prefix-image.json) | [build](evaluation/tinyllama-2g-embedding-prefix-build.json) | [2/2 passed](evaluation/tinyllama-2g-embedding-prefix-functional-results.json) | 312,457 |
+| DeepSeek-R1-Distill-Qwen-1.5B | [233,987,584 bytes](evaluation/deepseek-2g-embedding-prefix-image.json) | [build](evaluation/deepseek-2g-embedding-prefix-build.json) | [2/2 passed](evaluation/deepseek-2g-embedding-prefix-functional-results.json) | 140,383 |
+
+`extract_hashed_parameter.py` makes these subset images from each ZIP's stored
+model ELF using `--parameter embed_tokens --parameter layers.0.attn_norm`.
+Build with the model's pinned checkpoint, its fixed prefill IDs, and
+`compile_decoder.py --stage-limit 2 --device-check-all-stages --build`; then
+run `run_functional.py`. These are original-dimension prefix checks, not
+execution or latency measurements of the complete decoder programs.
+
 Gemma needs a smaller image for this map. `export_gemma_int4_tied.py` keeps
 the shared input/output embedding and attention matrices in INT8, packs the
 feed-forward matrices in signed INT4, and leaves norms in FP32. The full

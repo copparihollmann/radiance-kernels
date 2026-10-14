@@ -1,0 +1,75 @@
+{
+  "model": "deepseek_r1_distill_qwen_1_5b",
+  "scope": "full_dimension_checkpoint_stage_probe",
+  "device_optimization": "O3",
+  "stages_per_device_object": 20,
+  "device_source_files": [
+    "kernel.cpp",
+    "stage_chunk_000.cpp",
+    "model_data.cpp",
+    "verify_chunk_000.cpp"
+  ],
+  "device_source_generated": true,
+  "device_elf_built": true,
+  "device_execution": false,
+  "measured_cycles": null,
+  "checkpoint_weights": true,
+  "full_model_dimensions": true,
+  "layers": 28,
+  "stage_limit": 2,
+  "weight_image_manifest": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/deepseek-int8-prefix/weights/weights-image.json",
+  "weight_image_sha256": "4ce6a4685f28faa08037a213014a722ec72bdf6482c1f9d25fe083965caf68f9",
+  "weight_image_segments": 1,
+  "weight_segment_layout": [
+    {
+      "gpu_base_address": 335544320,
+      "image_size_bytes": 233987584,
+      "image_sha256": "4ce6a4685f28faa08037a213014a722ec72bdf6482c1f9d25fe083965caf68f9"
+    }
+  ],
+  "weight_image_base_address": 335544320,
+  "checkpoint_sha256": "58858233513d76b8703e72eed6ce16807b523328188e13329257fb9594462945",
+  "reference_output_sha256": "fbe73b6a019fd2de242b1cd1605d63cb8addd9f50dbbff73eb422080a70e4222",
+  "checkpoint_weight_format": "int8_scaled",
+  "quantization_comparison": {
+    "prefill.layer00.attn_norm": {
+      "max_abs_error": 0.014278076589107513,
+      "rms_error": 0.0021782002532326453,
+      "reference_sha256": "34a783996ea53f6804557494e3f28ef62977ca501fcb3bf3924fbf17530b51d4",
+      "quantized_sha256": "fbe73b6a019fd2de242b1cd1605d63cb8addd9f50dbbff73eb422080a70e4222",
+      "top1_equal": true
+    }
+  },
+  "upstream_execution_equivalent": false,
+  "buffers_cache_line_padded": true,
+  "prefill_tokens": 1,
+  "decode_steps": 2,
+  "input_token_ids": {
+    "decode0.token_ids": [
+      1
+    ],
+    "decode1.token_ids": [
+      1
+    ],
+    "prefill.token_ids": [
+      9707
+    ]
+  },
+  "token_sequence_explicit": true,
+  "reference_generated_token_ids": [
+    1,
+    1
+  ],
+  "generation": "greedy",
+  "stages": 2,
+  "device_check_all_stages": true,
+  "verified_tensors": [
+    "prefill.embedding",
+    "prefill.layer00.attn_norm"
+  ],
+  "native_verified_float_stages": 2,
+  "native_verified_integer_stages": 0,
+  "source_spec_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "radiance_elf_sha256": "34d811081c5b9188ab2a52389823f7f5eb03aaf357136be1c0fe1ff7f330202e",
+  "soc_elf_sha256": "2fa9dae984a745bbc239fcb06a357ec9ce931e532d785d4db6bcaffd0304cb58"
+}
