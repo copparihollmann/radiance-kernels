@@ -61,6 +61,9 @@ inline void real_dft_rows(const SF_GLOBAL float* input, SF_GLOBAL float* output,
                           uint32_t width, uint32_t channels,
                           uint32_t tid, uint32_t threads) {
   const uint32_t bins = width / 2 + 1;
+#ifndef RADIANCE_DEVICE
+  // The factored transform fails the Radiance device check at this grid size.
+  // Use the checked direct transform on device until its cause is resolved.
   if (width % 7 == 0 && width <= 56) {
     for (uint32_t work = tid; work < height * channels; work += threads) {
       const uint32_t row = work / channels, channel = work % channels;
@@ -77,6 +80,7 @@ inline void real_dft_rows(const SF_GLOBAL float* input, SF_GLOBAL float* output,
     }
     return;
   }
+#endif
   const float scale = 1.0f / __builtin_sqrtf((float)width);
   for (uint32_t work = tid; work < height * bins * channels; work += threads) {
     const uint32_t channel = work % channels;
@@ -99,6 +103,7 @@ inline void complex_dft_columns(const SF_GLOBAL float* input,
                                 const SF_GLOBAL float* sine, uint32_t height,
                                 uint32_t bins, uint32_t channels, bool inverse,
                                 uint32_t tid, uint32_t threads) {
+#ifndef RADIANCE_DEVICE
   if (height % 7 == 0 && height <= 56) {
     for (uint32_t work = tid; work < bins * channels; work += threads) {
       const uint32_t frequency_x = work / channels, channel = work % channels;
@@ -115,6 +120,7 @@ inline void complex_dft_columns(const SF_GLOBAL float* input,
     }
     return;
   }
+#endif
   const float scale = 1.0f / __builtin_sqrtf((float)height);
   for (uint32_t work = tid; work < height * bins * channels; work += threads) {
     const uint32_t channel = work % channels;
@@ -153,6 +159,7 @@ inline void inverse_real_dft_rows(const SF_GLOBAL float* input,
                                   uint32_t width, uint32_t channels,
                                   uint32_t tid, uint32_t threads) {
   const uint32_t bins = width / 2 + 1;
+#ifndef RADIANCE_DEVICE
   if (width % 7 == 0 && width <= 56) {
     for (uint32_t work = tid; work < height * channels; work += threads) {
       const uint32_t row = work / channels, channel = work % channels;
@@ -170,6 +177,7 @@ inline void inverse_real_dft_rows(const SF_GLOBAL float* input,
     }
     return;
   }
+#endif
   const float scale = 1.0f / __builtin_sqrtf((float)width);
   for (uint32_t work = tid; work < height * width * channels; work += threads) {
     const uint32_t channel = work % channels;
@@ -203,7 +211,35 @@ inline void gelu_exact(const SF_GLOBAL float* input, SF_GLOBAL float* output,
                        uint32_t count, uint32_t tid, uint32_t threads) {
   for (uint32_t i = tid; i < count; i += threads) {
     const float x = input[i];
-    output[i] = 0.5f * x * (1.0f + __builtin_erff(x * 0.7071067811865475f));
+    // Muon/Cyclotron's erff and expf paths disagree with the FP32 reference.
+    // Approximate exact GELU as x/2 plus an even Chebyshev series in x^2.
+    // The coefficients fit x*erf(x/sqrt(2))/2 over |x| <= 6; saturation
+    // beyond 6 has absolute error below 6e-9 in the exact function.
+    float y;
+    if (x >= 6.0f) y = x;
+    else if (x <= -6.0f) y = 0.0f;
+    else {
+      const float t = (x * x) / 18.0f - 1.0f;
+      const float b17 = 0.0f, b18 = 0.0f;
+      const float b16 = 2.0f * t * b17 - b18 - 4.31628767476e-07f;
+      const float b15 = 2.0f * t * b16 - b17 + 1.6450031348e-06f;
+      const float b14 = 2.0f * t * b15 - b16 - 6.15045559768e-06f;
+      const float b13 = 2.0f * t * b14 - b15 + 2.09947945046e-05f;
+      const float b12 = 2.0f * t * b13 - b14 - 6.76077111068e-05f;
+      const float b11 = 2.0f * t * b12 - b13 + 0.000203883281238f;
+      const float b10 = 2.0f * t * b11 - b12 - 0.000575447086017f;
+      const float b9 = 2.0f * t * b10 - b11 + 0.00151531745933f;
+      const float b8 = 2.0f * t * b9 - b10 - 0.00371531702853f;
+      const float b7 = 2.0f * t * b8 - b9 + 0.00847203374628f;
+      const float b6 = 2.0f * t * b7 - b8 - 0.0179937643155f;
+      const float b5 = 2.0f * t * b6 - b7 + 0.0358462197919f;
+      const float b4 = 2.0f * t * b5 - b6 - 0.0683166083358f;
+      const float b3 = 2.0f * t * b4 - b5 + 0.131107787939f;
+      const float b2 = 2.0f * t * b3 - b4 - 0.292061322112f;
+      const float b1 = 2.0f * t * b2 - b3 + 1.32283169892f;
+      y = 0.5f * x + t * b1 - b2 + 1.88273674627f;
+    }
+    output[i] = y;
   }
 }
 
