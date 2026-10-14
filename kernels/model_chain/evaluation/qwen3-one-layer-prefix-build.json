@@ -1,0 +1,74 @@
+{
+  "model": "qwen3_0_6b",
+  "source_config_sha256": "660db3b73d788119c04535e48cf9be5f55bc3100841a718637ae695b442f27dd",
+  "tied_lm_head": true,
+  "scope": "full_dimension_checkpoint_stage_probe",
+  "device_optimization": "O3",
+  "stages_per_device_object": 7,
+  "device_source_files": [
+    "kernel.cpp",
+    "stage_chunk_000.cpp",
+    "model_data.cpp",
+    "verify_chunk_000.cpp"
+  ],
+  "device_source_generated": true,
+  "device_elf_built": true,
+  "device_execution": false,
+  "measured_cycles": null,
+  "checkpoint_weights": true,
+  "full_model_dimensions": true,
+  "layers": 1,
+  "stage_limit": 7,
+  "weight_image_manifest": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/qwen3-1layer-image/qwen3_0_6b/weights-image.json",
+  "weight_image_sha256": "8d290b4ed133642fa49a7d8ff6790c5fbf329bd841d5d5e87b0f03f71cdca00d",
+  "weight_image_segments": 1,
+  "weight_segment_layout": [
+    {
+      "gpu_base_address": 536870912,
+      "image_size_bytes": 342635520,
+      "image_sha256": "8d290b4ed133642fa49a7d8ff6790c5fbf329bd841d5d5e87b0f03f71cdca00d"
+    }
+  ],
+  "weight_image_base_address": 536870912,
+  "checkpoint_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+  "reference_output_sha256": "06e70bf39f1bcf80eb52cda9ae591e871da03ff2303a982a46bcbbe10c78da0d",
+  "checkpoint_weight_format": "mixed_fp16",
+  "quantization_comparison": {
+    "prefill.layer00.k_norm": {
+      "max_abs_error": 1.9073486328125e-06,
+      "rms_error": 6.964526560854069e-08,
+      "reference_sha256": "aaf1a80a0385a2a708e2d0014b0ed26106f658c79785a247917e0dccc881fafb",
+      "quantized_sha256": "06e70bf39f1bcf80eb52cda9ae591e871da03ff2303a982a46bcbbe10c78da0d",
+      "top1_equal": true
+    }
+  },
+  "upstream_execution_equivalent": false,
+  "buffers_cache_line_padded": true,
+  "prefill_tokens": 1,
+  "decode_steps": 0,
+  "input_token_ids": {
+    "prefill.token_ids": [
+      5
+    ]
+  },
+  "token_sequence_explicit": true,
+  "reference_generated_token_ids": null,
+  "generation": "teacher_forced",
+  "stages": 7,
+  "device_check_all_stages": true,
+  "batch_clusters": 1,
+  "verified_tensors": [
+    "prefill.embedding",
+    "prefill.layer00.attn_norm",
+    "prefill.layer00.q_proj",
+    "prefill.layer00.k_proj",
+    "prefill.layer00.v_proj",
+    "prefill.layer00.q_norm",
+    "prefill.layer00.k_norm"
+  ],
+  "native_verified_float_stages": 7,
+  "native_verified_integer_stages": 0,
+  "source_spec_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "radiance_elf_sha256": "1ec6e5118fb7dcd68b4b546b1b6ba80a13ec3387b1e0dfddef455c40528a0d88",
+  "soc_elf_sha256": "e179437b08b30c9b3d6f4069a0a9610c28607fbba29282b618f918c0bb37e055"
+}

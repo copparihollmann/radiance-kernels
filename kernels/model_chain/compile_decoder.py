@@ -130,7 +130,7 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
         if attrs.get("weight_transposed") and parameter_dtype == "fp32":
             body = f"linear_tied({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
         elif attrs.get("weight_transposed") and parameter_dtype not in (
-                "fp16_tied", "int8_tied"):
+                "fp16", "fp16_tied", "int8_tied"):
             raise ValueError(f"{stage['id']}: unsupported tied weight format")
         elif parameter_dtype == "int6_scaled":
             body = f"linear_i6({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
@@ -142,7 +142,8 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
             body = f"linear_i8_tied({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
         elif parameter_dtype == "int8_scaled":
             body = f"linear_i8({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
-        elif parameter_dtype == "fp16_tied":
+        elif parameter_dtype == "fp16_tied" or (attrs.get("weight_transposed")
+                                                and parameter_dtype == "fp16"):
             body = f"linear_f16_tied({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
         elif parameter_dtype == "fp16":
             body = f"linear_f16({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
@@ -216,8 +217,6 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     external = checkpoint_dir is not None or weight_image is not None
     if external and (checkpoint_dir is None or weight_image is None):
         raise ValueError("checkpoint directory and weight image are both required")
-    if external and model == "qwen3_0_6b":
-        raise ValueError("Qwen3 checkpoint weight-image mapping is not implemented")
     if stage_limit is not None and not external:
         raise ValueError("stage limit is only for checkpoint device probes")
     if external and (model not in MODELS or stages_per_object <= 0
@@ -401,6 +400,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     uses_packed = external and image_manifest["dtype"] == "int5_group64_int6_tied"
     uses_tied = external and image_manifest["dtype"] in ("int8_fp16_tied",
                                                          "int4_int8_tied")
+    uses_tied = uses_tied or (external and any(
+        stage["attrs"].get("weight_transposed") and
+        parameter_dtype(stage) == "fp16" for stage in graph.stages))
     uses_fp32_tied = any(stage["attrs"].get("weight_transposed") and
                          parameter_dtype(stage) == "fp32" for stage in graph.stages)
     for i, stage in enumerate(graph.stages):

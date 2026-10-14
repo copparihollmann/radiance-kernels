@@ -16,7 +16,7 @@ import numpy as np
 
 class SafeTensorWeights:
     def __init__(self, path: Path, family: str):
-        if family not in ("llama", "qwen2", "gemma2"):
+        if family not in ("llama", "qwen2", "gemma2", "qwen3"):
             raise ValueError(f"unsupported checkpoint family {family}")
         try:
             from safetensors import safe_open
@@ -63,6 +63,8 @@ class SafeTensorWeights:
         }
         if part in norm_parts:
             return f"model.layers.{index}.{norm_parts[part]}.weight"
+        if part in ("q_norm", "k_norm") and self.family == "qwen3":
+            return f"model.layers.{index}.self_attn.{part}.weight"
         if part.endswith("_bias"):
             return f"model.layers.{index}.self_attn.{part[0]}_proj.bias"
         if part in ("q_proj", "k_proj", "v_proj", "o_proj"):
@@ -87,7 +89,8 @@ class SafeTensorWeights:
         # PyTorch linear weights are [out, in]; the graph uses [in, out].
         if logical.endswith("_bias"):
             value = value.reshape(shape)
-        elif len(shape) == 2:
+        elif len(shape) == 2 and not (self.family == "qwen3" and
+                                      logical == "embed_tokens"):
             value = value.T
         if value.shape != shape:
             raise ValueError(f"{key}: got {value.shape}, expected {shape}")
@@ -95,10 +98,28 @@ class SafeTensorWeights:
 
     def embedding_row(self, logical: str, row: int, width: int) -> np.ndarray:
         key = self.key(logical)
-        value = self._tensor(key)
-        if row < 0 or row >= value.shape[0] or value.shape[1] != width:
-            raise ValueError(f"{key}: invalid row {row} or width {width}")
-        return value[row]
+        with self.safe_open(str(self._key_to_file[key]), framework="pt",
+                            device="cpu") as file:
+            value = file.get_slice(key)
+            shape = value.get_shape()
+            if len(shape) != 2 or row < 0 or row >= shape[0] or shape[1] != width:
+                raise ValueError(f"{key}: invalid row {row} or width {width}")
+            return value[row].to(dtype=self.torch.float32).numpy()
+
+    def embedding_blocks(self, logical: str, vocab: int, width: int,
+                         block_rows: int = 256):
+        """Read embedding rows without materializing the entire vocabulary."""
+        key = self.key(logical)
+        if block_rows <= 0:
+            raise ValueError("block_rows must be positive")
+        with self.safe_open(str(self._key_to_file[key]), framework="pt",
+                            device="cpu") as file:
+            value = file.get_slice(key)
+            if value.get_shape() != [vocab, width]:
+                raise ValueError(f"{key}: got {value.get_shape()}, expected {[vocab, width]}")
+            for start in range(0, vocab, block_rows):
+                yield value[start:min(start + block_rows, vocab)].to(
+                    dtype=self.torch.float32).numpy()
 
     def embedding_table(self, logical: str, vocab: int, width: int) -> np.ndarray:
         key = self.key(logical)
@@ -106,6 +127,31 @@ class SafeTensorWeights:
         if value.shape != (vocab, width):
             raise ValueError(f"{key}: got {value.shape}, expected {(vocab, width)}")
         return value
+
+    def verify_tied_lm_head(self) -> dict:
+        """Compare every saved output-head element with the embedding table."""
+        if self.family != "qwen3":
+            raise ValueError("tied-head check is only defined for Qwen3")
+        embedding_key = self.key("embed_tokens")
+        head_key = "lm_head.weight"
+        if embedding_key not in self.keys or head_key not in self.keys:
+            raise KeyError("Qwen3 checkpoint lacks a saved tied head")
+        with self.safe_open(str(self._key_to_file[embedding_key]),
+                            framework="pt", device="cpu") as embeddings, self.safe_open(
+                                str(self._key_to_file[head_key]), framework="pt",
+                                device="cpu") as heads:
+            embedding = embeddings.get_slice(embedding_key)
+            head = heads.get_slice(head_key)
+            shape = embedding.get_shape()
+            if shape != head.get_shape() or len(shape) != 2:
+                raise ValueError("Qwen3 head and embedding shapes differ")
+            for start in range(0, shape[0], 256):
+                stop = min(start + 256, shape[0])
+                if not self.torch.equal(embedding[start:stop], head[start:stop]):
+                    raise ValueError(f"Qwen3 head differs from embedding at rows {start}:{stop}")
+        return {"embedding_key": embedding_key, "head_key": head_key,
+                "shape": shape, "compared_elements": shape[0] * shape[1],
+                "equal": True}
 
     def check_bindings(self, graph) -> dict:
         bound = set()
@@ -135,6 +181,12 @@ class MixedFP16Weights:
     def embedding_row(self, logical: str, row: int, width: int) -> np.ndarray:
         value = self.source.embedding_row(logical, row, width)
         return value.astype(np.float16).astype(np.float32)
+
+    def embedding_blocks(self, logical: str, vocab: int, width: int,
+                         block_rows: int = 256):
+        for value in self.source.embedding_blocks(logical, vocab, width,
+                                                  block_rows):
+            yield value.astype(np.float16).astype(np.float32)
 
     def key(self, logical: str) -> str:
         return self.source.key(logical)

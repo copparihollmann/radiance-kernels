@@ -68,15 +68,21 @@ def plan(model: str, layers: int, first_base: int = FIRST_BASE,
     segments = [item for item in segments if item["image_size_bytes"]]
     return {
         "model": model, "family": spec["family"], "layers": layers,
+        "source_config_sha256": spec["source_sha256"],
         "pinned_model_layers": model_specs()[model]["num_hidden_layers"],
         "graph_stages": len(graph.stages), "parameter_uses": uses,
         "distinct_parameters": len(parameters), "dtype": "mixed_fp16",
-        "linear_layout": "row_major_in_out", "alignment_bytes": ALIGNMENT,
+        "linear_layout": ("row_major_in_out_with_tied_embedding_transpose"
+                          if spec["family"] == "qwen3" else "row_major_in_out"),
+        "alignment_bytes": ALIGNMENT,
         "gpu_base_address": first_base,
         "gpu_end_address_exclusive": max(item["gpu_base_address"] + item["image_size_bytes"]
                                           for item in segments),
         "image_size_bytes": sum(item["image_size_bytes"] for item in segments),
         "fits_32_bit_address_space": True,
+        "fits_2g_gpu_region": all(item["gpu_base_address"] +
+                                   item["image_size_bytes"] <= 0x80000000
+                                   for item in segments),
         "warp_stack_reserved_range": [STACK_BOTTOM, STACK_TOP],
         "stack_overlap_parameters": [],
         "segments": segments, "parameters": parameters,
@@ -95,6 +101,8 @@ def export(layout: dict, checkpoint_dir: Path, output_dir: Path) -> dict:
     if sha256_file(weight_path) != weight_hash:
         raise ValueError("checkpoint weights differ from pinned full-model check")
     provider = SafeTensorWeights(weight_path, spec["family"])
+    tied_head = (provider.verify_tied_lm_head() if spec["family"] == "qwen3"
+                 else None)
     output_dir.mkdir(parents=True, exist_ok=True)
     overall = hashlib.sha256()
     for segment in layout["segments"]:
@@ -115,28 +123,37 @@ def export(layout: dict, checkpoint_dir: Path, output_dir: Path) -> dict:
                     overall.update(pad)
                     logical = item["logical_name"]
                     shape = tuple(item["shape"])
-                    if item["operation"] == "embedding":
-                        value = provider.embedding_table(logical, *shape)
-                    else:
-                        value = provider(logical, shape)
-                    if item["gemma_weight_offset"]:
-                        value = value + 1.0
-                    dtype = "<f2" if item["storage_dtype"] == "fp16" else "<f4"
-                    array = np.ascontiguousarray(value, dtype=dtype)
-                    if array.shape != shape or array.nbytes != item["size_bytes"]:
-                        raise ValueError(f"{logical}: checkpoint value has wrong shape or size")
-                    restored = array.astype(np.float32)
-                    if not np.isfinite(restored).all():
-                        raise ValueError(f"{logical}: FP16 conversion produced nonfinite values")
-                    delta = np.abs(restored - value)
-                    item["roundtrip_changed_elements"] = int(np.count_nonzero(restored != value))
-                    item["roundtrip_max_abs_error"] = float(np.max(delta))
-                    raw = memoryview(array).cast("B")
-                    stream.write(raw)
-                    digest.update(raw)
-                    overall.update(raw)
+                    blocks = (provider.embedding_blocks(logical, *shape)
+                              if item["operation"] == "embedding" else
+                              (provider(logical, shape),))
+                    packed = hashlib.sha256()
+                    bytes_written = changed = 0
+                    maximum_error = 0.0
+                    for value in blocks:
+                        if item["gemma_weight_offset"]:
+                            value = value + 1.0
+                        dtype = "<f2" if item["storage_dtype"] == "fp16" else "<f4"
+                        array = np.ascontiguousarray(value, dtype=dtype)
+                        if array.shape[1:] != shape[1:]:
+                            raise ValueError(f"{logical}: checkpoint value has wrong shape")
+                        restored = array.astype(np.float32)
+                        if not np.isfinite(restored).all():
+                            raise ValueError(f"{logical}: FP16 conversion produced nonfinite values")
+                        delta = np.abs(restored - value)
+                        changed += int(np.count_nonzero(restored != value))
+                        maximum_error = max(maximum_error, float(np.max(delta)))
+                        raw = memoryview(array).cast("B")
+                        stream.write(raw)
+                        packed.update(raw)
+                        digest.update(raw)
+                        overall.update(raw)
+                        bytes_written += len(raw)
+                    if bytes_written != item["size_bytes"]:
+                        raise ValueError(f"{logical}: checkpoint value has wrong size")
+                    item["roundtrip_changed_elements"] = changed
+                    item["roundtrip_max_abs_error"] = maximum_error
                     item["checkpoint_key"] = provider.key(logical)
-                    item["packed_sha256"] = hashlib.sha256(raw).hexdigest()
+                    item["packed_sha256"] = packed.hexdigest()
                 if stream.tell() != segment["image_size_bytes"]:
                     raise ValueError("FP16 image segment size differs from plan")
             os.replace(temporary, destination)
@@ -147,6 +164,7 @@ def export(layout: dict, checkpoint_dir: Path, output_dir: Path) -> dict:
     result = dict(layout)
     result.update(checkpoint_config_sha256=spec["source_sha256"],
                   checkpoint_weight_sha256=weight_hash,
+                  tied_checkpoint_head_check=tied_head,
                   image_sha256=overall.hexdigest(), checkpoint_weights=True,
                   roundtrip_changed_elements=sum(item["roundtrip_changed_elements"]
                                                  for item in layout["parameters"]),

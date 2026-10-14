@@ -25,7 +25,8 @@ sys.path.insert(0, str(ROOT / "kernels/evaluation/llm"))
 from checkpoint import SafeTensorWeights  # noqa: E402
 from stitch import build, model_specs  # noqa: E402
 
-MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it")
+MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
+          "qwen3_0_6b")
 ADDRESS_SPACE_SIZE = 1 << 32
 ALIGNMENT = 64
 # lib/src/mu_start.S places 8 KiB per lane below 0x7F000000. Reserve the
@@ -43,6 +44,10 @@ def sha256_file(path: Path) -> str:
 
 
 def checkpoint_sha256(model: str) -> str:
+    if model == "qwen3_0_6b":
+        # Published content SHA-256 at the pinned Qwen revision. Export still
+        # hashes the local checkpoint before using it.
+        return model_specs()[model]["checkpoint_weight_sha256"]
     records = json.loads((ROOT / "kernels/evaluation/llm/checkpoint-results.json").read_text())
     matches = [row["checkpoint_sha256"] for row in records["checks"]
                if row["model"] == model and row["layers_checked"] ==
@@ -73,6 +78,14 @@ def parameter_specs(graph) -> tuple[list[dict], int]:
             raise ValueError(f"{stage['id']}: unsupported checkpoint parameter op {op}")
         item = {"logical_name": name, "operation": op, "shape": list(shape),
                 "gemma_weight_offset": bool(attrs.get("gemma_weight_offset", False))}
+        if op == "embedding" and attrs.get("tied_lm_head"):
+            item["tied_lm_head"] = True
+        if name in parameters and attrs.get("weight_transposed"):
+            previous = parameters[name]
+            if (previous.get("tied_lm_head") and previous["operation"] == "embedding"
+                    and previous["shape"] == list(shape)):
+                uses += 1
+                continue
         if name in parameters and parameters[name] != item:
             raise ValueError(f"{name}: inconsistent use across model stages")
         parameters[name] = item

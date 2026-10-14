@@ -115,13 +115,25 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
             weight_shape = tuple(attrs["weight_shape"])
             if np.prod(weight_shape, dtype=np.int64) > max_tensor_elements and weights is None:
                 raise ValueError(f"{name}: synthetic weight exceeds numerical control limit")
-            weight = (weights(attrs["parameter"], weight_shape) if weights is not None
-                      else parameter(attrs["parameter"], weight_shape,
-                                     0.05 if attrs.get("weight_transposed") else
-                                     1.0 / np.sqrt(weight_shape[0])))
-            if attrs.get("weight_transposed"):
-                weight = weight.T
-            value = (args[0] @ weight).reshape(shape)
+            if (attrs.get("weight_transposed") and weights is not None and
+                    hasattr(weights, "embedding_blocks")):
+                value = np.empty(shape, dtype=np.float32)
+                start = 0
+                for block in weights.embedding_blocks(attrs["parameter"],
+                                                      *weight_shape):
+                    stop = start + block.shape[0]
+                    value[..., start:stop] = args[0] @ block.T
+                    start = stop
+                if start != shape[-1]:
+                    raise ValueError(f"{name}: tied embedding has wrong vocabulary size")
+            else:
+                weight = (weights(attrs["parameter"], weight_shape) if weights is not None
+                          else parameter(attrs["parameter"], weight_shape,
+                                         0.05 if attrs.get("weight_transposed") else
+                                         1.0 / np.sqrt(weight_shape[0])))
+                if attrs.get("weight_transposed"):
+                    weight = weight.T
+                value = (args[0] @ weight).reshape(shape)
         elif op == "bias_add":
             bias = (weights(attrs["parameter"], shape[2:]) if weights is not None
                     else parameter(attrs["parameter"], shape[2:]))

@@ -1,0 +1,73 @@
+[
+  {
+    "model": "qwen3_0_6b",
+    "scope": "full_dimension_checkpoint_stage_probe",
+    "layers": 1,
+    "prefill_tokens": 1,
+    "decode_steps": 0,
+    "stage_count": 7,
+    "checked_float_stages": 7,
+    "checked_integer_stages": 0,
+    "simulation": "Cyclotron functional ISA model",
+    "status": "passed",
+    "failure_reason": null,
+    "cycles_functional": 10401738,
+    "tohost": 0,
+    "failed_stage_index_one_based": null,
+    "failed_element_index": null,
+    "process_exit_code": 0,
+    "device_elf_sha256": "1ec6e5118fb7dcd68b4b546b1b6ba80a13ec3387b1e0dfddef455c40528a0d88",
+    "generated_source_sha256": "622a7698d644fd2497909a1249dbdf926e00ba25c7b592da5effbe17e384b36a",
+    "device_source_files_sha256": {
+      "kernel.cpp": "622a7698d644fd2497909a1249dbdf926e00ba25c7b592da5effbe17e384b36a",
+      "stage_chunk_000.cpp": "48afbfd3a8d79ed86db40579034eaa61a182892759ec55f5e3aaedd5e07c0e16",
+      "model_data.cpp": "6483784f2988d08f80858dd1461fd1fb79e7040de2989c0aaf14dbb02830d65b",
+      "verify_chunk_000.cpp": "002fc542981eb1572d48b834ced8590cb8d626b8fa7293f0d663f0d3fc6a6a18"
+    },
+    "device_optimization": "O3",
+    "stages_per_device_object": 7,
+    "portable_ops_sha256": "ad17f2ca9952d48c8b786617f860a9e33135686c3c0ac97786b83cc18e311e6e",
+    "quantized_ops_sha256": null,
+    "tied_embedding_ops_sha256": null,
+    "fp32_tied_ops_sha256": null,
+    "packed_ops_sha256": null,
+    "numpy_reference_sha256": "f19b739769adbe8895bdd6400a63ac8cbc068b3f080639c31313edd23ccc6d3a",
+    "model_specs_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+    "source_config_sha256": "660db3b73d788119c04535e48cf9be5f55bc3100841a718637ae695b442f27dd",
+    "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+    "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+    "simulator_cycle_limit": 100000000,
+    "log_sha256": "bcc84b7072dba49a5cea5ed30cc1dc0e09bb3a6b3d94be47e260534c1d9037ad",
+    "checkpoint_weights": true,
+    "original_model_dimensions": true,
+    "upstream_execution_equivalent": false,
+    "checkpoint_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+    "weight_image_sha256": "8d290b4ed133642fa49a7d8ff6790c5fbf329bd841d5d5e87b0f03f71cdca00d",
+    "weight_segment_layout": [
+      {
+        "gpu_base_address": 536870912,
+        "image_size_bytes": 342635520,
+        "image_sha256": "8d290b4ed133642fa49a7d8ff6790c5fbf329bd841d5d5e87b0f03f71cdca00d"
+      }
+    ],
+    "checkpoint_weight_format": "mixed_fp16",
+    "quantization_comparison": {
+      "prefill.layer00.k_norm": {
+        "max_abs_error": 1.9073486328125e-06,
+        "rms_error": 6.964526560854069e-08,
+        "reference_sha256": "aaf1a80a0385a2a708e2d0014b0ed26106f658c79785a247917e0dccc881fafb",
+        "quantized_sha256": "06e70bf39f1bcf80eb52cda9ae591e871da03ff2303a982a46bcbbe10c78da0d",
+        "top1_equal": true
+      }
+    },
+    "reference_output_sha256": "06e70bf39f1bcf80eb52cda9ae591e871da03ff2303a982a46bcbbe10c78da0d",
+    "stage_limit": 7,
+    "native_check_tolerance": null,
+    "device_check_tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "rtl_execution": false,
+    "performance_measurement": false
+  }
+]

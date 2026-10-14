@@ -96,6 +96,11 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
             failure_reason = "device_stage_mismatch"
         else:
             failure_reason = "device_or_simulator_failure"
+    device_sources = [target / name for name in manifest.get(
+        "device_source_files", ["kernel.cpp"])]
+    used_headers = {header for source in device_sources
+                    for header in ("pipeline_tied.hpp", "pipeline_fp32_tied.hpp")
+                    if f'#include "{header}"' in source.read_text()}
     result = {
         "model": model,
         "scope": manifest["scope"],
@@ -126,10 +131,9 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
                                  if manifest.get("checkpoint_weight_format") in
                                  ("int8_scaled", "int8_fp16_tied") else None),
         "tied_embedding_ops_sha256": (sha256(HERE / "pipeline_tied.hpp")
-                                      if manifest.get("checkpoint_weight_format") ==
-                                      "int8_fp16_tied" else None),
+                                      if "pipeline_tied.hpp" in used_headers else None),
         "fp32_tied_ops_sha256": (sha256(HERE / "pipeline_fp32_tied.hpp")
-                                  if manifest.get("tied_lm_head") else None),
+                                  if "pipeline_fp32_tied.hpp" in used_headers else None),
         "packed_ops_sha256": (sha256(HERE / "pipeline_packed.hpp")
                               if manifest.get("checkpoint_weight_format") ==
                               "int5_group64_int6_tied" else None),

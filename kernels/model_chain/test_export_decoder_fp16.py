@@ -36,6 +36,23 @@ class FP16DecoderImageTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exceeds safe GMEM"):
             plan("gemma_2_2b_it", 26)
 
+    def test_qwen3_tied_fp16_plan_fits_the_two_gib_gpu_region(self):
+        layout = plan("qwen3_0_6b", 28)
+        self.assertEqual(layout["distinct_parameters"], 310)
+        self.assertEqual(layout["image_size_bytes"], 1_192_230_912)
+        self.assertEqual(len(layout["segments"]), 1)
+        self.assertEqual(layout["segments"][0]["gpu_base_address"], 0x20000000)
+        self.assertEqual(layout["gpu_end_address_exclusive"], 0x67100000)
+        self.assertLess(layout["gpu_end_address_exclusive"], 0x80000000)
+        embeddings = [item for item in layout["parameters"]
+                      if item["logical_name"] == "embed_tokens"]
+        self.assertEqual(len(embeddings), 1)
+        self.assertTrue(embeddings[0]["tied_lm_head"])
+        self.assertFalse(any(item["logical_name"] == "lm_head"
+                             for item in layout["parameters"]))
+        self.assertEqual(sum(item["operation"] == "rmsnorm"
+                             for item in layout["parameters"]), 113)
+
     def test_quantized_reference_preserves_norms_and_rounds_linear_weights(self):
         class Source:
             def __call__(self, logical, shape):

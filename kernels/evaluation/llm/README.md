@@ -339,8 +339,12 @@ also matches an upstream full causal pass to `8.94e-8`. Zeroing the first
 query norm in the stitched path changes final logits by `0.0332`. Run
 `verify_qwen3_reduced.py` to reproduce the check. These controls establish
 the reduced decoder operation order and cache handoff. The original Qwen3
-checkpoint, full model dimensions, quantization and Radiance execution still
-need separate checks.
+checkpoint's saved embedding and output head were then compared element by
+element. A full-width, 28-layer Radiance ELF builds with a converted FP16
+weight image, and a seven-stage real-weight prefix passes Cyclotron; see the
+[checkpoint-weight device record](../../model_chain/README.md#qwen3-checkpoint-weight-path).
+The complete full-weight device run and independent full-weight upstream
+comparison remain separate checks.
 
 Run `python3 estimate_kv.py` to regenerate [kv-working-set.csv](kv-working-set.csv).
 The script verifies each local config against its recorded hash before

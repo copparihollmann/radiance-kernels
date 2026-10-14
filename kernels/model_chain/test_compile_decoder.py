@@ -7,7 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compile_decoder import generate, verify_native
+from compile_decoder import emit_stage, generate, verify_native
+import reference
+import stitch
 
 
 class DecoderCompilerTest(unittest.TestCase):
@@ -85,12 +87,16 @@ class DecoderCompilerTest(unittest.TestCase):
             self.assertEqual(manifest["native_verified_integer_stages"], 2)
             self.assertIn("errors=0", verify_native(target))
 
-    def test_qwen3_checkpoint_mode_requires_weight_mapping(self):
-        with self.assertRaisesRegex(ValueError, "Qwen3 checkpoint weight-image"):
-            generate("qwen3_0_6b", 1, 1, 0, "teacher_forced",
-                     Path("unused"), device_check_all_stages=True,
-                     stages_per_object=16, checkpoint_dir=Path("unused"),
-                     weight_image=Path("unused"))
+    def test_qwen3_fp16_tied_head_emits_transposed_embedding_read(self):
+        spec = reference.reduced_spec(stitch.model_specs()["qwen3_0_6b"])
+        graph = stitch.build("qwen3_0_6b", prefill=1, decode_steps=0,
+                             specs={"qwen3_0_6b": spec})
+        head = next(stage for stage in graph.stages
+                    if stage["id"] == "prefill.lm_head")
+        projection = next(stage for stage in graph.stages
+                          if stage["id"] == "prefill.layer00.q_proj")
+        self.assertIn("linear_f16_tied(", emit_stage(0, head, graph, "weight", "fp16"))
+        self.assertIn("linear_f16(", emit_stage(0, projection, graph, "weight", "fp16"))
 
     def test_two_cluster_buffers_and_second_output_are_checked(self):
         with tempfile.TemporaryDirectory() as temporary:

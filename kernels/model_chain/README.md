@@ -91,8 +91,7 @@ weight fixture; the independent Transformers comparison uses a different
 random fixture and checks the same graph structure.
 This is a correctness control, not a latency measurement. It uses generated
 FP32 weights and reduced tensor widths, not the Qwen3 checkpoint. The
-checkpoint weight-image mapping and full-dimension device run remain open;
-the compiler rejects that unsupported Qwen3 checkpoint mode explicitly.
+checkpoint-weight route and its separate device status are below.
 
 Reproduce the reduced control with the Muon toolchain and Cyclotron paths set:
 
@@ -105,6 +104,50 @@ python3 kernels/model_chain/run_functional.py --models qwen3_0_6b \
   --generated-root path/to/generated \
   --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
   --sim-cycles 100000000 --timeout 600 --out path/to/result.json
+```
+
+## Qwen3 checkpoint-weight path
+
+The pinned Qwen3-0.6B checkpoint has a saved `lm_head.weight` as well as an
+embedding table. The [checkpoint check](evaluation/qwen3-checkpoint-check.json)
+hashes the original weights and compares all 155,582,464 elements of those
+two tensors. They are equal, so the device image stores one FP16 table and
+the output projection reads its transpose. Query and key norm weights are
+bound separately. The [full image manifest](evaluation/qwen3-full-depth-fp16-image.json)
+records 310 distinct parameters, their checkpoint keys and device addresses,
+and the 1,192,230,912-byte image hash. The table is exported in row chunks;
+the exporter does not hold the full vocabulary as an FP32 array. The
+[placement plan](evaluation/qwen3-fp16-plan.json) fits that image below the
+2 GiB GPU memory boundary and outside the reserved warp stacks.
+
+The [one-layer prefix build](evaluation/qwen3-one-layer-prefix-build.json)
+uses the [one-layer image](evaluation/qwen3-one-layer-fp16-image.json) and
+checks the first seven original-width stages, through query/key head norms.
+All seven [Cyclotron checks](evaluation/qwen3-one-layer-prefix-functional-results.json)
+passed with `tohost=0` in 10,401,738 functional ISA cycles. This prefix does
+not exercise the tied output projection. A [28-layer ELF](evaluation/qwen3-full-depth-fp16-build.json)
+also builds for one-token prefill and one greedy decode step, with 1,071
+ordered stages and the tied FP16 projection. Its checkpoint-backed NumPy
+reference selects the same top token before and after FP16 storage conversion
+on both steps; the largest final-logit difference is `1.01e-5`. A complete
+device result and independent full-weight Transformers comparison are still
+pending. The Cyclotron cycles above are functional execution counts, not
+hardware latency or utilization.
+
+The checkpoint file and binary image stay in the local task directory. To
+reproduce the build, use the pinned checkpoint from the linked check and
+task-local paths for the output:
+
+```sh
+python3 kernels/model_chain/export_decoder_fp16.py \
+  --model qwen3_0_6b --layers 28 --checkpoint-dir "$CHECKPOINT" \
+  --out-dir "$WEIGHTS"
+python3 kernels/model_chain/compile_decoder.py \
+  --model qwen3_0_6b --layers 28 --prefill 1 --decode-steps 1 \
+  --generation greedy --token-ids 5 --stages-per-object 20 \
+  --device-check-all-stages --checkpoint-dir "$CHECKPOINT" \
+  --weight-image "$WEIGHTS/qwen3_0_6b/weights-image.json" \
+  --out-root "$BUILD" --build
 ```
 
 ## Checkpoint-weight device path

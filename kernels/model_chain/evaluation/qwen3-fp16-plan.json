@@ -1,0 +1,33 @@
+{
+  "model": "qwen3_0_6b",
+  "family": "qwen3",
+  "layers": 28,
+  "source_config_sha256": "660db3b73d788119c04535e48cf9be5f55bc3100841a718637ae695b442f27dd",
+  "pinned_model_layers": 28,
+  "graph_stages": 1070,
+  "parameter_uses": 622,
+  "distinct_parameters": 310,
+  "dtype": "mixed_fp16",
+  "linear_layout": "row_major_in_out_with_tied_embedding_transpose",
+  "alignment_bytes": 64,
+  "gpu_base_address": 536870912,
+  "gpu_end_address_exclusive": 1729101824,
+  "image_size_bytes": 1192230912,
+  "fits_32_bit_address_space": true,
+  "fits_2g_gpu_region": true,
+  "warp_stack_reserved_range": [
+    2128609280,
+    2130706432
+  ],
+  "stack_overlap_parameters": [],
+  "segments": [
+    {
+      "index": 0,
+      "image_file": "weights-0.bin",
+      "gpu_base_address": 536870912,
+      "image_size_bytes": 1192230912
+    }
+  ],
+  "checkpoint_weights": false,
+  "device_execution": false
+}

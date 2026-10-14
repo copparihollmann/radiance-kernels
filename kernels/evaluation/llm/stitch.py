@@ -35,6 +35,9 @@ def model_specs() -> dict:
     specs["qwen3_0_6b"] = {
         "name": source["model"], "family": "qwen3", "source": source["source_url"],
         "source_sha256": source["config_sha256"],
+        "checkpoint_revision": source["revision"],
+        "checkpoint_weight_sha256":
+            "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
         **{key: config[key] for key in (
             "hidden_size", "intermediate_size", "num_hidden_layers",
             "num_attention_heads", "num_key_value_heads", "head_dim",
