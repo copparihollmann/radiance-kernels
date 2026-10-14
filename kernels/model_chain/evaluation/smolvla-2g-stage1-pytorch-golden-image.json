@@ -1,0 +1,13 @@
+{
+  "model": "smolvla_base",
+  "dtype": "fp32",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "gpu_base_address": 33554432,
+  "image_size_bytes": 3145728,
+  "image_file": "stage1.bin",
+  "image_sha256": "d36104b6c61a4d080c5c047a77da7d852405aacb9da674f8926a9e17e7cdf767",
+  "parameters": [],
+  "reference_stage": "v.camera0.patch_embed",
+  "source_reference_sha256": "d606ddb491a3acf9d919305343b3261f355be6a65e724ae8a0b158a6d318878a",
+  "source_input_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea"
+}

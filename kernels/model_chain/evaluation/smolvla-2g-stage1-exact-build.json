@@ -1,0 +1,37 @@
+{
+  "model": "smolvla_base",
+  "scope": "full_dimension_checkpoint_stage_probe",
+  "device_elf_built": true,
+  "device_execution": false,
+  "output_validation": "all_elements_vs_stage_golden",
+  "output_check_tolerance": {
+    "rtol": 0.001,
+    "atol": 0.001
+  },
+  "golden_output_sha256": "d36104b6c61a4d080c5c047a77da7d852405aacb9da674f8926a9e17e7cdf767",
+  "golden_policy_precision": "generated_fp32_stage_reference",
+  "stage_golden_image_manifest": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/smolvla-compact-stage1/pytorch-golden/stage-golden-image.json",
+  "original_checkpoint_output_sha256": "72510abe5e55c793c52138f159133af892bc117efe4413b914f319b8a9ea6c65",
+  "input_image_manifest": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/smolvla-compact-stage1/inputs/weights-image.json",
+  "input_image_sha256": "18964ea8eb7eb6d60be968258809b50e7315ee30319bdfe63a16f7f48278f6ea",
+  "upstream_execution_equivalent": false,
+  "stage_limit": 1,
+  "stages": 1,
+  "full_graph_stages": 3673,
+  "execution_schedule_sha256": "55575a65373aad086e23c6338a1507093dd1a506bf04d58adc33a26cee97c84b",
+  "checkpoint_weight_format": "fp32",
+  "checkpoint_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "weight_image_sha256": "cf887c06e7bc29b31cb0e837053de6ce813f2832aa09ed3cdc152b01ef1a8997",
+  "weight_image_manifest": "/scratch/agustin/radiance/tasks/model-chain-audit/.tmp/smolvla-compact-stage1/weights/weights-image.json",
+  "activation_arena_bytes": 47193024,
+  "source_spec_sha256": "dc288959e021aff7de81293542d649dfed4e1f2851a5f0ca7e405991035c8910",
+  "device_source_files": [
+    "kernel.cpp",
+    "model_data.cpp",
+    "stage_chunk_000.cpp"
+  ],
+  "device_source_generated": true,
+  "precision": "fp32_from_checkpoint_bf16",
+  "radiance_elf_sha256": "ebb9b5406e2a94af2e3fe89b86f3813918526677d60a877d51f39530ba3ffee1",
+  "soc_elf_sha256": "a39d217ab63de4100eabcfa9f171e9d9ee3df78a54790d2660be9a19f93a9170"
+}

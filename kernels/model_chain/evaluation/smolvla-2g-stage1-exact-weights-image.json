@@ -1,0 +1,112 @@
+{
+  "model": "smolvla_base",
+  "family": "smolvla",
+  "dtype": "fp32",
+  "graph_stages": 3673,
+  "parameter_uses": 3,
+  "distinct_parameters": 3,
+  "linear_layout": "row_major_in_out",
+  "alignment_bytes": 64,
+  "gpu_base_address": 335544320,
+  "gpu_end_address_exclusive": 341052416,
+  "image_size_bytes": 5508096,
+  "fits_32_bit_address_space": true,
+  "warp_stack_reserved_range": [
+    2128609280,
+    2130706432
+  ],
+  "stack_overlap_parameters": [],
+  "segments": [
+    {
+      "index": 0,
+      "image_file": "weights-parameter.bin",
+      "gpu_base_address": 335544320,
+      "image_size_bytes": 5508096,
+      "image_sha256": "cf887c06e7bc29b31cb0e837053de6ce813f2832aa09ed3cdc152b01ef1a8997"
+    }
+  ],
+  "parameters": [
+    {
+      "logical_name": "model.vlm_with_expert.vlm.model.vision_model.embeddings.patch_embedding.weight",
+      "checkpoint_key": "model.vlm_with_expert.vlm.model.vision_model.embeddings.patch_embedding.weight",
+      "checkpoint_shape": [
+        768,
+        3,
+        16,
+        16
+      ],
+      "shape": [
+        768,
+        3,
+        16,
+        16
+      ],
+      "operation": "patch_embed",
+      "transpose_checkpoint_matrix": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 2359296,
+      "segment_index": 0,
+      "offset_bytes": 0,
+      "gpu_address": 335544320,
+      "overlaps_warp_stacks": false,
+      "packed_sha256": "3e41c2ada5b8c369fd14daf4031a905b3b64244dfb1d113693a54042d4d63a5f"
+    },
+    {
+      "logical_name": "model.vlm_with_expert.vlm.model.vision_model.embeddings.patch_embedding.bias",
+      "checkpoint_key": "model.vlm_with_expert.vlm.model.vision_model.embeddings.patch_embedding.bias",
+      "checkpoint_shape": [
+        768
+      ],
+      "shape": [
+        768
+      ],
+      "operation": "patch_embed",
+      "transpose_checkpoint_matrix": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 3072,
+      "segment_index": 0,
+      "offset_bytes": 2359296,
+      "gpu_address": 337903616,
+      "overlaps_warp_stacks": false,
+      "packed_sha256": "7d23eb9be2dab30ab98384d06b90e8d62398657c268bd90af71b0f98e759b13d"
+    },
+    {
+      "logical_name": "model.vlm_with_expert.vlm.model.vision_model.embeddings.position_embedding.weight",
+      "checkpoint_key": "model.vlm_with_expert.vlm.model.vision_model.embeddings.position_embedding.weight",
+      "checkpoint_shape": [
+        1024,
+        768
+      ],
+      "shape": [
+        1024,
+        768
+      ],
+      "operation": "patch_embed",
+      "transpose_checkpoint_matrix": false,
+      "storage_dtype": "fp32",
+      "size_bytes": 3145728,
+      "segment_index": 0,
+      "offset_bytes": 2362368,
+      "gpu_address": 337906688,
+      "overlaps_warp_stacks": false,
+      "packed_sha256": "a7f0ca652a19b8dafe77992a6f3ca04ce00e586c76e1e60585fc0ff7e4433a1c"
+    }
+  ],
+  "checkpoint_weights": true,
+  "device_execution": false,
+  "execution_schedule_sha256": "55575a65373aad086e23c6338a1507093dd1a506bf04d58adc33a26cee97c84b",
+  "checkpoint_config_sha256": "650584b56c104720f7a3c91d1ec6bec9e8de8ac11e60c92ba2fa82d93eda147d",
+  "checkpoint_weight_sha256": "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb",
+  "image_sha256": "cf887c06e7bc29b31cb0e837053de6ce813f2832aa09ed3cdc152b01ef1a8997",
+  "relocated_from": "/scratch/agustin/projects/chipyard/radiance-kernels-firesim/kernels/model_chain/generated/checkpoint-smolvla/smolvla_base/weights-image.json",
+  "physical_parameters": 3,
+  "probe_subset": {
+    "parameters": [
+      "model.vlm_with_expert.vlm.model.vision_model.embeddings.patch_embedding.weight",
+      "model.vlm_with_expert.vlm.model.vision_model.embeddings.patch_embedding.bias",
+      "model.vlm_with_expert.vlm.model.vision_model.embeddings.position_embedding.weight"
+    ],
+    "source_zip": "smolvla-2g-hbm-handoff.zip",
+    "source_elf_sha256": "eedbcde9a66ebcb72ba4d56a1b36873d7ca78be9c6ce1a6566317dd7fca9e332"
+  }
+}

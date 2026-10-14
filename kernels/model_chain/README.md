@@ -519,6 +519,28 @@ attempt [failed before the first stage](evaluation/smolvla-exact-input-overlap-f
 because the input blob at `0x10000000` overwrote the ELF entry point. The
 exporter now places it at `0x20000000`; the runner checks all preloads against
 ELF segments, reserved stacks, and each other before starting Cyclotron.
+
+The compact 2 GiB handoff has a stronger [first-stage device check](evaluation/smolvla-2g-stage1-exact-functional-results.json).
+The probe recovered just the three patch-embedding parameters (5,508,096
+bytes) and the full fixed input (9,444,288 bytes) from the packaged FireSim
+ELF. Their [weight](evaluation/smolvla-2g-stage1-exact-weights-image.json)
+and [input](evaluation/smolvla-2g-stage1-exact-input-image.json) manifests
+retain the verified source hashes. The corresponding compact
+[weight parameter map](evaluation/smolvla-2g-source-weights-image.json) and
+[input parameter map](evaluation/smolvla-2g-source-input-image.json) are
+recorded so `extract_hashed_parameter.py --image-manifest` can recover these
+subsets from the handoff ZIP without materializing the full ELF.
+`generate_smolvla_stage1_golden.py`
+recomputed the first vision output directly with the pinned PyTorch layer;
+its [3,145,728-byte golden image](evaluation/smolvla-2g-stage1-pytorch-golden-image.json)
+matches the previously recorded upstream reference hash. The
+[Radiance build](evaluation/smolvla-2g-stage1-exact-build.json) compared all
+786,432 patch outputs with that golden at `rtol=atol=1e-3`. Cyclotron passed
+with `tohost=0` after 167,726,096 functional cycles. A separate
+[generated-host-golden control](evaluation/smolvla-2g-stage1-native-golden-functional-results.json)
+also passed. These are one-stage correctness checks; the other 3,672 stages
+and FPGA latency remain unmeasured for the compact package.
+
 The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
 uses the generated C++ stage with real checkpoint weights and byte-exact
 camera input. Its 1024 by 768 patch tokens match a PyTorch convolution plus

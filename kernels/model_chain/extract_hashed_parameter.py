@@ -17,6 +17,7 @@ from zipfile import ZIP_STORED, ZipFile
 
 from package_firesim import (digest_region, file_regions_from_layout,
                              hash_folds, read_physical)
+from split_decoder_weights import image_segments
 
 
 def zip_data_offset(path: Path, header_offset: int) -> int:
@@ -37,30 +38,37 @@ def digest_stream(source) -> str:
 
 
 def extract(path: Path, *, elf_member: str, parameters: list[str],
-            out_dir: Path) -> dict:
+            out_dir: Path, image_manifest_path: Path | None = None,
+            all_parameters: bool = False) -> dict:
     with ZipFile(path) as archive:
         elf_info = archive.getinfo(elf_member)
         if elf_info.compress_type != ZIP_STORED:
             raise ValueError("model ELF must be ZIP_STORED for bounded-space extraction")
         prefix = elf_member.rsplit("/", 1)[0] + "/"
         receipt = json.loads(archive.read(elf_member + ".json"))
-        original = json.loads(archive.read(prefix + "weights-image.json"))
+        original = json.loads(image_manifest_path.read_text()
+                              if image_manifest_path is not None else
+                              archive.read(prefix + "weights-image.json"))
         with archive.open(elf_info) as source:
             if digest_stream(source) != receipt["firesim_elf_sha256"]:
                 raise ValueError("archived model ELF differs from its receipt")
+    if all_parameters:
+        if parameters:
+            raise ValueError("choose either named parameters or all parameters")
+        parameters = [item["logical_name"] for item in original["parameters"]]
     if not parameters or len(set(parameters)) != len(parameters):
         raise ValueError("request distinct parameter names")
     items = [item for item in original["parameters"]
              if item["logical_name"] in parameters]
     if len(items) != len(parameters):
         raise ValueError("weight image lacks a requested parameter")
-    if len({item["segment_index"] for item in items}) != 1:
+    if len({item.get("segment_index", 0) for item in items}) != 1:
         raise ValueError("requested parameters must share an image segment")
     layout = receipt.get("hash_layout")
     if (not layout or not layout.get("compact") or
             layout["cpu_base"] != 0x100000000):
         raise ValueError("handoff is not a compact hashed GPU ELF")
-    image = original["segments"][items[0]["segment_index"]]
+    image = image_segments(original)[items[0].get("segment_index", 0)]
     begin = min(item["gpu_address"] for item in items)
     size = max(item["gpu_address"] + item["size_bytes"]
                for item in items) - begin
@@ -118,6 +126,11 @@ def extract(path: Path, *, elf_member: str, parameters: list[str],
     if output.stat().st_size != size:
         raise ValueError("recovered parameter size differs from manifest")
     image_digest = digest.hexdigest()
+    if (len(items) == len(original["parameters"]) and
+            begin == original["gpu_base_address"] and
+            size == original["image_size_bytes"] and
+            image_digest != original["image_sha256"]):
+        raise ValueError("recovered full image differs from exporter")
     recovered_items = []
     for item in items:
         offset = item["gpu_address"] - begin
@@ -161,12 +174,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zip", type=Path, required=True)
     parser.add_argument("--elf-member", required=True)
-    parser.add_argument("--parameter", action="append", required=True)
+    parser.add_argument("--image-manifest", type=Path,
+                        help="source image manifest when the ZIP has none")
+    parser.add_argument("--parameter", action="append", default=[])
+    parser.add_argument("--all-parameters", action="store_true")
     parser.add_argument("--out-dir", type=Path, required=True)
     args = parser.parse_args()
     print(json.dumps(extract(args.zip.resolve(), elf_member=args.elf_member,
                              parameters=args.parameter,
-                             out_dir=args.out_dir.resolve()), indent=2))
+                             out_dir=args.out_dir.resolve(),
+                             image_manifest_path=(args.image_manifest.resolve()
+                                                  if args.image_manifest else None),
+                             all_parameters=args.all_parameters), indent=2))
 
 
 if __name__ == "__main__":

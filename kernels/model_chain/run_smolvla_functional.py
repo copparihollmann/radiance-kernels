@@ -45,7 +45,16 @@ def run(generated_root: Path, simulator_root: Path, timeout: int,
             Path(manifest["input_image_manifest"]))
         if input_image["image_sha256"] != manifest["input_image_sha256"]:
             raise ValueError("SmolVLA input image differs from build manifest")
-    verify_image_placement(elf, [image] + ([input_image] if input_image else []))
+    stage_golden = None
+    stage_golden_paths = []
+    if manifest.get("stage_golden_image_manifest"):
+        stage_golden, stage_golden_paths = verify_image(
+            Path(manifest["stage_golden_image_manifest"]))
+        if stage_golden["image_sha256"] != manifest["golden_output_sha256"]:
+            raise ValueError("SmolVLA stage golden differs from build manifest")
+    verify_image_placement(elf, [image] +
+                           ([input_image] if input_image else []) +
+                           ([stage_golden] if stage_golden else []))
     simulator_root = simulator_root.resolve()
     simulator = simulator_root / "target/release/cyclotron"
     source = (simulator_root / "config.toml").read_text()
@@ -61,10 +70,11 @@ def run(generated_root: Path, simulator_root: Path, timeout: int,
     env["RADIANCE_DISABLE_CYCLOTRON_TRACE"] = "1"
     segments = image_segments(image)
     input_segments = image_segments(input_image) if input_image else []
+    golden_segments = image_segments(stage_golden) if stage_golden else []
     env["CYCLOTRON_WEIGHTS"] = ",".join(
         f"0x{item['gpu_base_address']:x}:{path.resolve()}"
-        for item, path in zip(segments + input_segments,
-                              image_paths + input_paths))
+        for item, path in zip(segments + input_segments + golden_segments,
+                              image_paths + input_paths + stage_golden_paths))
     try:
         result = subprocess.run([str(simulator), str(config), "--binary-path",
                                  str(elf), "--gen-trace", "false"],
@@ -87,7 +97,7 @@ def run(generated_root: Path, simulator_root: Path, timeout: int,
               and len(cycles) == 1 and all(
                   f"preloaded {item['image_size_bytes']} bytes of weights "
                   f"@0x{item['gpu_base_address']:x}" in output
-                  for item in segments + input_segments))
+                  for item in segments + input_segments + golden_segments))
     record = {
         "model": "smolvla_base", "scope": manifest["scope"],
         "stage_count": manifest["stages"], "full_graph_stages": manifest["full_graph_stages"],
@@ -101,9 +111,12 @@ def run(generated_root: Path, simulator_root: Path, timeout: int,
         "failed_output_element_index": tohost >> 1 if tohost and tohost & 1 else None,
         "output_validation": manifest["output_validation"],
         "golden_output_comparison": (
-            manifest["output_validation"] == "all_elements_vs_upstream_policy"),
+            manifest["output_validation"] in
+            ("all_elements_vs_upstream_policy", "all_elements_vs_stage_golden")),
         "golden_output_sha256": manifest.get("golden_output_sha256"),
         "input_image_sha256": input_image["image_sha256"] if input_image else None,
+        "stage_golden_image_sha256": (stage_golden["image_sha256"]
+                                      if stage_golden else None),
         "upstream_execution_equivalent": False,
         "rtl_execution": False, "performance_measurement": False,
         "process_exit_code": exit_code,

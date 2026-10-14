@@ -232,9 +232,15 @@ def emit_stage(stage: dict, graph, allocation: dict, addresses: dict) -> str:
 def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              stages_per_object: int = 50,
              input_image: Path | None = None,
-             golden_output: Path | None = None) -> Path:
+             golden_output: Path | None = None,
+             stage_golden_image: Path | None = None,
+             stage_golden_sha256: str | None = None) -> Path:
     if stages_per_object <= 0:
         raise ValueError("stages per object must be positive")
+    if golden_output is not None and stage_golden_image is not None:
+        raise ValueError("choose the full-policy golden or a stage golden")
+    if (stage_golden_image is None) != (stage_golden_sha256 is None):
+        raise ValueError("stage golden image and SHA-256 must be provided together")
     graph = build("smolvla_base")
     storage = plan_buffers(graph)
     image, _ = verify_image(weight_image)
@@ -282,6 +288,19 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     stages = graph.stages if stage_limit is None else graph.stages[:stage_limit]
     if not stages:
         raise ValueError("at least one graph stage is required")
+    stage_golden_manifest = None
+    if stage_golden_image is not None:
+        if stage_limit is None:
+            raise ValueError("stage golden requires a stage-limited probe")
+        stage_golden_manifest, _ = verify_image(stage_golden_image)
+        expected_bytes = product(graph.tensors[stages[-1]["writes"]]["shape"]) * 4
+        if (stage_golden_manifest["model"] != "smolvla_base" or
+                stage_golden_manifest["dtype"] != "fp32" or
+                stage_golden_manifest["checkpoint_weight_sha256"] !=
+                image["checkpoint_weight_sha256"] or
+                stage_golden_manifest["image_sha256"] != stage_golden_sha256 or
+                stage_golden_manifest["image_size_bytes"] != expected_bytes):
+            raise ValueError("stage golden does not match the pinned output")
     target = (out_root / "smolvla_base").resolve()
     target.mkdir(parents=True, exist_ok=True)
     allocation = storage["allocation"]
@@ -390,13 +409,18 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
               "\nint main() {\n" + schedule +
               "  if (mu_hart_id() != 0) { for (;;) {} }\n"
               f"  const __global float* output = (const __global float*)(v_arena + {final_offset}u);\n"
-              f"  for (uint32_t j = 0; j < {final_count}u; ++j) {{\n"
+              + (f"  const __global float* golden = (const __global float*)"
+                 f"0x{stage_golden_manifest['gpu_base_address']:08x}u;\n"
+                 if stage_golden_manifest is not None else
+                 "  const __global float* golden = v_golden_output;\n"
+                 if golden_values is not None else "")
+              + f"  for (uint32_t j = 0; j < {final_count}u; ++j) {{\n"
               "    if (!(output[j] == output[j]) || "
               "output[j] > 1.0e20f || output[j] < -1.0e20f) { "
               "mu_tohost((j << 1) | 1u); return 0; }\n"
-              + ("    if (!mu_close(output[j], v_golden_output[j], 1e-3f, 1e-3f)) "
+              + ("    if (!mu_close(output[j], golden[j], 1e-3f, 1e-3f)) "
                  "{ mu_tohost((j << 1) | 1u); return 0; }\n"
-                 if golden_values is not None else "")
+                 if golden_values is not None or stage_golden_manifest is not None else "")
               + "  }\n"
               "  mu_tohost(0u); return 0;\n}\n")
     write_if_changed(target / "kernel.cpp", kernel)
@@ -416,15 +440,26 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 + f": {HERE / 'pipeline_smolvla.hpp'}\n")
     write_if_changed(target / "Makefile", makefile)
     result = {
-        "model": "smolvla_base", "scope": "full_checkpoint_action_chunk",
+        "model": "smolvla_base",
+        "scope": ("full_checkpoint_action_chunk" if stage_limit is None else
+                  "full_dimension_checkpoint_stage_probe"),
         "device_elf_built": False, "device_execution": False,
         "output_validation": ("all_elements_vs_upstream_policy"
-                              if golden_values is not None else "finite_range_only"),
+                              if golden_values is not None else
+                              "all_elements_vs_stage_golden"
+                              if stage_golden_manifest is not None else
+                              "finite_range_only"),
         "output_check_tolerance": ({"rtol": 1e-3, "atol": 1e-3}
-                                   if golden_values is not None else None),
-        "golden_output_sha256": golden["output_sha256"] if golden else None,
+                                   if golden_values is not None or
+                                   stage_golden_manifest is not None else None),
+        "golden_output_sha256": (golden["output_sha256"] if golden else
+                                 stage_golden_sha256),
         "golden_policy_precision": ("checkpoint_weights_promoted_fp32"
-                                    if golden else None),
+                                    if golden else
+                                    "generated_fp32_stage_reference"
+                                    if stage_golden_manifest else None),
+        "stage_golden_image_manifest": (str(stage_golden_image.resolve())
+                                        if stage_golden_image else None),
         "original_checkpoint_output_sha256": (
             input_manifest["source_golden_output_sha256"] if input_manifest else None),
         "input_image_manifest": str(input_image.resolve()) if input_image else None,
@@ -457,11 +492,14 @@ def main() -> None:
     parser.add_argument("--stages-per-object", type=int, default=50)
     parser.add_argument("--input-image", type=Path)
     parser.add_argument("--golden-output", type=Path)
+    parser.add_argument("--stage-golden-image", type=Path)
+    parser.add_argument("--stage-golden-sha256")
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
     target = generate(args.weight_image, args.out_root, args.stage_limit,
                       args.stages_per_object, args.input_image,
-                      args.golden_output)
+                      args.golden_output, args.stage_golden_image,
+                      args.stage_golden_sha256)
     if args.build:
         build_device(target)
     print(target)
