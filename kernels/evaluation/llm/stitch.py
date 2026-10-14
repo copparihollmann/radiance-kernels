@@ -72,6 +72,31 @@ def model_specs() -> dict:
         "tied_lm_head": False,
         "checkpoint_use_cache_default": config["use_cache"],
     }
+    source = sources["qwen3-30b-a3b"]
+    raw = (HERE / "inputs" / source["config_file"]).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != source["config_sha256"]:
+        raise ValueError("pinned Qwen3 MoE config changed")
+    config = json.loads(raw)
+    if (config["model_type"] != "qwen3_moe" or config["attention_bias"]
+            or config["tie_word_embeddings"] or config["hidden_act"] != "silu"
+            or config.get("rope_scaling") is not None
+            or config.get("use_sliding_window")
+            or config["decoder_sparse_step"] != 1 or config["mlp_only_layers"]
+            or not config["norm_topk_prob"] or
+            config["num_attention_heads"] % config["num_key_value_heads"]):
+        raise ValueError("unsupported Qwen3 MoE decoder configuration")
+    specs["qwen3_30b_a3b"] = {
+        "name": source["model"], "family": "qwen3_moe",
+        "source": source["source_url"], "source_sha256": source["config_sha256"],
+        "checkpoint_revision": source["revision"],
+        **{key: config[key] for key in (
+            "hidden_size", "intermediate_size", "num_hidden_layers",
+            "num_attention_heads", "num_key_value_heads", "head_dim",
+            "vocab_size", "rms_norm_eps", "rope_theta", "num_experts",
+            "num_experts_per_tok", "moe_intermediate_size", "norm_topk_prob")},
+        "activation": config["hidden_act"], "qkv_bias": False,
+        "tied_lm_head": False,
+    }
     return specs
 
 
@@ -124,7 +149,7 @@ class Graph:
             "execution_schedule": self.execution_schedule,
             "tensors": self.tensors, "stages": self.stages,
         }
-        if self.spec["family"] in {"qwen3", "olmo3"}:
+        if self.spec["family"] in {"qwen3", "olmo3", "qwen3_moe"}:
             result["source_sha256"] = self.spec["source_sha256"]
         return result
 
@@ -134,6 +159,8 @@ def _decoder_pass(graph: Graph, spec: dict, phase: str, batch: int,
                   token_ids: str | None = None) -> tuple[str, dict]:
     if spec["family"] == "olmo3":
         return _olmo3_pass(graph, spec, phase, batch, tokens, past, caches, token_ids)
+    if spec["family"] == "qwen3_moe":
+        return _qwen3_moe_pass(graph, spec, phase, batch, tokens, past, caches, token_ids)
     h, f = spec["hidden_size"], spec["intermediate_size"]
     qh, kvh, d = (spec[key] for key in
                   ("num_attention_heads", "num_key_value_heads", "head_dim"))
@@ -354,6 +381,115 @@ def _olmo3_pass(graph: Graph, spec: dict, phase: str, batch: int,
     return logits, next_caches
 
 
+def _qwen3_moe_pass(graph: Graph, spec: dict, phase: str, batch: int,
+                    tokens: int, past: int, caches: dict[int, tuple[str, str]],
+                    token_ids: str | None = None) -> tuple[str, dict]:
+    """Expose routing, top-k selection, expert work, and weighted reduction."""
+    h, qh, kvh, d = (spec[key] for key in
+                      ("hidden_size", "num_attention_heads", "num_key_value_heads",
+                       "head_dim"))
+    experts, selected, intermediate = (spec[key] for key in
+                                       ("num_experts", "num_experts_per_tok",
+                                        "moe_intermediate_size"))
+    ids = token_ids or graph.input(f"{phase}.token_ids", (batch, tokens), "int32")
+    if graph.tensors[ids]["shape"] != [batch, tokens]:
+        raise ValueError(f"{phase}: invalid token input shape")
+    hidden = graph.add(f"{phase}.embedding", "embedding", (ids,),
+                       (batch, tokens, h), attrs={
+                           "parameter": "embed_tokens", "vocab_size": spec["vocab_size"]})
+    next_caches = {}
+
+    def norm(name: str, source: str, parameter: str) -> str:
+        return graph.add(name, "rmsnorm", (source,),
+                         tuple(graph.tensors[source]["shape"]),
+                         "rmsnorm_qkv_fused",
+                         {"parameter": parameter, "epsilon": spec["rms_norm_eps"],
+                          "gemma_weight_offset": False})
+
+    def linear(name: str, source: str, shape: tuple[int, ...], parameter: str,
+               kernel: str | None = "gemm_mxgemmini") -> str:
+        in_width = graph.tensors[source]["shape"][-1]
+        out_width = 1
+        for width in shape[2:]:
+            out_width *= width
+        return graph.add(name, "linear", (source,), shape, kernel,
+                         {"parameter": parameter, "weight_shape": [in_width, out_width],
+                          "macs": batch * tokens * in_width * out_width})
+
+    for layer in range(spec["num_hidden_layers"]):
+        base = f"{phase}.layer{layer:02d}"
+        attn_in = norm(f"{base}.attn_norm", hidden,
+                       f"layers.{layer}.attn_norm")
+        q = linear(f"{base}.q_proj", attn_in, (batch, tokens, qh, d),
+                   f"layers.{layer}.q_proj")
+        k = linear(f"{base}.k_proj", attn_in, (batch, tokens, kvh, d),
+                   f"layers.{layer}.k_proj")
+        v = linear(f"{base}.v_proj", attn_in, (batch, tokens, kvh, d),
+                   f"layers.{layer}.v_proj")
+        q = norm(f"{base}.q_norm", q, f"layers.{layer}.q_norm")
+        k = norm(f"{base}.k_norm", k, f"layers.{layer}.k_norm")
+        rope_attrs = {"position_start": past, "theta": spec["rope_theta"]}
+        q = graph.add(f"{base}.q_rope", "rope", (q,),
+                      (batch, tokens, qh, d), "rope_qkv_fused", rope_attrs)
+        k = graph.add(f"{base}.k_rope", "rope", (k,),
+                      (batch, tokens, kvh, d), "rope_qkv_fused", rope_attrs)
+        old_k, old_v = caches.get(layer, (None, None))
+        k_cache = graph.add(f"{base}.k_cache", "kv_append",
+                            (k,) if old_k is None else (old_k, k),
+                            (batch, past + tokens, kvh, d))
+        v_cache = graph.add(f"{base}.v_cache", "kv_append",
+                            (v,) if old_v is None else (old_v, v),
+                            (batch, past + tokens, kvh, d))
+        next_caches[layer] = (k_cache, v_cache)
+        attention = graph.add(f"{base}.attention", "causal_gqa",
+                              (q, k_cache, v_cache), (batch, tokens, qh * d),
+                              attrs={"query_start": past, "q_heads": qh,
+                                     "kv_heads": kvh, "head_dim": d,
+                                     "window": None, "softcap": None})
+        attn_out = linear(f"{base}.o_proj", attention, (batch, tokens, h),
+                          f"layers.{layer}.o_proj")
+        after_attn = graph.add(f"{base}.attn_residual", "add",
+                               (hidden, attn_out), (batch, tokens, h), "vecadd")
+        ffn_in = norm(f"{base}.ffn_norm", after_attn,
+                      f"layers.{layer}.ffn_norm")
+        router = linear(f"{base}.router_logits", ffn_in,
+                        (batch, tokens, experts), f"layers.{layer}.router",
+                        kernel=None)
+        probabilities = graph.add(f"{base}.router_probs", "softmax", (router,),
+                                  (batch, tokens, experts), dtype="fp32")
+        indices = graph.add(f"{base}.topk_indices", "topk_indices",
+                            (probabilities,), (batch, tokens, selected),
+                            attrs={"k": selected}, dtype="int32")
+        scores = graph.add(f"{base}.topk_scores", "topk_scores",
+                           (probabilities, indices), (batch, tokens, selected),
+                           attrs={"renormalize": spec["norm_topk_prob"]}, dtype="fp32")
+        grouped = graph.add(f"{base}.expert_group", "expert_group",
+                            (ffn_in, indices), (batch, tokens, selected, h),
+                            attrs={"expert_count": experts})
+        gate_up = graph.add(f"{base}.expert_gate_up", "expert_gate_up",
+                            (grouped, indices),
+                            (batch, tokens, selected, 2 * intermediate),
+                            attrs={"parameters": {
+                                f"layers.{layer}.experts.gate_up_proj":
+                                    [experts, 2 * intermediate, h]}})
+        activated = graph.add(f"{base}.expert_activation", "expert_swiglu",
+                              (gate_up,), (batch, tokens, selected, intermediate))
+        expert_out = graph.add(f"{base}.expert_down", "expert_down",
+                               (activated, indices), (batch, tokens, selected, h),
+                               attrs={"parameters": {
+                                   f"layers.{layer}.experts.down_proj":
+                                       [experts, h, intermediate]}})
+        reduced = graph.add(f"{base}.expert_reduce", "expert_weighted_reduce",
+                            (expert_out, scores), (batch, tokens, h),
+                            attrs={"selected_experts": selected})
+        hidden = graph.add(f"{base}.ffn_residual", "add",
+                           (after_attn, reduced), (batch, tokens, h), "vecadd")
+    hidden = norm(f"{phase}.final_norm", hidden, "final_norm")
+    logits = linear(f"{phase}.lm_head", hidden,
+                    (batch, tokens, spec["vocab_size"]), "lm_head")
+    return logits, next_caches
+
+
 def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
                   decode_steps: int, generation: str = "teacher_forced") -> Graph:
     if min(batch, prefill) <= 0 or decode_steps < 0:
@@ -368,7 +504,7 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
     graph.generation = generation
     logits, caches = _decoder_pass(graph, spec, "prefill", batch, prefill, 0, {})
     graph.outputs.append(logits)
-    if spec["family"] in {"qwen3", "olmo3"}:
+    if spec["family"] in {"qwen3", "olmo3", "qwen3_moe"}:
         graph.execution_schedule = {
             "entrypoint": "causal_generate",
             "prefill_stages": [stage["id"] for stage in graph.stages],

@@ -407,6 +407,27 @@ detects that mapping mistake. This is one random-weight FFN block, not the
 with `python3 kernels/evaluation/llm/verify_qwen3_moe_router.py` in the
 Transformers environment.
 
+`stitch.py --model qwen3_30b_a3b` now emits the
+[48-layer tensor dependency graph](qwen3-30b-a3b-graph.json). Its saved
+batch-1, 128-token prefill and two greedy decode steps contain 3,467 stages.
+Each layer keeps per-head Q/K normalization before RoPE, its own K/V cache,
+and the attention output projection from 32 × 128 to the 2,048-wide residual
+stream. The FFN stages expose router probabilities, top-8 indices and
+renormalized scores, token grouping, packed gate/up expert weights, SwiGLU,
+expert down projections, and weighted recombination. The graph records the
+ordered cache and token dependencies across decode steps. Of its stages,
+1,733 lack a named device primitive; the rest are starting points, not
+connected implementations. The reduced router control above validates only
+that FFN operation. The full decoder graph has not been numerically executed
+or compiled for Radiance, and it does not include checkpoint weights.
+Regenerate the graph with:
+
+```sh
+python3 kernels/evaluation/llm/stitch.py --model qwen3_30b_a3b \
+  --batch 1 --prefill 128 --decode-steps 2 --generation greedy --compact \
+  --out kernels/evaluation/llm/qwen3-30b-a3b-graph.json
+```
+
 ### Qwen3-0.6B graph control
 
 `stitch.py --model qwen3_0_6b` reads the hash-checked candidate config and
