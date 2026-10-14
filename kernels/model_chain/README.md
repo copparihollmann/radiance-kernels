@@ -156,6 +156,23 @@ upstream FP32 execution. The three-token/two-step ELF is running separately;
 it has no completed device result yet. Cyclotron functional cycles are not
 hardware latency or utilization.
 
+The [last-prefill-logit checkpoint check](evaluation/qwen3-prefill-last-logit-check.json)
+uses the saved three-token full-width reference and streams the packed FP16
+tied embedding table in 1,024-row chunks. Projecting only the final hidden
+row reproduces the saved final prefill-logit row within `1.43e-5` maximum
+absolute error and selects token `16` in both paths. Projecting the first
+hidden row instead differs by `12.14` at maximum; a deliberately corrupted
+packed-table hash is rejected. This checks the numerical basis for the
+[last-logit graph mode](../evaluation/llm/profiles/qwen3-prefill-last-logit.json)
+without executing that optimized graph on device. Reproduce with:
+
+```sh
+OPENBLAS_NUM_THREADS=1 python3 kernels/model_chain/verify_qwen3_last_logit.py \
+  --build-dir "$TMPDIR/qwen3-multitoken-build/qwen3_0_6b" \
+  --weight-image "$TMPDIR/qwen3-full-image/qwen3_0_6b/weights-image.json" \
+  --out "$TMPDIR/qwen3-last-logit-check.json"
+```
+
 The checkpoint file and binary image stay in the local task directory. To
 reproduce the build, use the pinned checkpoint from the linked check and
 task-local paths for the output:

@@ -1,0 +1,29 @@
+{
+  "schema": "radiance.qwen3-last-prefill-logit-check.v1",
+  "status": "passed",
+  "scope": "full-width checkpoint-backed prefill",
+  "optimized_device_executed": false,
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "layers": 28,
+  "prefill_tokens": 3,
+  "vocab_size": 151936,
+  "hidden_size": 1024,
+  "selected_position": 2,
+  "selected_last_row_max_abs_error": 1.430511474609375e-05,
+  "wrong_first_row_max_abs_error": 12.142409324645996,
+  "selected_top1": 16,
+  "saved_full_logit_top1": 16,
+  "saved_reference_output_sha256": "660894162014ea279c856830fc0cba283d616f75852bd4eac9a41e046286db39",
+  "upstream_reference_sha256": "b3aa607871c882627a4e7b60b5b94c12bad1d615b05ff7f2ab66f0518643dd10",
+  "upstream_selected_tokens": [
+    16,
+    8
+  ],
+  "checkpoint_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+  "weight_image_sha256": "d263d39dfebfffe83ac042039961a5f4e6c4dad18037cbea49f3a3c7cfd6eaaf",
+  "tied_table_packed_sha256": "616f9374ddbaae3a033a0174557d502719154882e21e5d975ab5b58e0244459d",
+  "build_manifest_sha256": "8ee938249cc5f401e9471512eb7c1615273819f8be9ffe4259123ff063f9fd06",
+  "weight_image_manifest_sha256": "eb6e1f5f4674d676edc4e62265e45cd4f675a21f11fad549e8e4617f3cf36ca9",
+  "generated_model_data_sha256": "d7002f50c533f754ce9e250f365091b94098eda5e67c104c6cac5fbab53c31a2"
+}

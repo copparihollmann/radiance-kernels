@@ -295,9 +295,11 @@ greedy generation. Decoder and KV dependencies stay the same. For a batch-1,
 607,744 bytes and the prefill LM-head work from 159.3 billion to 155.6
 million MACs. A reduced NumPy control projects only the selected hidden row
 and matches the last row of the full logits exactly, including the selected
-token. This is a static graph and arithmetic check; the optimized graph
-still needs reference execution and a compiled device check before these
-savings can be used in a Radiance result.
+token. A separate [full-width checkpoint check](../../model_chain/evaluation/qwen3-prefill-last-logit-check.json)
+streams the packed FP16 tied table and reproduces the saved final prefill
+logit row within `1.43e-5`, with the same top token. These are graph and
+arithmetic checks; the optimized graph still needs reference execution and
+a compiled device check before these savings can be used in a Radiance result.
 
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The
