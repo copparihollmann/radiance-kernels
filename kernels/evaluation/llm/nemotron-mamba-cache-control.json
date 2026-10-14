@@ -1,0 +1,63 @@
+{
+  "schema": "radiance.nemotron-mamba-cache-control.v1",
+  "scope": "one reduced random-weight Mamba2 mixer, CPU torch fallback; no pinned checkpoint or Radiance execution",
+  "transformers_version": "5.3.0",
+  "torch_version": "2.9.1+cpu",
+  "random_seed": 17,
+  "inside_one_chunk": {
+    "chunk_size": 8,
+    "prefill_tokens": 3,
+    "total_tokens": 5,
+    "input_sha256": "91bd235e3f78921e95aa3422356fda4bca486b115e550add75e6c30a17f810a1",
+    "full_output_sha256": "8ed64941c9291171f02046e0a4a7c07eaf91ae82f28ee57ef4203ada76923fe0",
+    "cached_output_sha256": "2a7073c4e208ec96cfbca49757b07967be27fb49110b572a73ed2269b29311b4",
+    "max_abs_error": 2.384185791015625e-07,
+    "prefill_max_abs_error": 2.384185791015625e-07,
+    "first_token_above_1e_5": null,
+    "tail_token_errors": [
+      1.7881393432617188e-07,
+      1.7881393432617188e-07,
+      2.384185791015625e-07
+    ],
+    "conv_state_shape": [
+      1,
+      48,
+      3
+    ],
+    "ssm_state_shape": [
+      1,
+      4,
+      8,
+      4
+    ]
+  },
+  "crossing_pinned_chunk_size": {
+    "chunk_size": 256,
+    "prefill_tokens": 255,
+    "total_tokens": 257,
+    "input_sha256": "06c659d9ae9bf6d5f43063fec77c8bc889ccf35665297c081201501fce4dea09",
+    "full_output_sha256": "73af613a4baea03ed97f28142c73e68d9784dbea2fd5e45f78f6f265e70a2961",
+    "cached_output_sha256": "d757e0847fc24d23043f9016fb1e0558a92fd9c06b188587b33aa703c7908481",
+    "max_abs_error": 0.0012243688106536865,
+    "prefill_max_abs_error": 0.0,
+    "first_token_above_1e_5": 256,
+    "tail_token_errors": [
+      0.0,
+      4.172325134277344e-07,
+      0.0012243688106536865
+    ],
+    "conv_state_shape": [
+      1,
+      48,
+      3
+    ],
+    "ssm_state_shape": [
+      1,
+      4,
+      8,
+      4
+    ]
+  },
+  "crossing_status": "cached_full_difference_above_1e-5",
+  "peak_rss_kib": 399104
+}

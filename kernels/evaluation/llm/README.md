@@ -409,6 +409,21 @@ numerical check needs a compatible implementation or a reviewed adapter
 that preserves the 17 MLP-only blocks and fixes the cache handoff, followed
 by prefill/decode comparisons against real checkpoint outputs.
 
+There is also a small temporal-state control using the installed library's
+single Mamba2 mixer, separate from the pinned network. The
+[recorded CPU fallback run](nemotron-mamba-cache-control.json) compares a
+full causal pass with a three-token prefill plus two cached steps at reduced
+width. When all five tokens stay inside one eight-token scan chunk, maximum
+output error is `2.38e-7`. With the checkpoint's 256-token chunk size, a
+255-token prefill plus two steps first differs above `1e-5` at token 256;
+maximum error is `0.001224`. This is a concrete boundary case to resolve
+before treating cached and full-sequence checks as interchangeable. It is
+specific to Transformers 5.3.0's CPU fallback, random reduced weights, and
+PyTorch 2.9.1; it does not validate or diagnose the pinned checkpoint's
+runtime. Reproduce with
+`python3 kernels/evaluation/llm/verify_nemotron_mamba_cache.py --out
+kernels/evaluation/llm/nemotron-mamba-cache-control.json` in that environment.
+
 ### OLMo 3 local/global attention control
 
 [`verify_olmo3_reduced.py`](verify_olmo3_reduced.py) executes the emitted
