@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from importlib import metadata
 import json
 from pathlib import Path
 
@@ -91,6 +92,10 @@ def verify(target: Path, input_path: Path, out: Path,
         "simulator_sha256": run["simulator_sha256"],
         "output_sha256": sha256(output_path),
         "reference_sha256": sha256(reference_path),
+        "reference_environment": {
+            package: metadata.version(package) for package in
+            ("torch", "timm", "numpy")
+        },
         "all_finite": finite,
         "max_abs_error": float(np.max(np.abs(delta))) if finite else None,
         "rms_error": float(np.sqrt(np.mean(delta * delta))) if finite else None,
