@@ -40,6 +40,10 @@ convolution outputs, 192 final convolution state values, 224 scan outputs,
 and 128 final SSM state values. Maximum errors against NumPy were
 `1.56e-6`, zero, `1.49e-7`, and `4.47e-8`, respectively. The four device
 output hashes exactly matched the separate convolution and handoff runs.
+For a [negative control](evaluation/zero-scan-input-control.json), replacing
+the scan's read of the convolution output with zero caused Cyclotron to fail
+with nonzero `tohost=705`. This checks that the scan output comparison can
+detect a broken on-device connection.
 
 This is a connected pair of mixer primitives, not a full Mamba layer or a
 full Nemotron model. Input projection, gate, normalization, output projection,

@@ -1,0 +1,14 @@
+{
+  "schema": "radiance.mamba-conv-scan-negative-control.v1",
+  "status": "expected_failure_observed",
+  "backend": "cyclotron",
+  "mutation": "replace the scan callback x read from conv_y_raw with 0.0f; convolution callback unchanged",
+  "expected": "on-device scan golden check fails",
+  "observed_tohost": 705,
+  "observed_case": 352,
+  "functional_cycles": 25916,
+  "mutated_kernel_sha256": "db40d9d45f897ae5f07d6e9835df0443ba243d7a8f9b58f59111fa8b8cb33990",
+  "mutated_elf_sha256": "e8d0b0a40878791c01fb5ff2134c0ee2368d6a7f417897857d6d4a7406e8d7ae",
+  "build_log_sha256": "3df16976fe2851f1439b1552e763287f07205737fdad7b13b5b517ea5cf3c9f8",
+  "simulator_log_sha256": "52b306d45315cc816dab81c699bf572ef0e3e458ca0bb3084fa3c960224595e7"
+}
