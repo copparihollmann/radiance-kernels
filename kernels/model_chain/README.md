@@ -1331,6 +1331,16 @@ unverified. Regenerate the second golden with
 `compile_smolvla.py --stage-limit 2 --warps 4 --all-cores` plus the pinned
 `--weight-image`, `--input-image`, `--stage-golden-image`, and
 `--stage-golden-sha256` arguments, then run `run_smolvla_functional.py`.
+The [full two-core build check](evaluation/smolvla-full-two-core-build.json)
+confirms a linked 3,673-stage ELF with the same checkpoint, input, graph
+schedule, and FP32 output golden as the core-0 build. After normalizing the
+core assignment, cache drain, and scratch capacity, all 92 stage source
+chunks and the main schedule match. The full two-core ELF has not completed
+a device run. A [4-million-cycle launch probe](evaluation/smolvla-full-two-core-diagnostic.json)
+preloaded both original images and reached its planned cycle cap; it did not
+reach or check the action output. The generated schedule still contains
+354,131,264,512 scalar linear multiply-accumulates, including
+260,919,263,232 in the vision branches.
 
 The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
 uses the generated C++ stage with real checkpoint weights and byte-exact
