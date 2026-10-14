@@ -106,6 +106,51 @@ python3 kernels/model_chain/run_functional.py --models qwen3_0_6b \
   --sim-cycles 100000000 --timeout 600 --out path/to/result.json
 ```
 
+## Qwen3 sparse expert decoder control
+
+`compile_decoder.py` also connects the pinned Qwen3-30B-A3B graph's routing
+and expert stages to the existing attention, residual, and cache operations.
+The [reduced two-layer build](evaluation/qwen3-moe-reduced-chain-build.json)
+uses 16 experts, top-8 routing, a three-token prefill, and two dependent
+greedy decode steps. It checks all 155 stage outputs, including eight integer
+expert-index and token-selection stages. Native C++ agrees with the synthetic
+NumPy graph to `1.20e-6` maximum absolute error. The
+[Cyclotron run](evaluation/qwen3-moe-reduced-chain-functional.json) passed
+with `tohost=0` after 643,753 functional ISA cycles, and the
+[artifact verifier](evaluation/qwen3-moe-reduced-chain-verification.json)
+checked the ELF, generated sources, sparse expert operations, numerical
+references, simulator, configuration, and completion log by hash. The local
+build directory occupies about 6.8 MiB. The separate
+[Transformers comparison](../evaluation/llm/qwen3-moe-reduced-reference.json)
+checks a reduced two-layer network against upstream with its own seeded
+weights; the device build uses deterministic synthetic weights. The compiler
+regression test disables selected-score renormalization in a temporary
+header and confirms that the connected native check fails.
+
+These are functional checks at reduced dimensions. They do not execute the
+30B checkpoint or measure RTL latency, utilization, area, or power. The
+scalar expert operations do not use MX-Gemmini. To reproduce with local
+Muon and Cyclotron paths set:
+
+```sh
+RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+  --model qwen3_30b_a3b --layers 2 --prefill 3 --decode-steps 2 \
+  --generation greedy --token-ids 1 2 3 --device-check-all-stages \
+  --stages-per-object 20 --out-root "$TMPDIR/qwen3-moe-chain" \
+  --verify-native --build
+python3 kernels/model_chain/run_functional.py --models qwen3_30b_a3b \
+  --generated-root "$TMPDIR/qwen3-moe-chain" \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 100000000 --timeout 300 \
+  --out "$TMPDIR/qwen3-moe-chain/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$TMPDIR/qwen3-moe-chain/qwen3_30b_a3b/functional-result.json" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --config "$TMPDIR/qwen3-moe-chain/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/qwen3-30b-a3b.json \
+  --out "$TMPDIR/qwen3-moe-chain/qwen3_30b_a3b/verification.json"
+```
+
 ## Qwen3 checkpoint-weight path
 
 The pinned Qwen3-0.6B checkpoint has a saved `lm_head.weight` as well as an

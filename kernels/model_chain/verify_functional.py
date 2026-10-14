@@ -68,6 +68,7 @@ def verify(result_path: Path, simulator: Path, config: Path,
     same(HERE / "pipeline_math.hpp", result["portable_ops_sha256"],
          "portable device operations")
     for key, name in (("quantized_ops_sha256", "pipeline_int8.hpp"),
+                      ("moe_ops_sha256", "pipeline_moe.hpp"),
                       ("tied_embedding_ops_sha256", "pipeline_tied.hpp"),
                       ("fp32_tied_ops_sha256", "pipeline_fp32_tied.hpp"),
                       ("packed_ops_sha256", "pipeline_packed.hpp")):
@@ -75,6 +76,15 @@ def verify(result_path: Path, simulator: Path, config: Path,
             same(HERE / name, result[key], name)
     same(ROOT / "kernels/evaluation/llm/reference.py",
          result["numpy_reference_sha256"], "NumPy reference")
+    for key, name in (("numpy_moe_graph_reference_sha256", "moe_graph_reference.py"),
+                      ("numpy_moe_stage_ops_sha256", "moe_ops.py"),
+                      ("graph_builder_sha256", "stitch.py")):
+        if result.get(key):
+            same(ROOT / "kernels/evaluation/llm" / name, result[key], name)
+    if result["model"] == "qwen3_30b_a3b" and any(not result.get(key) for key in (
+            "moe_ops_sha256", "numpy_moe_graph_reference_sha256",
+            "numpy_moe_stage_ops_sha256", "graph_builder_sha256")):
+        raise ValueError("Qwen3 MoE receipt lacks sparse-stage source hashes")
     same(ROOT / "kernels/evaluation/llm/pr1-models.json",
          result["model_specs_sha256"], "model specs")
     if source_config is not None:

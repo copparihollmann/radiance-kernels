@@ -98,6 +98,33 @@ class DecoderCompilerTest(unittest.TestCase):
         self.assertIn("linear_f16_tied(", emit_stage(0, head, graph, "weight", "fp16"))
         self.assertIn("linear_f16(", emit_stage(0, projection, graph, "weight", "fp16"))
 
+    def test_qwen3_moe_sparse_stages_join_prefill_and_greedy_decode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = generate("qwen3_30b_a3b", 2, 3, 2, "greedy",
+                              Path(temporary), device_check_all_stages=True,
+                              token_ids=[1, 2, 3], stages_per_object=20)
+            manifest = json.loads((target / "manifest.json").read_text())
+            result = verify_native(target)
+            self.assertIn("errors=0", result)
+            self.assertLess(float(result.split("max_abs_error=")[1]), 1e-4)
+            self.assertEqual(manifest["stages"], 155)
+            self.assertEqual(manifest["native_verified_float_stages"] +
+                             manifest["native_verified_integer_stages"],
+                             manifest["stages"])
+            self.assertEqual(manifest["native_verified_integer_stages"], 8)
+            self.assertIn('"pipeline_moe.hpp"',
+                          (target / "stage_chunk_000.cpp").read_text())
+            with self.assertRaisesRegex(ValueError, "weight-image export is not implemented"):
+                generate("qwen3_30b_a3b", 2, 3, 2, "greedy",
+                         Path(temporary), checkpoint_dir=Path(temporary),
+                         weight_image=Path(temporary) / "missing.json")
+            header = (Path(__file__).parent / "pipeline_moe.hpp").read_text()
+            self.assertEqual(header.count("if (renormalize)"), 1)
+            (target / "pipeline_moe.hpp").write_text(
+                header.replace("if (renormalize)", "if (false && renormalize)"))
+            with self.assertRaises(subprocess.CalledProcessError):
+                verify_native(target)
+
     def test_two_cluster_buffers_and_second_output_are_checked(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = generate("tinyllama", 1, 2, 1, "greedy",

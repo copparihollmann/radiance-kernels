@@ -16,7 +16,8 @@ from split_decoder_weights import (image_segments, verify_image,
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
-          "qwen3_0_6b")
+          "qwen3_0_6b", "qwen3_30b_a3b")
+DEFAULT_MODELS = MODELS[:4]
 
 
 def sha256(path: Path) -> str:
@@ -99,7 +100,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
     device_sources = [target / name for name in manifest.get(
         "device_source_files", ["kernel.cpp"])]
     used_headers = {header for source in device_sources
-                    for header in ("pipeline_tied.hpp", "pipeline_fp32_tied.hpp")
+                    for header in ("pipeline_tied.hpp", "pipeline_fp32_tied.hpp",
+                                   "pipeline_moe.hpp")
                     if f'#include "{header}"' in source.read_text()}
     result = {
         "model": model,
@@ -127,6 +129,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "device_optimization": manifest.get("device_optimization", "O3"),
         "stages_per_device_object": manifest.get("stages_per_device_object", 0),
         "portable_ops_sha256": sha256(HERE / "pipeline_math.hpp"),
+        "moe_ops_sha256": (sha256(HERE / "pipeline_moe.hpp")
+                            if "pipeline_moe.hpp" in used_headers else None),
         "quantized_ops_sha256": (sha256(HERE / "pipeline_int8.hpp")
                                  if manifest.get("checkpoint_weight_format") in
                                  ("int8_scaled", "int8_fp16_tied") else None),
@@ -138,6 +142,14 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
                               if manifest.get("checkpoint_weight_format") ==
                               "int5_group64_int6_tied" else None),
         "numpy_reference_sha256": sha256(ROOT / "kernels/evaluation/llm/reference.py"),
+        "numpy_moe_graph_reference_sha256": (
+            sha256(ROOT / "kernels/evaluation/llm/moe_graph_reference.py")
+            if model == "qwen3_30b_a3b" else None),
+        "numpy_moe_stage_ops_sha256": (
+            sha256(ROOT / "kernels/evaluation/llm/moe_ops.py")
+            if model == "qwen3_30b_a3b" else None),
+        "graph_builder_sha256": (sha256(ROOT / "kernels/evaluation/llm/stitch.py")
+                                  if model == "qwen3_30b_a3b" else None),
         "model_specs_sha256": manifest["source_spec_sha256"],
         "source_config_sha256": manifest.get("source_config_sha256"),
         "simulator_sha256": sha256(simulator),
@@ -167,7 +179,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--models", nargs="+", choices=MODELS, default=MODELS)
+    parser.add_argument("--models", nargs="+", choices=MODELS,
+                        default=DEFAULT_MODELS)
     parser.add_argument("--generated-root", type=Path, default=HERE / "generated")
     parser.add_argument("--cyclotron-root", type=Path,
                         default=ROOT.parent / "generators/radiance/cyclotron")

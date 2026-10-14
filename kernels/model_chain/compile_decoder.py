@@ -26,6 +26,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "kernels/evaluation/llm"))
 import reference  # noqa: E402
 import stitch  # noqa: E402
+import moe_graph_reference  # noqa: E402
 from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
                         SafeTensorWeights, TiedFP16INT8GemmaWeights,
                         TiedINT8INT4GemmaWeights, TiedINT5INT6GemmaWeights)
@@ -34,7 +35,7 @@ from split_decoder_weights import image_segments, verify_image  # noqa: E402
 
 
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
-          "qwen3_0_6b")
+          "qwen3_0_6b", "qwen3_30b_a3b")
 
 
 def symbol(name: str) -> str:
@@ -92,6 +93,10 @@ def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
                                    1.0 / np.sqrt(shape[0]))
     elif op == "bias_add":
         data = reference.parameter(attrs["parameter"], tuple(stage["shape"][2:]))
+    elif op in ("expert_gate_up", "expert_down"):
+        (name, shape), = attrs["parameters"].items()
+        data = reference.parameter(name, tuple(shape))
+        return symbol("parameter." + name), data
     else:
         return None
     return symbol("parameter." + attrs["parameter"]), data.astype(np.float32)
@@ -181,6 +186,27 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
     elif op == "token_select":
         in_shape = graph.tensors[stage["reads"][0]]["shape"]
         body = f"token_select({ins[0]}, {out}, {batch}, {in_shape[1]}, {in_shape[2]}, tid, tpb)"
+    elif op == "softmax":
+        body = f"moe_softmax({ins[0]}, {out}, {count // shape[-1]}, {shape[-1]}, tid, tpb)"
+    elif op == "topk_indices":
+        experts = graph.tensors[stage["reads"][0]]["shape"][-1]
+        body = f"moe_topk_indices({ins[0]}, {out}, {count // shape[-1]}, {experts}, {shape[-1]}, tid, tpb)"
+    elif op == "topk_scores":
+        experts = graph.tensors[stage["reads"][0]]["shape"][-1]
+        normalize = "true" if attrs["renormalize"] else "false"
+        body = f"moe_topk_scores({ins[0]}, {ins[1]}, {out}, {count // shape[-1]}, {experts}, {shape[-1]}, {normalize}, tid, tpb)"
+    elif op == "expert_group":
+        body = f"moe_expert_group({ins[0]}, {ins[1]}, {out}, {count // (shape[-2] * shape[-1])}, {shape[-2]}, {shape[-1]}, {attrs['expert_count']}, tid, tpb)"
+    elif op == "expert_gate_up":
+        hidden = graph.tensors[stage["reads"][0]]["shape"][-1]
+        body = f"moe_expert_gate_up({ins[0]}, {ins[1]}, {parameter}, {out}, {count // (shape[-2] * shape[-1])}, {shape[-2]}, {hidden}, {shape[-1] // 2}, tid, tpb)"
+    elif op == "expert_swiglu":
+        body = f"moe_expert_swiglu({ins[0]}, {out}, {count}, {shape[-1]}, tid, tpb)"
+    elif op == "expert_down":
+        intermediate = graph.tensors[stage["reads"][0]]["shape"][-1]
+        body = f"moe_expert_down({ins[0]}, {ins[1]}, {parameter}, {out}, {count // (shape[-2] * shape[-1])}, {shape[-2]}, {intermediate}, {shape[-1]}, tid, tpb)"
+    elif op == "expert_weighted_reduce":
+        body = f"moe_expert_reduce({ins[0]}, {ins[1]}, {out}, {count // shape[-1]}, {attrs['selected_experts']}, {shape[-1]}, tid, tpb)"
     else:
         raise ValueError(f"unsupported operation {op} at {stage['id']}")
     return (f"static void stage_{index}(void* context, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
@@ -217,6 +243,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     external = checkpoint_dir is not None or weight_image is not None
     if external and (checkpoint_dir is None or weight_image is None):
         raise ValueError("checkpoint directory and weight image are both required")
+    if external and model == "qwen3_30b_a3b":
+        raise ValueError("Qwen3 MoE checkpoint weight-image export is not implemented")
     if stage_limit is not None and not external:
         raise ValueError("stage limit is only for checkpoint device probes")
     if external and (model not in MODELS or stages_per_object <= 0
@@ -225,6 +253,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                          "and all-stage checks for one-cluster runs")
     specs = stitch.model_specs()
     spec = dict(specs[model]) if external else reference.reduced_spec(specs[model])
+    if model == "qwen3_30b_a3b" and not external:
+        spec.update(num_experts=16, num_experts_per_tok=8,
+                    moe_intermediate_size=16)
     if token_ids is not None:
         expected_ids = prefill + (decode if generation == "teacher_forced" else 0)
         if len(token_ids) != expected_ids:
@@ -313,7 +344,10 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                 raise ValueError(f"graph has no teacher-forced input {name}")
             inputs[name] = np.asarray([token_ids[prefill + step]],
                                       dtype=np.int32)[None]
-    values = reference.execute(graph, inputs, weights=provider)
+    values = (moe_graph_reference.execute(
+        graph, inputs, retain=tuple(stage["writes"] for stage in graph.stages))
+        if model == "qwen3_30b_a3b" else
+        reference.execute(graph, inputs, weights=provider))
     quantization_comparison = None
     if external and image_manifest["dtype"] in ("mixed_fp16", "int8_scaled",
                                                  "int8_fp16_tied", "int4_int8_tied",
@@ -405,6 +439,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         parameter_dtype(stage) == "fp16" for stage in graph.stages))
     uses_fp32_tied = any(stage["attrs"].get("weight_transposed") and
                          parameter_dtype(stage) == "fp32" for stage in graph.stages)
+    uses_moe = any(stage["op"] in moe_graph_reference.moe_ops.OPS
+                   for stage in graph.stages)
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage),
@@ -446,6 +482,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                 for name, (address, dtype) in sorted(external_params.items()))
             source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
                       "#include <stdint.h>\n#include \"pipeline_math.hpp\"\n"
+                      + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
                       + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
                       + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
                       + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -586,6 +623,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
            + ("#include \"model_cluster_id.h\"\n" if batch_clusters == 2 else "") +
            "#include \"pipeline_math.hpp\"\n"
+           + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
            + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
            + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
            + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -620,6 +658,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         for out, gold, count in integer_checks)
     native = ("#include <stdint.h>\n#include <stdio.h>\n"
               "#include \"pipeline_math.hpp\"\n"
+              + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
               + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
               + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
               + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -651,6 +690,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         f"EXTRA_MU_CFLAGS += -I{HERE}\n"
         f"include {ROOT / 'kernels/common.mk'}\n"
         f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}"
+        + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
         + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
         + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
         + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
@@ -659,6 +699,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         + "\n"
         + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
            + f": {HERE / 'pipeline_math.hpp'}"
+           + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
            + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
            + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
            + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
@@ -734,6 +775,9 @@ def verify_native(target: Path) -> str:
 
 
 def build_device(target: Path) -> None:
+    jobs = int(os.environ.get("RADIANCE_BUILD_JOBS", "2"))
+    if not 1 <= jobs <= 16:
+        raise ValueError("RADIANCE_BUILD_JOBS must be between 1 and 16")
     toolchain = Path(os.environ.get(
         "RISCV_TOOLCHAIN_PATH",
         "/scratch/agustin/projects/chipyard/.conda-env/riscv-tools"))
@@ -750,7 +794,7 @@ def build_device(target: Path) -> None:
     extra = "-nostdinc++ -isystem " + str(llvm_muon / "include/c++/v1")
     env["EXTRA_MU_CFLAGS"] = (env.get("EXTRA_MU_CFLAGS", "") + " " + extra).strip()
     env.setdefault("MU_USE_LIBC", "1")
-    command = ["make", "-j2", "kernel.soc.elf"]
+    command = ["make", f"-j{jobs}", "kernel.soc.elf"]
     with subprocess.Popen(command, cwd=target, env=env, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT) as process:
         tail = bytearray()
