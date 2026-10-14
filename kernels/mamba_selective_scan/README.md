@@ -31,3 +31,24 @@ the state at the prefill/decode boundary and must change decode output. The
 Cyclotron result checks device output with FP32 tolerance and independently
 compares the dumped output and final state with the NumPy golden. Its cycle
 count is a functional simulator diagnostic, not a hardware performance result.
+
+For a second input source, `gen_upstream_data.py` extracts `x`, `B`, `C`, `dt`,
+`A`, and `D` from a seven-token, random-weight Transformers Mamba2 mixer. It
+runs a five-token prefill followed by two cached decode calls. A hook captures
+the upstream scan output; the NumPy recurrence checks that output, the final
+SSM state, and the mixer output after its existing gate/norm and projection.
+Run the same Radiance check using a Python environment with Torch and
+Transformers 5.3:
+
+```sh
+python3 kernels/mamba_selective_scan/test_device.py --source upstream \
+  --reference-python "$TRANSFORMERS_PYTHON" \
+  --out "$TMPDIR/mamba-selective-scan-upstream"
+```
+
+The [recorded reduced upstream check](evaluation/transformers-reduced-cyclotron.json)
+has `8.94e-8` maximum scan-output error and `2.24e-8` final-state error
+between NumPy and the Transformers CPU fallback. Cyclotron then passes on
+those exact extracted inputs. This checks the scan contract for one reduced
+mixer with random weights. It does not use the pinned Nemotron checkpoint or
+validate a connected full model.

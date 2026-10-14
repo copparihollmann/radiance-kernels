@@ -4,12 +4,16 @@
   "backend": "cyclotron",
   "rtl_execution": false,
   "performance_measurement": false,
+  "fixture_source": "synthetic",
   "functional_cycles": 9874,
   "checked_output_elements": 224,
   "checked_final_state_elements": 128,
   "fixture": {
     "schema": "radiance.mamba-selective-scan-fixture.v1",
-    "seed": 19,
+    "source": "numpy_synthetic",
+    "provenance": {
+      "seed": 19
+    },
     "heads": 4,
     "head_dim": 8,
     "groups": 2,
@@ -33,11 +37,12 @@
   "output_sha256": "a9ee42d712ed92f1399a20c85769f6292c1117514820aee677dbb503e6f8dbfd",
   "final_state_sha256": "edb5cefbfb2b0626baeea2d6b717d44fb9428fd174428c5b56f4199643d98d92",
   "kernel_source_sha256": "a4ce03267d1e3d02482cf59ca23fdc8dca2744d4cc9f0c1dd2a91882aadad344",
-  "generator_source_sha256": "cf5d4431b0dcae0cf13abe3600ea2c1f04a92604217044ac0d2cbae1cd201381",
-  "test_source_sha256": "4bbf268793caa1e2b23c75f390caab418355e02766c3067905a9664633b8728c",
+  "generator_source_sha256": "a57c13deeb41c5ef4274db5a3bf6a2e09e16c13184e5bc7a31310130cce8daf7",
+  "fixture_helper_source_sha256": "a57c13deeb41c5ef4274db5a3bf6a2e09e16c13184e5bc7a31310130cce8daf7",
+  "test_source_sha256": "8e0d822c89178cb1ce0b82ead9d4a96f320fd39320d9d47036b883fbeb642d8e",
   "elf_sha256": "126d8f0deb2e6367c53b3f1a4f2e54bdcc1d89008d2d66c97245f952a7841304",
   "config_sha256": "db92edd18930811087147251470cc12be4c62762db2eed176afabe61f830126b",
   "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
-  "build_log_sha256": "d041ccf8941d391cdf0d12c5a889e8c870acf74d961cc962f1010bf585f6a1b4",
+  "build_log_sha256": "6726dce2206c86f35d44c9d93390696f5c52e92ac00129045d4b30a46908103b",
   "cyclotron_log_sha256": "f1d8b8cc349188e5397c6ca14f65046742bdc28e0547312d9aa4c988b2c5de29"
 }

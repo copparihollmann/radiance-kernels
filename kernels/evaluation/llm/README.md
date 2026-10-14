@@ -383,6 +383,11 @@ golden. The graph now gives the 63 scan stages that primitive's name and
 keeps time-step preparation as a separate missing device stage. It still
 needs projection slicing, convolution, gate and norm, multi-output scan
 binding, and pinned-weight validation before network execution.
+The [reduced upstream mixer check](../../mamba_selective_scan/evaluation/transformers-reduced-cyclotron.json)
+also extracts seven tokens of intermediate scan inputs from Transformers 5.3,
+checks NumPy against its cached CPU fallback, and passes the resulting device
+fixture on Cyclotron. This is random-weight, reduced-width evidence rather
+than a pinned-checkpoint or full-model validation.
 Those names do not make the stages connected executables. The pinned source's
 attention cache handoff remains the main reference discrepancy, and this
 graph has neither an upstream numerical comparison nor a Radiance ELF.

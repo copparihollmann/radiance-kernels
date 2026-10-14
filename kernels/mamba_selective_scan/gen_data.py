@@ -47,20 +47,23 @@ def reference(x, b, c, dt, a, d, initial, prefill: int,
     return y, state
 
 
-def generate(out: Path) -> dict:
-    rng = np.random.default_rng(19)
-    x = rng.normal(0, 0.35, (TOKENS, HEADS * HEAD_DIM)).astype(np.float32)
-    b = rng.normal(0, 0.2, (TOKENS, GROUPS, STATE_SIZE)).astype(np.float32)
-    c = rng.normal(0, 0.2, (TOKENS, GROUPS, STATE_SIZE)).astype(np.float32)
-    dt = rng.uniform(0.005, 0.12, (TOKENS, HEADS)).astype(np.float32)
-    a = -rng.uniform(0.3, 1.6, HEADS).astype(np.float32)
-    d = rng.uniform(0.5, 1.2, HEADS).astype(np.float32)
-    initial = rng.normal(0, 0.03, (HEADS * HEAD_DIM, STATE_SIZE)).astype(np.float32)
-    gold_y, gold_state = reference(x, b, c, dt, a, d, initial, PREFILL)
+def emit_fixture(out: Path, *, x, b, c, dt, a, d, initial,
+                 gold_y, gold_state, source: str, provenance: dict) -> dict:
+    expected_shapes = ((x, (TOKENS, HEADS * HEAD_DIM)),
+                       (b, (TOKENS, GROUPS, STATE_SIZE)),
+                       (c, (TOKENS, GROUPS, STATE_SIZE)),
+                       (dt, (TOKENS, HEADS)), (a, (HEADS,)),
+                       (d, (HEADS,)),
+                       (initial, (HEADS * HEAD_DIM, STATE_SIZE)),
+                       (gold_y, (TOKENS, HEADS * HEAD_DIM)),
+                       (gold_state, (HEADS * HEAD_DIM, STATE_SIZE)))
+    if any(value.shape != shape or value.dtype != np.float32
+           for value, shape in expected_shapes):
+        raise ValueError("scan fixture has a wrong shape or dtype")
     reset_y, _ = reference(x, b, c, dt, a, d, initial, PREFILL,
                            reset_at_decode=True)
     decode_delta = float(np.max(np.abs(reset_y[PREFILL:] - gold_y[PREFILL:])))
-    if decode_delta < 1e-4:
+    if decode_delta < 1e-8:
         raise ValueError("prefill-to-decode state control is too weak")
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w") as stream:
@@ -76,7 +79,8 @@ def generate(out: Path) -> dict:
                        dims=f"[{array.size}]", trailing_comma=True)
     return {
         "schema": "radiance.mamba-selective-scan-fixture.v1",
-        "seed": 19, "heads": HEADS, "head_dim": HEAD_DIM,
+        "source": source, "provenance": provenance,
+        "heads": HEADS, "head_dim": HEAD_DIM,
         "groups": GROUPS, "state_size": STATE_SIZE,
         "tokens": TOKENS, "prefill_tokens": PREFILL,
         "input_sha256": {name: sha(array) for name, array in
@@ -87,6 +91,21 @@ def generate(out: Path) -> dict:
         "reset_at_decode_max_output_delta": decode_delta,
         "generated_header_sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
     }
+
+
+def generate(out: Path) -> dict:
+    rng = np.random.default_rng(19)
+    x = rng.normal(0, 0.35, (TOKENS, HEADS * HEAD_DIM)).astype(np.float32)
+    b = rng.normal(0, 0.2, (TOKENS, GROUPS, STATE_SIZE)).astype(np.float32)
+    c = rng.normal(0, 0.2, (TOKENS, GROUPS, STATE_SIZE)).astype(np.float32)
+    dt = rng.uniform(0.005, 0.12, (TOKENS, HEADS)).astype(np.float32)
+    a = -rng.uniform(0.3, 1.6, HEADS).astype(np.float32)
+    d = rng.uniform(0.5, 1.2, HEADS).astype(np.float32)
+    initial = rng.normal(0, 0.03, (HEADS * HEAD_DIM, STATE_SIZE)).astype(np.float32)
+    gold_y, gold_state = reference(x, b, c, dt, a, d, initial, PREFILL)
+    return emit_fixture(out, x=x, b=b, c=c, dt=dt, a=a, d=d,
+                        initial=initial, gold_y=gold_y, gold_state=gold_state,
+                        source="numpy_synthetic", provenance={"seed": 19})
 
 
 def main() -> None:

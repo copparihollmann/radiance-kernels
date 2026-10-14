@@ -33,10 +33,14 @@ def digest(path: Path) -> str:
 def run(args: argparse.Namespace) -> dict:
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    for name in ("kernel.cpp", "gen_data.py"):
+    generator = "gen_upstream_data.py" if args.source == "upstream" else "gen_data.py"
+    if args.source == "upstream" and args.reference_python is None:
+        raise ValueError("--reference-python is required for the upstream fixture")
+    for name in ("kernel.cpp", "gen_data.py", generator):
         shutil.copy2(HERE / name, out / name)
     receipt = out / "fixture.json"
-    subprocess.run([sys.executable, str(HERE / "gen_data.py"),
+    subprocess.run([str(args.reference_python or sys.executable),
+                    str(HERE / generator),
                     "--out", str(out / "data"), "--receipt", str(receipt)],
                    check=True)
     (out / "Makefile").write_text(f"""PROJECT = kernel
@@ -136,6 +140,7 @@ kernel.mu.o: data
         "schema": "radiance.mamba-selective-scan-device-check.v1",
         "status": "passed", "backend": "cyclotron", "rtl_execution": False,
         "performance_measurement": False,
+        "fixture_source": args.source,
         "functional_cycles": int(cycle_matches[0]),
         "checked_output_elements": y_bytes // 4,
         "checked_final_state_elements": state_bytes // 4,
@@ -143,7 +148,8 @@ kernel.mu.o: data
         "output_sha256": hashlib.sha256(y).hexdigest(),
         "final_state_sha256": hashlib.sha256(state).hexdigest(),
         "kernel_source_sha256": digest(HERE / "kernel.cpp"),
-        "generator_source_sha256": digest(HERE / "gen_data.py"),
+        "generator_source_sha256": digest(HERE / generator),
+        "fixture_helper_source_sha256": digest(HERE / "gen_data.py"),
         "test_source_sha256": digest(HERE / "test_device.py"),
         "elf_sha256": digest(elf),
         "config_sha256": digest(config_path),
@@ -158,6 +164,9 @@ kernel.mu.o: data
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--source", choices=("synthetic", "upstream"),
+                        default="synthetic")
+    parser.add_argument("--reference-python", type=Path)
     parser.add_argument("--toolchain", type=Path, default=DEFAULT_TOOLCHAIN)
     parser.add_argument("--llvm-muon", type=Path, default=DEFAULT_LLVM)
     parser.add_argument("--cyclotron", type=Path, default=DEFAULT_CYCLOTRON)
