@@ -1,0 +1,14 @@
+{
+  "schema": "radiance.qwen3-moe-ffn-negative-control.v1",
+  "status": "expected_failure_observed",
+  "backend": "cyclotron",
+  "mutation": "omit normalization of selected top-8 router scores after full-expert softmax",
+  "expected": "selected score and expert output checks fail",
+  "observed_tohost": 561,
+  "observed_case": 280,
+  "functional_cycles": 78120,
+  "mutated_kernel_sha256": "b3548e5d2f3a9e7d7dc8ccd67ee5dd82c521d483ef175511f85cad15121654e6",
+  "mutated_elf_sha256": "2f9affd27310588d2ce19696f3a171686064565bb764f01e8144e16f8d525f17",
+  "build_log_sha256": "e47f9d234c142712e75f1d1235adbbe9cfdc09780545f85fcd5d1887bdde02ae",
+  "simulator_log_sha256": "79b5bf9679f5e382a2431b4f19c8d949faaa81ca7849700e830f5b2fb1ad2463"
+}

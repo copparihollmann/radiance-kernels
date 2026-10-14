@@ -560,7 +560,12 @@ expert IDs from Transformers 5.3.0 exactly; the maximum selected-score error
 is `1.19e-7` and the maximum output error is `7.45e-8`. Omitting the
 selected-score renormalization changes the result by `0.0643`, so the control
 detects that mapping mistake. This is one random-weight FFN block, not the
-48-layer decoder, a checkpoint-backed run, or a Radiance executable. Run it
+48-layer decoder or a checkpoint-backed run. A
+[connected reduced Radiance FFN](../../qwen3_moe_ffn/README.md) now runs
+the same router, top-8 selection, selected-score normalization, expert
+projections, SiLU, and weighted reduction in one ELF. Its Cyclotron check
+passes all seven tokens; the full model and MX mapping remain open. Run the
+independent CPU check
 with `python3 kernels/evaluation/llm/verify_qwen3_moe_router.py` in the
 Transformers environment.
 
