@@ -1,6 +1,6 @@
 {
   "status": "passed",
-  "scope": "four-layer random-weight OLMo 3 staged graph, direct mapping, and upstream prefill/cached decode; no checkpoint or Radiance execution",
+  "scope": "four-layer random-weight OLMo 3 staged graph, compiler reference, direct mapping, and upstream prefill/cached decode; no checkpoint or Radiance execution",
   "pinned_config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
   "source_model": "allenai/Olmo-3-7B-Instruct",
   "small_config": {
@@ -30,6 +30,8 @@
     6
   ],
   "graph_stage_count": 273,
+  "compiler_reference_stage_max_abs_error": 2.4437904357910156e-06,
+  "compiler_reference_source_sha256": "5979e02c286f3bb9a184c9db4c5b784415b1f4d94388aff5a6f4e2fd2235d6c7",
   "comparisons": [
     {
       "phase": "prefill",

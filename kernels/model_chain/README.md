@@ -204,6 +204,111 @@ python3 kernels/model_chain/verify_functional.py \
   --out "$TMPDIR/qwen3-moe-48layer-reduced/qwen3_30b_a3b/verification.json"
 ```
 
+## OLMo 3 local and full attention control
+
+The pinned [OLMo 3 graph](../evaluation/llm/olmo3-7b-graph.json) has 32
+layers in a repeating three-local/one-full attention order. It normalizes
+each complete Q/K projection before reshaping heads, then applies YaRN
+rotary positions. `compile_decoder.py` maps those reshape and rotary stages
+and keeps the per-layer window and K/V cache dependencies. A reduced build
+uses the requested prefix of `layer_types`, so four layers mean the first
+three local layers followed by one full layer.
+
+The [four-layer control](evaluation/olmo3-local-control-build.json) uses four
+prefill tokens and two dependent greedy decode steps. Its local window is
+set to three tokens to exercise eviction within this short test; the pinned
+model's window is 4,096 tokens. All 275 native stages pass with `1.53e-5`
+maximum absolute error. Removing the local mask from the generated native
+program fails the stage checks. The [Cyclotron run](evaluation/olmo3-local-control-functional.json)
+passes 273 floating-point and two integer checks with `tohost=0` in 546,920
+functional cycles. The [artifact verifier](evaluation/olmo3-local-control-verification.json)
+checks the ELF, generated code, OLMo operations, numerical reference,
+simulator, configuration, and logs by hash. This build occupies about 6.4
+MiB locally; its single-job device build peaked at about 110 MiB RSS.
+
+The [independent upstream check](../evaluation/llm/olmo3-reduced-reference.json)
+binds the compiler reference to the same seeded Transformers 5.3.0 fixture
+used by the existing graph check. Its 273 stage outputs differ by at most
+`2.44e-6`; the staged graph's logits differ from Transformers by at most
+`1.79e-7`. The Radiance build uses a separate deterministic synthetic FP32
+fixture. Its device result therefore checks code generation and stage
+handoffs, while the upstream fixture checks the model operations. This is
+not a checkpoint-weight run, a 4,097-token local-window test, an MX-Gemmini
+run, or hardware performance.
+
+The [full-depth topology check](evaluation/olmo3-full-depth-topology-check.json)
+compares the reduced 32-layer schedule with the pinned graph: all 2,123
+ordered stage IDs, operations, tensor dependencies, outputs, and greedy token
+dependencies match. It also checks the local/full layer pattern, projection
+norm axes, and YaRN settings. The reduced execution uses a three-token
+prefill, so this topology match does not exercise the pinned 4,097-token
+context. A [native numerical diagnostic](evaluation/olmo3-full-depth-tolerance-diagnostic.json)
+records 46 elements in 33 stages outside the default `1e-4` relative plus
+`1e-5` absolute threshold; the first occurs in layer 10. All saved element
+comparisons pass `1e-3` relative plus `1e-4` absolute, which is still
+tighter than the device stage-check threshold. The error grows gradually
+with depth, consistent with accumulated FP32 evaluation-order differences;
+the diagnostic alone does not prove their cause.
+
+The [32-layer reduced build](evaluation/olmo3-full-depth-reduced-build.json)
+passes all 2,123 native stage checks with `4.73e-4` maximum absolute error
+at the recorded `1e-3` relative plus `1e-4` absolute tolerance. Its
+[Cyclotron run](evaluation/olmo3-full-depth-reduced-functional.json) passes
+2,121 floating-point and two integer checks with `tohost=0` after 3,509,428
+functional cycles. The [artifact verifier](evaluation/olmo3-full-depth-reduced-verification.json)
+checks the ELF, generated sources, reference code, simulator, configuration,
+and logs by SHA-256. Layout checking found 4,606 buffers on disjoint cache
+lines. The build occupies 45 MiB locally and peaked at 397 MiB RSS with one
+device compile job. It uses reduced FP32 widths, synthetic weights, and a
+three-token prompt; it is not a full OLMo-3-7B checkpoint run, a 4,097-token
+window-crossing execution, RTL timing, or an FPGA result. The Cyclotron cycle
+count is a functional ISA count rather than hardware latency.
+
+Reproduce the small device control with task-local `TMPDIR` and the Muon and
+Cyclotron paths set for your machine:
+
+```sh
+RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+  --model olmo3_7b --layers 4 --prefill 4 --decode-steps 2 \
+  --generation greedy --control-sliding-window 3 --token-ids 1 2 3 4 \
+  --device-check-all-stages --stages-per-object 20 \
+  --out-root "$TMPDIR/olmo3-local-control" --verify-native --build
+python3 kernels/model_chain/run_functional.py --models olmo3_7b \
+  --generated-root "$TMPDIR/olmo3-local-control" \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 100000000 --timeout 600 \
+  --out "$TMPDIR/olmo3-local-control/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$TMPDIR/olmo3-local-control/olmo3_7b/functional-result.json" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --config "$TMPDIR/olmo3-local-control/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/olmo3-7b.json \
+  --out "$TMPDIR/olmo3-local-control/olmo3_7b/verification.json"
+```
+
+Reproduce the full-depth reduced control with the same task-local `TMPDIR`:
+
+```sh
+python3 kernels/model_chain/check_olmo3_topology.py \
+  --out "$TMPDIR/olmo3-full-depth-topology-check.json"
+RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+  --model olmo3_7b --layers 32 --prefill 3 --decode-steps 2 \
+  --generation greedy --token-ids 1 2 3 --device-check-all-stages \
+  --stages-per-object 20 --native-rtol 0.001 --native-atol 0.0001 \
+  --out-root "$TMPDIR/olmo3-full-depth-reduced" --verify-native --build
+python3 kernels/model_chain/run_functional.py --models olmo3_7b \
+  --generated-root "$TMPDIR/olmo3-full-depth-reduced" \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 100000000 --timeout 1200 \
+  --out "$TMPDIR/olmo3-full-depth-reduced/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$TMPDIR/olmo3-full-depth-reduced/olmo3_7b/functional-result.json" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --config "$TMPDIR/olmo3-full-depth-reduced/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/olmo3-7b.json \
+  --out "$TMPDIR/olmo3-full-depth-reduced/olmo3_7b/verification.json"
+```
+
 ## Mistral held-out decoder control
 
 The held-out [Mistral-7B-v0.3 graph](../evaluation/llm/mistral-7b-v03-graph.json)

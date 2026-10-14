@@ -16,7 +16,7 @@ from split_decoder_weights import (image_segments, verify_image,
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
-          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03")
+          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03", "olmo3_7b")
 DEFAULT_MODELS = MODELS[:4]
 
 
@@ -101,7 +101,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "device_source_files", ["kernel.cpp"])]
     used_headers = {header for source in device_sources
                     for header in ("pipeline_tied.hpp", "pipeline_fp32_tied.hpp",
-                                   "pipeline_moe.hpp", "pipeline_select_last.hpp")
+                   "pipeline_moe.hpp", "pipeline_select_last.hpp",
+                   "pipeline_olmo.hpp")
                     if f'#include "{header}"' in source.read_text()}
     result = {
         "model": model,
@@ -134,6 +135,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "last_token_ops_sha256": (
             sha256(HERE / "pipeline_select_last.hpp")
             if "pipeline_select_last.hpp" in used_headers else None),
+        "olmo_ops_sha256": (sha256(HERE / "pipeline_olmo.hpp")
+                             if "pipeline_olmo.hpp" in used_headers else None),
         "quantized_ops_sha256": (sha256(HERE / "pipeline_int8.hpp")
                                  if manifest.get("checkpoint_weight_format") in
                                  ("int8_scaled", "int8_fp16_tied") else None),
@@ -154,8 +157,12 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "numpy_last_token_graph_reference_sha256": (
             sha256(ROOT / "kernels/evaluation/llm/last_token_graph_reference.py")
             if manifest.get("prefill_logits_policy") == "last" else None),
+        "numpy_olmo_graph_reference_sha256": (
+            sha256(ROOT / "kernels/evaluation/llm/olmo_graph_reference.py")
+            if model == "olmo3_7b" else None),
         "graph_builder_sha256": (sha256(ROOT / "kernels/evaluation/llm/stitch.py")
-                                  if model == "qwen3_30b_a3b" else None),
+                                  if model in ("qwen3_30b_a3b", "olmo3_7b")
+                                  else None),
         "model_specs_sha256": manifest["source_spec_sha256"],
         "source_config_sha256": manifest.get("source_config_sha256"),
         "simulator_sha256": sha256(simulator),
@@ -176,7 +183,9 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "reference_output_sha256": manifest.get("reference_output_sha256"),
         "stage_limit": manifest.get("stage_limit"),
         "prefill_logits_policy": manifest.get("prefill_logits_policy", "all"),
+        "control_sliding_window": manifest.get("control_sliding_window"),
         "native_check_tolerance": (None if checkpoint_weights else
+                                   manifest.get("native_check_tolerance") or
                                    {"rtol": 1e-4, "atol": 1e-5}),
         "device_check_tolerance": {"rtol": 5e-3, "atol": 5e-4},
         "rtl_execution": False,

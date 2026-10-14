@@ -28,6 +28,7 @@ import reference  # noqa: E402
 import stitch  # noqa: E402
 import moe_graph_reference  # noqa: E402
 import last_token_graph_reference  # noqa: E402
+import olmo_graph_reference  # noqa: E402
 from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
                         SafeTensorWeights, TiedFP16INT8GemmaWeights,
                         TiedINT8INT4GemmaWeights, TiedINT5INT6GemmaWeights)
@@ -36,7 +37,7 @@ from split_decoder_weights import image_segments, verify_image  # noqa: E402
 
 
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
-          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03")
+          "qwen3_0_6b", "qwen3_30b_a3b", "mistral_7b_v03", "olmo3_7b")
 
 
 def symbol(name: str) -> str:
@@ -161,6 +162,11 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
     elif op == "rope":
         tokens, heads, width = shape[1:]
         body = f"rope({ins[0]}, v_rope_cos, v_rope_sin, {out}, {batch}, {tokens}, {heads}, {width}, {attrs['position_start']}, tid, tpb)"
+    elif op == "reshape_heads":
+        body = f"reshape_heads({ins[0]}, {out}, {count}, tid, tpb)"
+    elif op == "rope_yarn":
+        tokens, heads, width = shape[1:]
+        body = f"rope({ins[0]}, v_olmo_cos, v_olmo_sin, {out}, {batch}, {tokens}, {heads}, {width}, {attrs['position_start']}, tid, tpb)"
     elif op == "kv_append":
         tokens = graph.tensors[stage["reads"][-1]]["shape"][1]
         past = shape[1] - tokens
@@ -236,7 +242,10 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              stage_limit: int | None = None,
              token_ids: list[int] | None = None,
              batch_clusters: int = 1,
-             prefill_logits: str = "all") -> Path:
+             prefill_logits: str = "all",
+             control_sliding_window: int | None = None,
+             native_rtol: float = 1e-4,
+             native_atol: float = 1e-5) -> Path:
     if device_opt not in ("O1", "O2", "O3"):
         raise ValueError(f"unsupported device optimization level: {device_opt}")
     if stages_per_object < 0:
@@ -247,11 +256,20 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("two-cluster builds use final and attention/activation checks")
     if prefill_logits not in ("all", "last"):
         raise ValueError("prefill logits must be all or last")
+    if not (0 < native_rtol <= 5e-3 and 0 < native_atol <= 5e-4):
+        raise ValueError("native tolerance must be positive and no looser than device checks")
+    if control_sliding_window is not None and (
+            model != "olmo3_7b" or control_sliding_window <= 0):
+        raise ValueError("the positive control sliding window is only for OLMo 3")
     external = checkpoint_dir is not None or weight_image is not None
     if external and (checkpoint_dir is None or weight_image is None):
         raise ValueError("checkpoint directory and weight image are both required")
     if external and model == "qwen3_30b_a3b":
         raise ValueError("Qwen3 MoE checkpoint weight-image export is not implemented")
+    if external and model == "olmo3_7b":
+        raise ValueError("OLMo 3 checkpoint weight-image export is not implemented")
+    if external and control_sliding_window is not None:
+        raise ValueError("the control sliding window requires synthetic weights")
     if stage_limit is not None and not external:
         raise ValueError("stage limit is only for checkpoint device probes")
     if external and (model not in MODELS or stages_per_object <= 0
@@ -273,6 +291,12 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     if not 1 <= layers <= specs[model]["num_hidden_layers"]:
         raise ValueError("layer count exceeds the pinned model")
     spec["num_hidden_layers"] = layers
+    if model == "olmo3_7b":
+        spec["layer_types"] = spec["layer_types"][:layers]
+        if len(spec["layer_types"]) != layers:
+            raise ValueError("OLMo 3 layer-type sequence is shorter than requested depth")
+        if control_sliding_window is not None:
+            spec["sliding_window"] = control_sliding_window
     graph = stitch.build(model, prefill=prefill, decode_steps=decode,
                          specs={model: spec}, generation=generation,
                          prefill_logits=prefill_logits)
@@ -356,6 +380,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         if model == "qwen3_30b_a3b":
             return moe_graph_reference.execute(
                 graph, inputs, retain=tuple(stage["writes"] for stage in graph.stages))
+        if model == "olmo3_7b":
+            return olmo_graph_reference.execute(graph, inputs, weights=weights)
         if prefill_logits == "last":
             return last_token_graph_reference.execute(
                 graph, inputs, weights=weights,
@@ -441,6 +467,15 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     angles = np.arange(max_position, dtype=np.float32)[:, None] * inv_freq
     declarations.append(array_decl("v_rope_cos", np.cos(angles), max_position * half))
     declarations.append(array_decl("v_rope_sin", np.sin(angles), max_position * half))
+    if model == "olmo3_7b":
+        inverse = olmo_graph_reference.yarn_frequencies(
+            spec["rope_scaling"], spec["rope_theta"], spec["head_dim"])
+        olmo_angles = np.arange(max_position, dtype=np.float32)[:, None] * inverse
+        factor = np.float32(spec["rope_scaling"]["attention_factor"])
+        declarations.append(array_decl("v_olmo_cos", np.cos(olmo_angles) * factor,
+                                       max_position * half))
+        declarations.append(array_decl("v_olmo_sin", np.sin(olmo_angles) * factor,
+                                       max_position * half))
     stage_src = []
     uses_int8 = external and image_manifest["dtype"] in ("int8_scaled", "int8_fp16_tied",
                                                         "int4_int8_tied",
@@ -458,6 +493,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                    for stage in graph.stages)
     uses_select_last = any(stage["op"] == "select_last_token"
                            for stage in graph.stages)
+    uses_olmo = model == "olmo3_7b"
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage),
@@ -491,6 +527,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                 if stage["op"] == "rope":
                     symbols["v_rope_cos"] = "float"
                     symbols["v_rope_sin"] = "float"
+                if stage["op"] == "rope_yarn":
+                    symbols["v_olmo_cos"] = "float"
+                    symbols["v_olmo_sin"] = "float"
             externs = "\n".join(f"extern __global {dtype} {name}[];"
                                 for name, dtype in sorted(symbols.items()))
             pointers = "\n".join(
@@ -502,6 +541,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                       + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
                       + ("#include \"pipeline_select_last.hpp\"\n"
                          if uses_select_last else "")
+                      + ("#include \"pipeline_olmo.hpp\"\n" if uses_olmo else "")
                       + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
                       + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
                       + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -666,7 +706,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         + (f" + {replica * ((count + 15) // 16 * 16)}u" if batch_clusters == 2
            else "") + f"] - {gold}[i]);\n"
         f"    if (delta > maximum) maximum = delta;\n"
-        f"    if (delta > 1e-4f * __builtin_fabsf({gold}[i]) + 1e-5f) ++errors;\n"
+        f"    if (delta > {literal(native_rtol)} * __builtin_fabsf({gold}[i]) + {literal(native_atol)}) ++errors;\n"
         f"  }}"
         for replica in range(batch_clusters)
         for out, gold, count in native_checks)
@@ -682,6 +722,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
               + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
               + ("#include \"pipeline_select_last.hpp\"\n"
                  if uses_select_last else "")
+              + ("#include \"pipeline_olmo.hpp\"\n" if uses_olmo else "")
               + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
               + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
               + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
@@ -715,6 +756,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}"
         + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
         + (f" {HERE / 'pipeline_select_last.hpp'}" if uses_select_last else "")
+        + (f" {HERE / 'pipeline_olmo.hpp'}" if uses_olmo else "")
         + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
         + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
         + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
@@ -725,6 +767,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + f": {HERE / 'pipeline_math.hpp'}"
            + (f" {HERE / 'pipeline_moe.hpp'}" if uses_moe else "")
            + (f" {HERE / 'pipeline_select_last.hpp'}" if uses_select_last else "")
+           + (f" {HERE / 'pipeline_olmo.hpp'}" if uses_olmo else "")
            + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
            + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
            + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
@@ -763,6 +806,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "buffers_cache_line_padded": True,
         "prefill_tokens": prefill, "decode_steps": decode,
         "prefill_logits_policy": prefill_logits,
+        "control_sliding_window": control_sliding_window,
         "input_token_ids": {name: tensor.ravel().tolist()
                             for name, tensor in sorted(inputs.items())},
         "token_sequence_explicit": token_ids is not None,
@@ -773,6 +817,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             if generation == "greedy" else None),
         "generation": generation, "stages": len(graph.stages),
         "device_check_all_stages": device_check_all_stages,
+        "native_check_tolerance": {"rtol": native_rtol, "atol": native_atol}
+        if not external else None,
         "batch_clusters": batch_clusters,
         "verified_tensors": (
             [stage["id"] for stage in graph.stages
@@ -860,6 +906,10 @@ def main() -> None:
                         default="teacher_forced")
     parser.add_argument("--prefill-logits", choices=("all", "last"), default="all",
                         help="project only the final prefill token in greedy Qwen3")
+    parser.add_argument("--control-sliding-window", type=int,
+                        help="short OLMo 3 local window for a reduced mask control")
+    parser.add_argument("--native-rtol", type=float, default=1e-4)
+    parser.add_argument("--native-atol", type=float, default=1e-5)
     parser.add_argument("--out-root", type=Path, default=HERE / "generated")
     parser.add_argument("--device-check-all-stages", action="store_true")
     parser.add_argument("--device-opt", choices=("O1", "O2", "O3"), default="O3")
@@ -883,7 +933,9 @@ def main() -> None:
                       args.device_check_all_stages, args.device_opt,
                       args.stages_per_object, args.checkpoint_dir,
                       args.weight_image, args.stage_limit, args.token_ids,
-                      args.batch_clusters, args.prefill_logits)
+                      args.batch_clusters, args.prefill_logits,
+                      args.control_sliding_window, args.native_rtol,
+                      args.native_atol)
     if args.verify_native and args.weight_image:
         parser.error("native C++ checking is not supported for external weight images")
     if args.verify_native or (args.build and args.weight_image is None):

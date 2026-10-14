@@ -499,6 +499,19 @@ The [saved result](olmo3-reduced-reference.json) checks all 273 stages across
 a four-token prefill and two cached decode tokens. The staged and direct
 NumPy outputs agree exactly, and the largest upstream logit difference is `1.79e-7`;
 upstream cached and full causal outputs agree within `2.24e-7`.
+The connected compiler's separate OLMo reference, bound to this same random
+weight fixture, differs from the staged graph by at most `2.44e-6` across
+all 273 stages. A [four-layer Radiance control](../../model_chain/README.md)
+also passes in Cyclotron using its own deterministic synthetic weights and a
+three-token local window.
+The [32-layer reduced Radiance control](../../model_chain/evaluation/olmo3-full-depth-reduced-functional.json)
+passes all 2,123 stage checks in Cyclotron with a three-token prefill and two
+greedy decode steps. Its [build](../../model_chain/evaluation/olmo3-full-depth-reduced-build.json)
+records the calibrated native FP32 tolerance and its
+[topology check](../../model_chain/evaluation/olmo3-full-depth-topology-check.json)
+matches the pinned stage dependencies. The short executed prompt does not
+cross the pinned 4,096-token local window, and the weights and widths are
+synthetic reduced controls.
 Forcing all four mapped layers to full attention changes the final logits by
 `0.227` in both NumPy paths, so the test detects a lost local mask. The separately calculated
 YaRN inverse frequencies are also checked against upstream. Reproduce with

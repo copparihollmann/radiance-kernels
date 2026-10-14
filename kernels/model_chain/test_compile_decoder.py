@@ -121,6 +121,31 @@ class DecoderCompilerTest(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 verify_native(target)
 
+    def test_olmo3_local_window_and_four_layer_prefix(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = generate("olmo3_7b", 4, 4, 2, "greedy", Path(temporary),
+                              device_check_all_stages=True, stages_per_object=20,
+                              token_ids=[1, 2, 3, 4], control_sliding_window=3,
+                              native_rtol=1e-3, native_atol=1e-4)
+            manifest = json.loads((target / "manifest.json").read_text())
+            self.assertEqual(manifest["layers"], 4)
+            self.assertEqual(manifest["stages"], 275)
+            self.assertEqual(manifest["control_sliding_window"], 3)
+            self.assertEqual(manifest["native_check_tolerance"],
+                             {"rtol": 1e-3, "atol": 1e-4})
+            self.assertIn("errors=0", verify_native(target))
+            source = target / "native.cpp"
+            original = source.read_text()
+            local = ", 3, 0.0f, tid, tpb);"
+            self.assertEqual(original.count(local), 9)
+            try:
+                source.write_text(original.replace(local, ", 0, 0.0f, tid, tpb);"))
+                with self.assertRaises(subprocess.CalledProcessError):
+                    verify_native(target)
+            finally:
+                source.write_text(original)
+            self.assertIn("errors=0", verify_native(target))
+
     def test_qwen3_moe_sparse_stages_join_prefill_and_greedy_decode(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = generate("qwen3_30b_a3b", 2, 3, 2, "greedy",

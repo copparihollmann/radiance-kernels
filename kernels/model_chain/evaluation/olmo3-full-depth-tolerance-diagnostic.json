@@ -1,0 +1,235 @@
+{
+  "schema": "radiance.olmo3-native-fp32-tolerance-diagnostic.v1",
+  "scope": "32-layer reduced-width synthetic FP32 native check, before device execution",
+  "status": "observed",
+  "stages_examined": 2121,
+  "strict_tolerance": {
+    "rtol": 0.0001,
+    "atol": 1e-05
+  },
+  "strict_failed_stages": 33,
+  "strict_failed_elements": 46,
+  "strict_max_abs_error": 0.000473022461,
+  "first_failure": {
+    "stage": "prefill.layer10.down_proj",
+    "flat_element_index": 57,
+    "actual": 0.0563560724,
+    "expected": 0.0563799143,
+    "abs_error": 2.38418579e-05
+  },
+  "tolerance_sweep": [
+    {
+      "rtol": 0.0001,
+      "atol": 1e-05,
+      "failed_elements": 46
+    },
+    {
+      "rtol": 0.001,
+      "atol": 0.0001,
+      "failed_elements": 0
+    },
+    {
+      "rtol": 0.002,
+      "atol": 0.0002,
+      "failed_elements": 0
+    },
+    {
+      "rtol": 0.005,
+      "atol": 0.0005,
+      "failed_elements": 0
+    }
+  ],
+  "sampled_prefill_layer_errors": {
+    "0": {
+      "q_proj": {
+        "max_abs_error": 0.0,
+        "failed_elements": 0
+      },
+      "q_norm": {
+        "max_abs_error": 1.19e-07,
+        "failed_elements": 0
+      },
+      "q_rope": {
+        "max_abs_error": 2.38e-07,
+        "failed_elements": 0
+      },
+      "attention": {
+        "max_abs_error": 1.12e-08,
+        "failed_elements": 0
+      },
+      "down_proj": {
+        "max_abs_error": 3.28e-07,
+        "failed_elements": 0
+      },
+      "ffn_residual": {
+        "max_abs_error": 1.19e-06,
+        "failed_elements": 0
+      }
+    },
+    "1": {
+      "q_proj": {
+        "max_abs_error": 1.91e-06,
+        "failed_elements": 0
+      },
+      "q_norm": {
+        "max_abs_error": 1.19e-06,
+        "failed_elements": 0
+      },
+      "q_rope": {
+        "max_abs_error": 1.55e-06,
+        "failed_elements": 0
+      },
+      "attention": {
+        "max_abs_error": 5.96e-07,
+        "failed_elements": 0
+      },
+      "down_proj": {
+        "max_abs_error": 6.2e-06,
+        "failed_elements": 0
+      },
+      "ffn_residual": {
+        "max_abs_error": 3.34e-06,
+        "failed_elements": 0
+      }
+    },
+    "5": {
+      "q_proj": {
+        "max_abs_error": 2.38e-06,
+        "failed_elements": 0
+      },
+      "q_norm": {
+        "max_abs_error": 9.54e-07,
+        "failed_elements": 0
+      },
+      "q_rope": {
+        "max_abs_error": 1.13e-06,
+        "failed_elements": 0
+      },
+      "attention": {
+        "max_abs_error": 9.54e-07,
+        "failed_elements": 0
+      },
+      "down_proj": {
+        "max_abs_error": 1.53e-05,
+        "failed_elements": 0
+      },
+      "ffn_residual": {
+        "max_abs_error": 5.72e-06,
+        "failed_elements": 0
+      }
+    },
+    "9": {
+      "q_proj": {
+        "max_abs_error": 4.53e-06,
+        "failed_elements": 0
+      },
+      "q_norm": {
+        "max_abs_error": 8.94e-07,
+        "failed_elements": 0
+      },
+      "q_rope": {
+        "max_abs_error": 1.13e-06,
+        "failed_elements": 0
+      },
+      "attention": {
+        "max_abs_error": 2.98e-06,
+        "failed_elements": 0
+      },
+      "down_proj": {
+        "max_abs_error": 1.98e-05,
+        "failed_elements": 0
+      },
+      "ffn_residual": {
+        "max_abs_error": 6.68e-06,
+        "failed_elements": 0
+      }
+    },
+    "10": {
+      "q_proj": {
+        "max_abs_error": 2.62e-06,
+        "failed_elements": 0
+      },
+      "q_norm": {
+        "max_abs_error": 9.54e-07,
+        "failed_elements": 0
+      },
+      "q_rope": {
+        "max_abs_error": 1.19e-06,
+        "failed_elements": 0
+      },
+      "attention": {
+        "max_abs_error": 5.25e-06,
+        "failed_elements": 0
+      },
+      "down_proj": {
+        "max_abs_error": 4.05e-05,
+        "failed_elements": 1
+      },
+      "ffn_residual": {
+        "max_abs_error": 6.68e-06,
+        "failed_elements": 0
+      }
+    },
+    "11": {
+      "q_proj": {
+        "max_abs_error": 4.41e-06,
+        "failed_elements": 0
+      },
+      "q_norm": {
+        "max_abs_error": 1.43e-06,
+        "failed_elements": 0
+      },
+      "q_rope": {
+        "max_abs_error": 1.73e-06,
+        "failed_elements": 0
+      },
+      "attention": {
+        "max_abs_error": 5.93e-06,
+        "failed_elements": 0
+      },
+      "down_proj": {
+        "max_abs_error": 4.39e-05,
+        "failed_elements": 1
+      },
+      "ffn_residual": {
+        "max_abs_error": 7.63e-06,
+        "failed_elements": 0
+      }
+    },
+    "12": {
+      "q_proj": {
+        "max_abs_error": 8.11e-06,
+        "failed_elements": 0
+      },
+      "q_norm": {
+        "max_abs_error": 2.03e-06,
+        "failed_elements": 0
+      },
+      "q_rope": {
+        "max_abs_error": 2.8e-06,
+        "failed_elements": 0
+      },
+      "attention": {
+        "max_abs_error": 4.35e-06,
+        "failed_elements": 0
+      },
+      "down_proj": {
+        "max_abs_error": 4.39e-05,
+        "failed_elements": 0
+      },
+      "ffn_residual": {
+        "max_abs_error": 8.11e-06,
+        "failed_elements": 0
+      }
+    }
+  },
+  "pinned_source_config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
+  "strict_native_log_sha256": "e300899206e4c25c11f4c734d787431ac6157e617c54fc0da30a793e48add0d0",
+  "diagnostic_elf_sha256": "3a137a6be5ddf604af260e3cab186751335ce02f60c334b4ea7249ef98f87ba3",
+  "diagnostic_source_sha256": "d9fa7e43257d643c17bd796d28d91ec4a8a4bbe4e6ed00dc559fa93c0c1b495c",
+  "diagnostic_gdb_script_sha256": "551e5c8a41f9289a2e8824f8f7255950edb6d33616887b00c31b40acbd80a0bf",
+  "diagnostic_gdb_log_sha256": "05db658e89f224a08ca6b689b3d0638d83b6aeaf57143677c652f5420b0564b2",
+  "analysis": "Errors begin below native threshold in the first projection norm and grow across depth; accumulated FP32 evaluation-order differences are the leading explanation. This is an inference from the stage error pattern.",
+  "rtl_execution": false,
+  "performance_measurement": false
+}

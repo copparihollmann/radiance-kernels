@@ -14,6 +14,7 @@ import torch
 import transformers
 
 from stitch import build, model_specs
+import olmo_graph_reference
 
 
 CONFIG = Path(__file__).parent / "inputs/olmo3-7b.json"
@@ -137,6 +138,26 @@ def parameter_key(name: str) -> str:
     raise ValueError(f"unknown graph parameter {name}")
 
 
+class GraphWeights:
+    """Present the upstream fixture's row-major tensors to the graph oracle."""
+
+    def __init__(self, tensors: dict[str, np.ndarray]):
+        self.tensors = tensors
+
+    def __call__(self, logical: str, shape: tuple[int, ...]) -> np.ndarray:
+        tensor = self.tensors[parameter_key(logical)]
+        value = tensor.T if tensor.ndim == 2 else tensor
+        if value.shape != shape:
+            raise ValueError(f"{logical}: fixture shape {value.shape} != {shape}")
+        return value
+
+    def embedding_row(self, logical: str, token: int, width: int) -> np.ndarray:
+        row = self.tensors[parameter_key(logical)][token]
+        if row.shape != (width,):
+            raise ValueError(f"{logical}: fixture embedding width differs")
+        return row
+
+
 def execute_graph(graph, inputs: dict[str, np.ndarray],
                   tensors: dict[str, np.ndarray],
                   *, force_full_attention: bool = False) -> dict[str, np.ndarray]:
@@ -244,6 +265,12 @@ def check() -> dict:
     inputs = {f"{name}.token_ids": phase[None, :] for name, phase in
               zip(("prefill", "decode0", "decode1"), phases)}
     graph_values = execute_graph(graph, inputs, tensors)
+    compiler_values = olmo_graph_reference.execute(
+        graph, inputs, weights=GraphWeights(tensors))
+    compiler_reference_error = max(
+        float(np.max(np.abs(compiler_values[stage["writes"]] -
+                            graph_values[stage["writes"]])))
+        for stage in graph.stages)
     mapped_cache = None
     upstream_cache = None
     comparisons = []
@@ -277,13 +304,14 @@ def check() -> dict:
         incorrect_graph[graph.outputs[-1]][0, -1] - full)))
     cached_full_error = float(np.max(np.abs(expected[-1] - full)))
     passed = (all(row["allclose_atol_1e-5_rtol_1e-5"] for row in comparisons)
+              and compiler_reference_error < 1e-5
               and cached_full_error < 1e-5 and incorrect_delta > 1e-4
               and yarn_error < 1e-6 and incorrect_graph_delta > 1e-4
               and all(row["graph_vs_direct_max_abs_error"] < 1e-5
                       for row in comparisons))
     return {
         "status": "passed" if passed else "failed",
-        "scope": "four-layer random-weight OLMo 3 staged graph, direct mapping, and upstream prefill/cached decode; no checkpoint or Radiance execution",
+        "scope": "four-layer random-weight OLMo 3 staged graph, compiler reference, direct mapping, and upstream prefill/cached decode; no checkpoint or Radiance execution",
         "pinned_config_sha256": hashlib.sha256(config_bytes).hexdigest(),
         "source_model": "allenai/Olmo-3-7B-Instruct",
         "small_config": {key: small[key] for key in (
@@ -294,6 +322,9 @@ def check() -> dict:
         "transformers_version": transformers.__version__,
         "seed": 23, "token_ids": ids.tolist(),
         "graph_stage_count": len(graph.stages),
+        "compiler_reference_stage_max_abs_error": compiler_reference_error,
+        "compiler_reference_source_sha256": hashlib.sha256(
+            Path(olmo_graph_reference.__file__).read_bytes()).hexdigest(),
         "comparisons": comparisons,
         "upstream_cached_vs_full_max_abs_error": cached_full_error,
         "yarn_inverse_frequency_max_abs_error": yarn_error,

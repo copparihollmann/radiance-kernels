@@ -53,6 +53,11 @@ def verify(result_path: Path, simulator: Path, config: Path,
             or result["prefill_tokens"] != manifest["prefill_tokens"]
             or result["decode_steps"] != manifest["decode_steps"]):
         raise ValueError("receipt does not cover every compiled stage")
+    if result.get("native_check_tolerance") != (
+            None if result["checkpoint_weights"] else
+            manifest.get("native_check_tolerance") or
+            {"rtol": 1e-4, "atol": 1e-5}):
+        raise ValueError("native-check tolerance differs from build manifest")
 
     elf = target / "kernel.radiance.elf"
     same(elf, result["device_elf_sha256"], "device ELF")
@@ -70,6 +75,7 @@ def verify(result_path: Path, simulator: Path, config: Path,
     for key, name in (("quantized_ops_sha256", "pipeline_int8.hpp"),
                       ("moe_ops_sha256", "pipeline_moe.hpp"),
                       ("last_token_ops_sha256", "pipeline_select_last.hpp"),
+                      ("olmo_ops_sha256", "pipeline_olmo.hpp"),
                       ("tied_embedding_ops_sha256", "pipeline_tied.hpp"),
                       ("fp32_tied_ops_sha256", "pipeline_fp32_tied.hpp"),
                       ("packed_ops_sha256", "pipeline_packed.hpp")):
@@ -81,6 +87,8 @@ def verify(result_path: Path, simulator: Path, config: Path,
                       ("numpy_moe_stage_ops_sha256", "moe_ops.py"),
                       ("numpy_last_token_graph_reference_sha256",
                        "last_token_graph_reference.py"),
+                      ("numpy_olmo_graph_reference_sha256",
+                       "olmo_graph_reference.py"),
                       ("graph_builder_sha256", "stitch.py")):
         if result.get(key):
             same(ROOT / "kernels/evaluation/llm" / name, result[key], name)
@@ -94,6 +102,13 @@ def verify(result_path: Path, simulator: Path, config: Path,
                 ("last_token_ops_sha256",
                  "numpy_last_token_graph_reference_sha256")):
             raise ValueError("last-logit receipt lacks its graph or device sources")
+    if result["model"] == "olmo3_7b":
+        if (result.get("control_sliding_window") !=
+                manifest.get("control_sliding_window") or
+                any(not result.get(key) for key in
+                    ("olmo_ops_sha256", "numpy_olmo_graph_reference_sha256",
+                     "graph_builder_sha256"))):
+            raise ValueError("OLMo 3 receipt lacks schedule or operation sources")
     same(ROOT / "kernels/evaluation/llm/pr1-models.json",
          result["model_specs_sha256"], "model specs")
     if source_config is not None:
