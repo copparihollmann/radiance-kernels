@@ -399,6 +399,16 @@ pinned implementation. Reproduce with
 kernels/evaluation/llm/nemotron-source-audit.json`; the script fetches only
 the pinned 79 KB modeling file into memory.
 
+The installed Transformers 5.3.0 is also not a drop-in numerical reference
+for this checkpoint. [`check_nemotron_config.py`](check_nemotron_config.py)
+passes the pinned config to its `NemotronHConfig.from_dict`; the
+[recorded result](nemotron-config-compatibility.json) is `KeyError: '-'`
+because this version's legacy-pattern parser does not accept MLP-only
+blocks. That check uses about 247 MB peak RAM and loads no weights. A valid
+numerical check needs a compatible implementation or a reviewed adapter
+that preserves the 17 MLP-only blocks and fixes the cache handoff, followed
+by prefill/decode comparisons against real checkpoint outputs.
+
 ### OLMo 3 local/global attention control
 
 [`verify_olmo3_reduced.py`](verify_olmo3_reduced.py) executes the emitted

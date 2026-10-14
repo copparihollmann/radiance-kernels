@@ -1,0 +1,16 @@
+{
+  "schema": "radiance.nemotron-config-compatibility.v1",
+  "model": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+  "revision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+  "config_sha256": "fde9241f66cd414458df444a80eb535f53aef2b4b240a91f092e651fa6f27219",
+  "transformers_version": "5.3.0",
+  "pattern_symbols": [
+    "*",
+    "-",
+    "M"
+  ],
+  "status": "incompatible",
+  "exception": "KeyError",
+  "detail": "'-'",
+  "scope": "config parser only; no weights or model execution"
+}
