@@ -234,6 +234,42 @@ the standard nightly `kernel_cycles` field is 32-bit and should not be used
 for these long model chains. This depends on the target image implementing
 the `mcycleh` CSR present in the current Radiance source.
 
+For the 2 GiB GPU map in the public HBM configuration, SmolVLA's FP32 image
+fits if its two weight segments and exact input image are moved below the warp
+stacks. `relocate_images.py` verifies the original bytes and rejects overlaps
+with the device ELF, stacks, other images, or the declared GPU limit. The
+output manifests use symlinks to the original bytes; the final packaged ELF
+is self-contained. Rebuild the SmolVLA device program with the relocated
+manifests because its stage code contains absolute parameter addresses:
+
+```sh
+python3 kernels/model_chain/relocate_images.py \
+  --image /path/to/smolvla/weights-image.json \
+  --image /path/to/smolvla-inputs/inputs-image.json \
+  --base 0x14000000 --base 0x62b8c000 --base 0x01000000 \
+  --device-elf /path/to/smolvla/kernel.radiance.elf \
+  --gpu-size 0x80000000 --out-dir /path/to/compact-images
+python3 kernels/model_chain/compile_smolvla.py \
+  --weight-image /path/to/compact-images/image-0.json \
+  --input-image /path/to/compact-images/image-1.json \
+  --golden-output kernels/evaluation/llm/smolvla-policy-fp32-results.json \
+  --out-root /path/to/compact-build --build
+python3 kernels/model_chain/prepare_hbm.py \
+  --source /path/to/compact-build/smolvla_base \
+  --out /path/to/compact-hbm --build
+python3 kernels/model_chain/package_firesim.py \
+  --elf /path/to/compact-hbm/kernel.soc.elf \
+  --image /path/to/compact-images/image-0.json \
+  --image /path/to/compact-images/image-1.json \
+  --hash-size 0x80000000 --hash-unit 32 --hash-slices 4 \
+  --output /path/to/smolvla-base-2g-hbm.soc.elf
+```
+
+This placement ends at GPU offset `0x74052680`. Check the generated device
+ELF's load segments against the relocated manifests again after rebuilding,
+and verify the packaged ELF with `package_firesim.py --verify`. The October 11
+XB10 bitstream's exact HWDB and FPGA execution remain to be checked.
+
 ### Full-depth checkpoint builds
 
 `export_decoder_fp16.py` stores linear and embedding weights as IEEE FP16,
