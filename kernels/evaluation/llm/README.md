@@ -343,7 +343,9 @@ checkpoint's saved embedding and output head were then compared element by
 element. The [full-checkpoint upstream check](qwen3-checkpoint-reference.json)
 compares one-token prefill and greedy cached decode against Transformers
 5.3.0 in FP32: the largest logit error is `2.96e-5`, and the selected token
-agrees. An original-width, 28-layer Radiance ELF builds with a converted FP16
+agrees. A [three-token prefill, two-step greedy check](qwen3-checkpoint-multitoken-reference.json)
+also matches upstream with at most `2.10e-5` logit error and the same two
+selected tokens. An original-width, 28-layer Radiance ELF builds with a converted FP16
 weight image, and a seven-stage real-weight prefix passes Cyclotron; see the
 [checkpoint-weight device record](../../model_chain/README.md#qwen3-checkpoint-weight-path).
 The complete full-weight device run remains pending.

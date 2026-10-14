@@ -136,6 +136,13 @@ prefill and greedy decode logits differ by at most `2.96e-5`, and both select
 the same token. The upstream cached decode also agrees with an upstream full
 causal pass to `2.49e-5`. Transformers loads its two saved matrices as
 separate storage, while their values are exactly equal as checked above.
+The [three-token prefill and two-step greedy check](../evaluation/llm/qwen3-checkpoint-multitoken-reference.json)
+runs a 1,607-stage connected graph and compares its output logits with upstream
+execution. Both paths select
+tokens `[16, 8]`; the largest logit error across prefill and decode is
+`2.10e-5`, and upstream cached versus full causal output differs by at most
+`1.43e-5`. This is a full-weight software check. The full-dimension device
+program above still uses the shorter one-token case.
 The complete device run is still pending. Cyclotron functional cycles are
 not hardware latency or utilization.
 
@@ -156,6 +163,9 @@ python3 kernels/model_chain/compile_decoder.py \
 python3 kernels/evaluation/llm/verify_qwen3_checkpoint.py \
   --checkpoint-dir "$CHECKPOINT" --input-token 5 \
   --out "$BUILD/qwen3-checkpoint-reference.json"
+python3 kernels/evaluation/llm/verify_qwen3_checkpoint.py \
+  --checkpoint-dir "$CHECKPOINT" --prefill-ids 5 6 7 --decode-steps 2 \
+  --out "$BUILD/qwen3-checkpoint-multitoken-reference.json"
 ```
 
 The upstream FP32 comparison reused the same checkpoint file and reached
