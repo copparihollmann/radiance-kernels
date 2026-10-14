@@ -19,6 +19,10 @@ work, not measured results in this report.
 
 - [STREAM](stream/README.md): Copy, Scale, Add, and Triad, each measured on
   1,048,576 float32 elements.
+- [Nightly HBM STREAM](nightly/stream/README.md): the same four operations
+  built at one million elements for one and two SMs. The device arithmetic and
+  partitioning have Cyclotron controls; XB10 correctness and timing remain to
+  be measured.
 - [Spatter](spatter/README.md): Gather, Scatter, GatherScatter (GS),
   MultiGather, and MultiScatter. Each original GPU STREAM suite case has 256
   pattern entries and 1,024 repetitions.
