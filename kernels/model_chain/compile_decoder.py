@@ -27,7 +27,8 @@ sys.path.insert(0, str(ROOT / "kernels/evaluation/llm"))
 import reference  # noqa: E402
 import stitch  # noqa: E402
 from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
-                        SafeTensorWeights, TiedFP16INT8GemmaWeights)
+                        SafeTensorWeights, TiedFP16INT8GemmaWeights,
+                        TiedINT8INT4GemmaWeights)
 from export_decoder_weights import WARP_STACK_BOTTOM, WARP_STACK_TOP  # noqa: E402
 from split_decoder_weights import image_segments, verify_image  # noqa: E402
 
@@ -110,7 +111,11 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
         body = f"rmsnorm({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['epsilon'])}, tid, tpb)"
     elif op == "linear":
         k, n = attrs["weight_shape"]
-        if parameter_dtype == "int8_scaled":
+        if parameter_dtype == "int4_scaled":
+            body = f"linear_i4({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
+        elif parameter_dtype == "int8_tied":
+            body = f"linear_i8_tied({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
+        elif parameter_dtype == "int8_scaled":
             body = f"linear_i8({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
         elif parameter_dtype == "fp16_tied":
             body = f"linear_f16_tied({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
@@ -211,7 +216,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         image_manifest = json.loads(weight_image.read_text())
         if (image_manifest["model"] != model or image_manifest["layers"] != layers
                 or image_manifest["dtype"] not in ("fp32", "mixed_fp16", "int8_scaled",
-                                                   "int8_fp16_tied")
+                                                   "int8_fp16_tied", "int4_int8_tied")
                 or not image_manifest["checkpoint_weights"]
                 or image_manifest["gpu_end_address_exclusive"] > (1 << 32)):
             raise ValueError("weight image does not match the full-dimension graph")
@@ -251,6 +256,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                                             spec["family"])
         provider = (MixedFP16Weights(source_provider)
                     if image_manifest["dtype"] == "mixed_fp16" else
+                    TiedINT8INT4GemmaWeights(source_provider)
+                    if image_manifest["dtype"] == "int4_int8_tied" else
                     TiedFP16INT8GemmaWeights(source_provider)
                     if image_manifest["dtype"] == "int8_fp16_tied" else
                     QuantizedINT8Weights(source_provider)
@@ -271,7 +278,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     values = reference.execute(graph, inputs, weights=provider)
     quantization_comparison = None
     if external and image_manifest["dtype"] in ("mixed_fp16", "int8_scaled",
-                                                 "int8_fp16_tied"):
+                                                 "int8_fp16_tied", "int4_int8_tied"):
         unquantized = reference.execute(graph, inputs, weights=source_provider)
         quantization_comparison = {}
         for name in graph.outputs:
@@ -340,8 +347,11 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     declarations.append(array_decl("v_rope_cos", np.cos(angles), max_position * half))
     declarations.append(array_decl("v_rope_sin", np.sin(angles), max_position * half))
     stage_src = []
-    uses_int8 = external and image_manifest["dtype"] in ("int8_scaled", "int8_fp16_tied")
-    uses_tied = external and image_manifest["dtype"] == "int8_fp16_tied"
+    uses_int8 = external and image_manifest["dtype"] in ("int8_scaled", "int8_fp16_tied",
+                                                        "int4_int8_tied")
+    uses_int4 = external and image_manifest["dtype"] == "int4_int8_tied"
+    uses_tied = external and image_manifest["dtype"] in ("int8_fp16_tied",
+                                                         "int4_int8_tied")
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage)))
@@ -378,11 +388,12 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                                 for name, dtype in sorted(symbols.items()))
             pointers = "\n".join(
                 f"#define {name} ((const __global "
-                f"{'uint16_t' if dtype in ('fp16', 'fp16_tied') else 'int8_t' if dtype == 'int8_scaled' else 'float'}*)0x{address:08x}u)"
+                f"{'uint16_t' if dtype in ('fp16', 'fp16_tied') else 'uint8_t' if dtype == 'int4_scaled' else 'int8_t' if dtype in ('int8_scaled', 'int8_tied') else 'float'}*)0x{address:08x}u)"
                 for name, (address, dtype) in sorted(external_params.items()))
             source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
                       "#include <stdint.h>\n#include \"pipeline_math.hpp\"\n"
                       + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
+                      + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
                       + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
                       + externs + "\n" + pointers + "\n"
                       + "\n".join(item.replace("static void stage_", "void stage_", 1)
@@ -515,6 +526,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
            "#include \"pipeline_math.hpp\"\n"
            + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
+           + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
            + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
            + "extern \"C\" uint32_t __mu_num_warps = 1;\n"
            + device_declarations + "\n" + device_stages + "\n" + verify_prototypes +
@@ -537,6 +549,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     native = ("#include <stdint.h>\n#include <stdio.h>\n"
               "#include \"pipeline_math.hpp\"\n"
               + ("#include \"pipeline_int8.hpp\"\n" if uses_int8 else "")
+              + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
               + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
               + "\n".join(part.replace("__global ", "")
                           for part in declarations + ([] if device_check_all_stages else native_extra))
@@ -564,11 +577,13 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         f"include {ROOT / 'kernels/common.mk'}\n"
         f"kernel.mu.o: {HERE / 'pipeline_math.hpp'}"
         + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
+        + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
         + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
         + "\n"
         + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
            + f": {HERE / 'pipeline_math.hpp'}"
            + (f" {HERE / 'pipeline_int8.hpp'}" if uses_int8 else "")
+           + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
            + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
            + "\n" if stage_files else ""))
     manifest = {

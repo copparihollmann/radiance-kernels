@@ -172,6 +172,75 @@ def quantize_per_channel(value: np.ndarray, operation: str) -> tuple[np.ndarray,
     }
 
 
+def quantize_int4_per_channel(value: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Pack signed [-7, 7] nibbles from row-major W[K,N], low nibble first."""
+    if value.ndim != 2 or not np.isfinite(value).all():
+        raise ValueError("per-column INT4 requires a finite linear matrix")
+    maxima = np.zeros(value.shape[1], dtype=np.float32)
+    for start in range(0, value.shape[0], 64):
+        maxima = np.maximum(maxima,
+                            np.abs(value[start:start + 64]).max(axis=0))
+    scales = np.where(maxima == 0.0, 1.0, maxima / 7.0).astype("<f4")
+    signed = np.empty(value.shape, dtype=np.int8)
+    maximum_error = 0.0
+    changed = 0
+    for start in range(0, value.shape[0], 64):
+        stop = min(start + 64, value.shape[0])
+        block = value[start:stop]
+        part = np.rint(block / scales).clip(-7, 7).astype(np.int8)
+        signed[start:stop] = part
+        delta = np.abs(part.astype(np.float32) * scales - block)
+        maximum_error = max(maximum_error, float(delta.max()))
+        changed += int(np.count_nonzero(delta))
+    flat = signed.reshape(-1)
+    packed = np.zeros((flat.size + 1) // 2, dtype=np.uint8)
+    packed[:flat[::2].size] = (flat[::2] & 0x0f).astype(np.uint8)
+    packed[:flat[1::2].size] |= ((flat[1::2] & 0x0f) << 4).astype(np.uint8)
+    return packed, scales, {
+        "roundtrip_changed_elements": changed,
+        "roundtrip_max_abs_error": maximum_error,
+    }
+
+
+def unpack_int4(packed: np.ndarray, count: int) -> np.ndarray:
+    raw = np.empty(packed.size * 2, dtype=np.uint8)
+    raw[::2] = packed & 0x0f
+    raw[1::2] = packed >> 4
+    signed = raw[:count].astype(np.int8)
+    signed[signed >= 8] -= 16
+    return signed
+
+
+def quantize_int4_groupwise(value: np.ndarray, group_size: int = 32
+                            ) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Signed INT4 W[K,N], with a separate scale per K group and output."""
+    if value.ndim != 2 or group_size <= 0 or not np.isfinite(value).all():
+        raise ValueError("groupwise INT4 requires a finite linear matrix")
+    k, n = value.shape
+    scales = np.empty(((k + group_size - 1) // group_size, n), dtype="<f4")
+    signed = np.empty(value.shape, dtype=np.int8)
+    maximum_error = 0.0
+    changed = 0
+    for group, start in enumerate(range(0, k, group_size)):
+        block = value[start:start + group_size]
+        maxima = np.abs(block).max(axis=0)
+        scale = np.where(maxima == 0.0, 1.0, maxima / 7.0).astype("<f4")
+        scales[group] = scale
+        part = np.rint(block / scale).clip(-7, 7).astype(np.int8)
+        signed[start:start + group_size] = part
+        delta = np.abs(part.astype(np.float32) * scale - block)
+        maximum_error = max(maximum_error, float(delta.max()))
+        changed += int(np.count_nonzero(delta))
+    flat = signed.reshape(-1)
+    packed = np.zeros((flat.size + 1) // 2, dtype=np.uint8)
+    packed[:flat[::2].size] = (flat[::2] & 0x0f).astype(np.uint8)
+    packed[:flat[1::2].size] |= ((flat[1::2] & 0x0f) << 4).astype(np.uint8)
+    return packed, scales, {
+        "roundtrip_changed_elements": changed,
+        "roundtrip_max_abs_error": maximum_error,
+    }
+
+
 class QuantizedINT8Weights:
     """Numerical reference for the device's per-channel INT8 checkpoint image."""
 
@@ -206,3 +275,38 @@ class TiedFP16INT8GemmaWeights(QuantizedINT8Weights):
 
     def embedding_row(self, logical: str, row: int, width: int) -> np.ndarray:
         return self.source.embedding_row(logical, row, width).astype(np.float16).astype(np.float32)
+
+
+class TiedINT8INT4GemmaWeights(QuantizedINT8Weights):
+    """Reference for INT8 embedding/attention and INT4 feed-forward weights."""
+
+    def __call__(self, logical: str, shape: tuple[int, ...]) -> np.ndarray:
+        if logical == "lm_head":
+            table = self.source("lm_head", shape).T
+            packed, scales, _ = quantize_per_channel(table, "embedding")
+            return (packed.astype(np.float32) * scales[:, None]).T
+        if logical.endswith(("norm", "_bias")):
+            return self.source(logical, shape)
+        value = self.source(logical, shape)
+        if logical.endswith(("q_proj", "k_proj", "v_proj", "o_proj")):
+            packed, scales, _ = quantize_per_channel(value, "linear")
+            return packed.astype(np.float32) * scales
+        packed, scales, _ = quantize_int4_per_channel(value)
+        signed = unpack_int4(packed, value.size).reshape(value.shape)
+        return signed.astype(np.float32) * scales
+
+
+class TiedINT8GroupINT4GemmaWeights(TiedINT8INT4GemmaWeights):
+    """Reference for INT8 attention and group-32 INT4 feed-forward weights."""
+
+    def __call__(self, logical: str, shape: tuple[int, ...]) -> np.ndarray:
+        if not logical.endswith(("gate_proj", "up_proj", "down_proj")):
+            return super().__call__(logical, shape)
+        value = self.source(logical, shape)
+        packed, scales, _ = quantize_int4_groupwise(value)
+        signed = unpack_int4(packed, value.size).reshape(value.shape)
+        result = np.empty(value.shape, dtype=np.float32)
+        for group, start in enumerate(range(0, value.shape[0], 32)):
+            stop = min(start + 32, value.shape[0])
+            result[start:stop] = signed[start:stop].astype(np.float32) * scales[group]
+        return result

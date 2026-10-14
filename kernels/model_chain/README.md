@@ -291,6 +291,23 @@ Radiance and nightly HBM source ELFs compile and the 2 GiB compact-hash
 FireSim packages pass local reconstruction checks. Hardware correctness and
 performance remain unmeasured for these builds.
 
+Gemma needs a smaller image for this map. `export_gemma_int4_tied.py` keeps
+the shared input/output embedding and attention matrices in INT8, packs the
+feed-forward matrices in signed INT4, and leaves norms in FP32. The full
+26-layer image is 1,790,800,896 bytes and ends at `0x7edd7400`, below the
+reserved stacks. A full 1,496-stage greedy Radiance ELF compiled, and its
+image does not overlap the program. This is a **feasibility build**, not a
+validated Gemma workload: its two tokens are `[5231, 651]`, while the pinned
+checkpoint produces `[109, 235287]`. A group-32 INT4 numerical reference
+also differs, producing `[235248, 109]`. The measured comparisons and image
+hashes are in [the weight-format trials](evaluation/gemma-2g-weight-format-trials.json).
+`evaluate_gemma_group32.py --checkpoint-dir /path/to/pinned/Gemma/snapshot`
+repeats the group-32 reference check without exporting another image. It used
+about 7.5 GiB of peak RAM in the recorded run.
+Do not use these INT4 conversions to report Gemma inference performance. The
+original full checkpoint build remains available for a GPU memory map large
+enough to hold it; the actual XB10 bitstream map must be checked first.
+
 ### Full-depth checkpoint builds
 
 `export_decoder_fp16.py` stores linear and embedding weights as IEEE FP16,

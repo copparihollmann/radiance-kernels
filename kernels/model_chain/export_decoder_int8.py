@@ -22,7 +22,7 @@ from export_decoder_weights import ALIGNMENT, SafeTensorWeights, parameter_specs
 from export_decoder_fp16 import FIRST_BASE, SECOND_BASE, SECOND_LIMIT
 from split_decoder_weights import STACK_BOTTOM, STACK_TOP, verify_image
 from stitch import build, model_specs
-from checkpoint import quantize_per_channel as quantize
+from checkpoint import quantize_int4_per_channel, quantize_per_channel as quantize
 
 
 HERE = Path(__file__).resolve().parent
@@ -177,6 +177,8 @@ def export(layout: dict, checkpoint_dir: Path, output_dir: Path) -> dict:
                         else:
                             metric = {"roundtrip_changed_elements": 0,
                                       "roundtrip_max_abs_error": 0.0}
+                    elif item["storage_dtype"] == "int4_scaled":
+                        packed, scales, metric = quantize_int4_per_channel(value)
                     else:
                         packed, scales, metric = quantize(value, item["operation"])
                     raw = memoryview(np.ascontiguousarray(packed)).cast("B")

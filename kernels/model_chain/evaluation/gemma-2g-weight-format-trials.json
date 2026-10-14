@@ -1,0 +1,113 @@
+{
+  "model": "gemma_2_2b_it",
+  "pinned_checkpoint_config_sha256": "eacec6c5ca317a87ed2c46789d9705b9274db5027e7ba59da739bfae23addb55",
+  "pinned_checkpoint_files_sha256": {
+    "model-00001-of-00002.safetensors": "532d792c9178805064170a3ec485b7dedbfccc6fd297b92c31a6091b6c7e41bf",
+    "model-00002-of-00002.safetensors": "6d6d9ce84db398fb6e0191f91542e5da0a73da2cb695e172a24edc2146dc8d20",
+    "model.safetensors.index.json": "ada0043f3e3b2e5ab2f445cad9c0fbbf9d91ad444675e6a82b822591c63abf5a"
+  },
+  "scope": "fixed [2,100] prefill plus two greedy tokens on the full 26-layer graph",
+  "hardware_execution": false,
+  "target_gpu_size_bytes": 2147483648,
+  "trials": [
+    {
+      "weight_format": "tied_INT8_embedding_INT4_body_per_output",
+      "image_size_bytes": 1606775808,
+      "gpu_base_address": 335544320,
+      "gpu_end_address_exclusive": 1942320128,
+      "image_sha256": "aee896b98d0b19f2c3d5df750b448abfd6ab295fcdb5dd393b93121b3957631c",
+      "image_parameters": 288,
+      "reference_generated_token_ids": [
+        5231,
+        651
+      ],
+      "original_checkpoint_generated_token_ids": [
+        109,
+        235287
+      ],
+      "tokens_match_original": false,
+      "quantization_comparison": {
+        "prefill.logit_softcap": {
+          "max_abs_error": 12.450080037117004,
+          "rms_error": 1.98946998381451,
+          "reference_sha256": "a035a1d842158c73a0d98a7c27a5d8b4282473f80fb22dde06736b8c7af965cb",
+          "quantized_sha256": "38e762e2caae69a2398a0bd576b569e711d71b34c1b151c0b710c386576e6ed4",
+          "top1_equal": false
+        },
+        "decode0.logit_softcap": {
+          "max_abs_error": 14.547657012939453,
+          "rms_error": 5.141062948810047,
+          "reference_sha256": "1464a6051ee46f9349d847a9eb2d6b84399516664152b69e48c5e24c768d8369",
+          "quantized_sha256": "6629b62521fcd2e4f18056f2b6c6ac7be364c8d56707cfac878548754449217a",
+          "top1_equal": false
+        },
+        "decode1.logit_softcap": {
+          "max_abs_error": 17.641884565353394,
+          "rms_error": 3.60036898180375,
+          "reference_sha256": "1bd1f74a43efa7c9bc207f98ad806c2e1cce1a63aa009f43e356ea3ecf24763f",
+          "quantized_sha256": "3823f644b3a428964c3d2fc0b12b448020c42ed4ddf379a392cd685a6d9b4ca5",
+          "top1_equal": false
+        }
+      },
+      "radiance_elf_sha256": null,
+      "soc_elf_sha256": null
+    },
+    {
+      "weight_format": "tied_INT8_embedding_attention_INT4_FFN_per_output",
+      "image_size_bytes": 1790800896,
+      "gpu_base_address": 337641472,
+      "gpu_end_address_exclusive": 2128442368,
+      "image_sha256": "6c1cff5816c270cf4ae2c7d67e1410985d5e737aa70114c1f76bf670c2a8732c",
+      "image_parameters": 288,
+      "reference_generated_token_ids": [
+        5231,
+        651
+      ],
+      "original_checkpoint_generated_token_ids": [
+        109,
+        235287
+      ],
+      "tokens_match_original": false,
+      "quantization_comparison": {
+        "prefill.logit_softcap": {
+          "max_abs_error": 11.779714107513428,
+          "rms_error": 1.411133536111265,
+          "reference_sha256": "a035a1d842158c73a0d98a7c27a5d8b4282473f80fb22dde06736b8c7af965cb",
+          "quantized_sha256": "303b5b639fc257a88382e9867560c86e5d2ac22fc01ac2c26b84985cd4787770",
+          "top1_equal": false
+        },
+        "decode0.logit_softcap": {
+          "max_abs_error": 12.043925285339355,
+          "rms_error": 4.466555409607406,
+          "reference_sha256": "1464a6051ee46f9349d847a9eb2d6b84399516664152b69e48c5e24c768d8369",
+          "quantized_sha256": "db40c219cfa859178317e049ceb584185bc64ef84ab7a683636ffacdd3b3b601",
+          "top1_equal": false
+        },
+        "decode1.logit_softcap": {
+          "max_abs_error": 17.69343638420105,
+          "rms_error": 3.546545057916732,
+          "reference_sha256": "1bd1f74a43efa7c9bc207f98ad806c2e1cce1a63aa009f43e356ea3ecf24763f",
+          "quantized_sha256": "b779b8340c62cfdc90b1bc88bc6bdefb9fd400a9617704c968923db13e36eaf9",
+          "top1_equal": false
+        }
+      },
+      "radiance_elf_sha256": "061f24490567c622dc4218c90baa3adef04648bf934e7852358eaf1241b97ce3",
+      "soc_elf_sha256": "5d33d94bac1ed77729014ea1196d41bc4e4392165a8ea96fd4aaa4380761ce1a"
+    },
+    {
+      "weight_format": "tied_INT8_embedding_attention_group32_INT4_FFN",
+      "reference_generated_token_ids": [
+        235248,
+        109
+      ],
+      "original_checkpoint_generated_token_ids": [
+        109,
+        235287
+      ],
+      "tokens_match_original": false,
+      "image_exported": false,
+      "radiance_elf_built": false
+    }
+  ],
+  "conclusion": "These conversions do not preserve the two upstream greedy tokens. No 2 GiB Gemma FireSim workload is validated."
+}

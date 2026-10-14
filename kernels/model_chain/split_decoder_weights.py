@@ -103,14 +103,14 @@ def verify_image(manifest_path: Path) -> tuple[dict, list[Path]]:
                 segment["image_size_bytes"] or item["gpu_address"] !=
                 segment["gpu_base_address"] + offset):
             raise ValueError(f"{item['logical_name']}: address or size differs from segment")
-        if item.get("storage_dtype") == "int8_scaled":
+        if item.get("storage_dtype") in ("int8_scaled", "int8_tied", "int4_scaled"):
             scale_offset = item["scale_offset_bytes"]
             if (scale_offset % ALIGNMENT or
                     scale_offset < offset + item["weight_size_bytes"] or
                     scale_offset + 4 * item["scale_count"] != offset + size or
                     item["scale_gpu_address"] != segment["gpu_base_address"] +
                     scale_offset):
-                raise ValueError(f"{item['logical_name']}: INT8 scale address differs from segment")
+                raise ValueError(f"{item['logical_name']}: quantized scale address differs from segment")
     return manifest, paths
 
 
