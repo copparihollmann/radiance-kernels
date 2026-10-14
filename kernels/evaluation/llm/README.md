@@ -306,13 +306,13 @@ below are derived from those configs:
 | Candidate | Ordered layer structure | Mapping consequence |
 | --- | --- | --- |
 | Qwen3-0.6B | 28 full-attention, dense-FFN layers | Dense prefill and cached decode baseline. |
-| OLMo-3-7B | Repeat 3 sliding-attention layers then 1 full-attention layer, 8 times | Keep the 4,096-token local window distinct from the full-context KV layers. Its config disables caching, so cached decode needs an upstream reference check. |
+| OLMo-3-7B | Repeat 3 sliding-attention layers then 1 full-attention layer, 8 times | Keep the 4,096-token local window distinct from the full-context KV layers. Its config disables caching by default; the reduced upstream control below checks an explicit cached-decode override. |
 | Qwen3-30B-A3B | 48 full-attention layers with MoE FFNs | Route each token to 8 of 128 experts, then combine their outputs in layer order. |
 | Nemotron-3-Nano-4B | 21 Mamba2 blocks, 4 full-attention blocks, 17 MLP-only blocks in the recorded sequence | Carry Mamba state and attention KV with their separate lifetimes. |
 | Mistral-7B-v0.3 | 32 full-attention, dense-FFN layers | Reserve as the held-out dense model. |
 
 The inventory names block types from config fields; it does not claim that
-these models are compiled, numerically checked, or timed on Radiance. The
+these models are compiled or timed on Radiance. The
 Nemotron `M`, `*`, and `-` symbols respectively denote Mamba2, attention,
 and MLP-only blocks in its [official pinned configuration code](https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16/blob/dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f/configuration_nemotron_h.py).
 Qwen3-MoE uses the config's expert count, top-k, sparse step, and explicit
@@ -320,6 +320,27 @@ dense-FFN exceptions according to its [decoder implementation](https://github.co
 the pinned model has an MoE FFN in every layer. A device schedule still needs
 the operations within each block, checkpoints, token inputs, and a reference
 run before any model-level performance comparison.
+
+### OLMo 3 local/global attention control
+
+[`verify_olmo3_reduced.py`](verify_olmo3_reduced.py) checks a four-layer,
+random-weight OLMo 3 against independent Transformers 5.3.0 execution. It
+preserves the pinned order of three sliding-attention layers followed by one
+full-attention layer, but sets the local window to three tokens so six input
+tokens exercise the boundary. The NumPy path implements the model's
+projection-wide Q/K RMSNorm before head splitting, YaRN rotary frequencies,
+causal local/full masks, per-layer K/V carry, post-attention and
+post-feedforward RMSNorm, and the untied output head. The source config sets
+`use_cache=false`; both paths explicitly enable a cache for this test.
+The [saved result](olmo3-reduced-reference.json) checks a four-token prefill
+and two cached decode tokens. Its largest logit difference is `1.79e-7`;
+upstream cached and full causal outputs agree within `2.24e-7`.
+Forcing all four mapped layers to full attention changes the final logits by
+`0.227`, so the test detects a lost local mask. The separately calculated
+YaRN inverse frequencies are also checked against upstream. Reproduce with
+`python3 kernels/evaluation/llm/verify_olmo3_reduced.py` in the pinned
+Transformers environment. This is a reduced operation-order check; a pinned
+checkpoint, full-size Radiance executable, and performance run remain open.
 
 ### Qwen3-0.6B graph control
 
@@ -374,7 +395,8 @@ and an 8192-token prompt at batch 1. For each attention layer it uses
 only Nemotron's four attention layers; its Mamba state is omitted. The
 `new_token_kv_write_bytes` column counts one new K/V pair per attention layer
 and batch item. OLMo's config has `use_cache=false`, so its rows describe an
-explicit proposed cached-decode mapping that still needs a reference check.
+explicit proposed cached-decode mapping. The reduced upstream check above
+validates the operation and cache order; the full checkpoint path remains open.
 
 These are logical working-set sizes. They do not include weights,
 activations, padding, allocator overhead, memory-transaction amplification,

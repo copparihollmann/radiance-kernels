@@ -1,0 +1,70 @@
+{
+  "status": "passed",
+  "scope": "four-layer random-weight OLMo 3 local/global prefill and cached decode; no checkpoint or Radiance execution",
+  "pinned_config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
+  "source_model": "allenai/Olmo-3-7B-Instruct",
+  "small_config": {
+    "hidden_size": 32,
+    "intermediate_size": 64,
+    "num_hidden_layers": 4,
+    "num_attention_heads": 2,
+    "num_key_value_heads": 2,
+    "vocab_size": 64,
+    "sliding_window": 3,
+    "layer_types": [
+      "sliding_attention",
+      "sliding_attention",
+      "sliding_attention",
+      "full_attention"
+    ]
+  },
+  "torch_version": "2.9.1+cpu",
+  "transformers_version": "5.3.0",
+  "seed": 23,
+  "token_ids": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "comparisons": [
+    {
+      "phase": "prefill",
+      "shape": [
+        4,
+        64
+      ],
+      "max_abs_error": 1.7881393432617188e-07,
+      "allclose_atol_1e-5_rtol_1e-5": true,
+      "mapped_sha256": "a5696f5f25eeed279b1c4601957e84c354c0b79fb256a75f79feddd6faca3b13",
+      "upstream_sha256": "e444c8387817bf78eb78c3e745d8460c4f995731b61c5c59ec2998077a5e9459"
+    },
+    {
+      "phase": "decode0",
+      "shape": [
+        1,
+        64
+      ],
+      "max_abs_error": 1.1920928955078125e-07,
+      "allclose_atol_1e-5_rtol_1e-5": true,
+      "mapped_sha256": "83f62e280071a027f006bca0ce3c7a4ff4035b59e47d9a690b3c6adcd8e8520e",
+      "upstream_sha256": "787249607a8c8010dd6cb89cc2692f9a0f5d4e584b9e2cecd652c01ba3ff89fa"
+    },
+    {
+      "phase": "decode1",
+      "shape": [
+        1,
+        64
+      ],
+      "max_abs_error": 1.4901161193847656e-07,
+      "allclose_atol_1e-5_rtol_1e-5": true,
+      "mapped_sha256": "b2cdae766753b750b48af690539ca88925fe4735996bdacff0782981439c1885",
+      "upstream_sha256": "eef0fef87830fd580cd613ccf81bcc1111a5607c84e14870ef64cb5584a759f8"
+    }
+  ],
+  "upstream_cached_vs_full_max_abs_error": 2.2351741790771484e-07,
+  "yarn_inverse_frequency_max_abs_error": 0.0,
+  "force_full_attention_max_abs_logit_delta": 0.22650787234306335
+}
