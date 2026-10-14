@@ -300,6 +300,10 @@ streams the packed FP16 tied table and reproduces the saved final prefill
 logit row within `1.43e-5`, with the same top token. These are graph and
 arithmetic checks; the optimized graph still needs reference execution and
 a compiled device check before these savings can be used in a Radiance result.
+The [final-token selection kernel](../../select_last_token/README.md) has
+separately passed Cyclotron on the saved full-width Qwen3 hidden state, with
+exact equality for all 1,024 selected values. Its full-model binding remains
+to be compiled and checked.
 
 This directory records candidate workload inputs for an initial Radiance
 performance evaluation. It contains no timed LLM performance measurements. The

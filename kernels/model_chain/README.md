@@ -173,6 +173,11 @@ OPENBLAS_NUM_THREADS=1 python3 kernels/model_chain/verify_qwen3_last_logit.py \
   --out "$TMPDIR/qwen3-last-logit-check.json"
 ```
 
+The [standalone device selection check](../select_last_token/README.md) also
+copies the saved full-width final hidden row on Radiance and matches all
+1,024 values exactly in Cyclotron. The optimized full-model ELF remains to
+be built and checked.
+
 The checkpoint file and binary image stay in the local task directory. To
 reproduce the build, use the pinned checkpoint from the linked check and
 task-local paths for the output:

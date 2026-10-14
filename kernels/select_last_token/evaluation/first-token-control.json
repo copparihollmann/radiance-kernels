@@ -1,0 +1,14 @@
+{
+  "schema": "radiance.select-last-token-negative-control.v1",
+  "status": "expected_failure_observed",
+  "backend": "cyclotron",
+  "mutation": "read prefill token 0 instead of token TOKENS-1",
+  "expected": "saved Qwen3 last-hidden output comparison fails",
+  "observed_tohost": 2049,
+  "observed_case": 1024,
+  "functional_cycles": 8595,
+  "mutated_kernel_sha256": "92bbc9e8b207b5ae3d312d0b48b3b207f66e32c4548dbdbe056066adfd7d6344",
+  "mutated_elf_sha256": "74b935fd11c1c4f5ee6e6db26f9d2334ec148493c7976a300c70a595c7db3e50",
+  "build_log_sha256": "df0c2a4417dd830a685e3d57cadc00d3a5a8b15b158e33738f4a18f97d41fe75",
+  "simulator_log_sha256": "49010880664768b0859e1cbbc3ee146f1d7de90216d617f9dd1496a7c91cf52f"
+}

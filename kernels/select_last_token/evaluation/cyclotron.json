@@ -1,0 +1,31 @@
+{
+  "schema": "radiance.select-last-token-device-check.v1",
+  "status": "passed",
+  "backend": "cyclotron",
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "functional_cycles": 718,
+  "checked_elements": 66,
+  "output_sha256": "e940062fd142f6d6624a13ffdc46ad4e5cb832fee2838274f0bf9e8b5faec229",
+  "fixture": {
+    "schema": "radiance.select-last-token-fixture.v1",
+    "source": "synthetic",
+    "provenance": {
+      "seed": 37
+    },
+    "batch": 2,
+    "tokens": 5,
+    "width": 33,
+    "input_sha256": "c9d47199191142745c77cadf6ef1db37dc35d8b6c5cadb3154daad559e1b778a",
+    "gold_sha256": "e940062fd142f6d6624a13ffdc46ad4e5cb832fee2838274f0bf9e8b5faec229",
+    "wrong_first_token_max_abs_delta": 2.9278604984283447,
+    "generated_header_sha256": "81590f43e1b07e016fb605a8a7d5b6c6f9087e236ab9d77766acf46cafdb412f"
+  },
+  "kernel_source_sha256": "f79e502a1845f2c4dbb1731e1dfa25c6042e4c0dd5a4c49f377da2cc507cbd56",
+  "generator_source_sha256": "91c9e45a7ea6521d49e7a56ed94c4c1f2f81bf59e3909aa9ced04223fe072726",
+  "elf_sha256": "73d4a951127f5389a94330d5a1397ae72202461634ea7bfd19836bd35117275e",
+  "config_sha256": "db92edd18930811087147251470cc12be4c62762db2eed176afabe61f830126b",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "build_log_sha256": "c2d3408cf94fd4d76c5d9bebbbf3405b176e324991e272a49a1ee4febfaa9a72",
+  "cyclotron_log_sha256": "c494fb108204010a29e6e1bbb7b0cde785e1b85e2b3818b869e0f4ce79c15df3"
+}
