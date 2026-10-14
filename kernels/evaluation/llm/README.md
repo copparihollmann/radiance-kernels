@@ -600,7 +600,10 @@ token feedback, and reject an oversized expert weight before allocation. The
 four MoE tests peak near 36 MiB RSS. This is a synthetic regression for graph
 ordering; the Transformers comparison above is the upstream numerical check.
 The full-dimension, 48-layer graph has not been numerically executed or
-compiled for Radiance, and it does not include checkpoint weights.
+compiled for Radiance, and it does not include checkpoint weights. A
+[48-layer reduced-width Radiance control](../../model_chain/README.md) now
+executes the same ordered stage dependencies with synthetic FP32 weights;
+the original dimensions and checkpoint remain open.
 Regenerate the graph with:
 
 ```sh

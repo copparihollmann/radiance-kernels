@@ -93,6 +93,11 @@ def verify(result_path: Path, simulator: Path, config: Path,
     same(config, result["config_sha256"], "Cyclotron config")
     log_path = target / "functional.log"
     same(log_path, result["log_sha256"], "Cyclotron completion log")
+    if result.get("native_log_sha256"):
+        native_log = target / "native.log"
+        same(native_log, result["native_log_sha256"], "native completion log")
+        if "errors=0" not in native_log.read_text():
+            raise ValueError("native completion log did not pass")
     log = log_path.read_text()
     cycles = re.findall(r"simulation finished after (\d+) cycles", log)
     if (cycles != [str(result["cycles_functional"])]

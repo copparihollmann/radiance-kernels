@@ -119,8 +119,8 @@ NumPy graph to `1.20e-6` maximum absolute error. The
 with `tohost=0` after 643,753 functional ISA cycles, and the
 [artifact verifier](evaluation/qwen3-moe-reduced-chain-verification.json)
 checked the ELF, generated sources, sparse expert operations, numerical
-references, simulator, configuration, and completion log by hash. The local
-build directory occupies about 6.8 MiB. The separate
+references, simulator, configuration, and native and Cyclotron logs by hash.
+The local build directory occupies about 6.8 MiB. The separate
 [Transformers comparison](../evaluation/llm/qwen3-moe-reduced-reference.json)
 checks a reduced two-layer network against upstream with its own seeded
 weights; the device build uses deterministic synthetic weights. The compiler
@@ -149,6 +149,59 @@ python3 kernels/model_chain/verify_functional.py \
   --config "$TMPDIR/qwen3-moe-chain/cyclotron-config.toml" \
   --source-config kernels/evaluation/llm/inputs/qwen3-30b-a3b.json \
   --out "$TMPDIR/qwen3-moe-chain/qwen3_30b_a3b/verification.json"
+```
+
+### Full-depth reduced-width control
+
+The [topology check](evaluation/qwen3-moe-48layer-topology-check.json) compares
+the reduced 48-layer graph with the pinned full-dimension graph. All 3,467
+ordered stage IDs, operations, reads, writes, output names, and greedy token
+dependencies match. Tensor widths and the number of available experts are
+reduced; top-8 selection and the 48-layer order are retained. Reproduce that
+check with [`check_qwen3_moe_topology.py`](check_qwen3_moe_topology.py).
+
+The [48-layer build](evaluation/qwen3-moe-48layer-reduced-build.json) uses
+the same three-token prefill and two greedy decode steps. Its native C++
+check passed with maximum absolute error `1.14e-5`. The
+[Cyclotron result](evaluation/qwen3-moe-48layer-reduced-functional.json)
+passed 3,321 floating-point and 146 integer stage checks with `tohost=0`
+after 14,788,602 functional ISA cycles. The
+[artifact verification](evaluation/qwen3-moe-48layer-reduced-verification.json)
+rechecks the ELF, all generated sources, reference code, simulator, config,
+and native and Cyclotron logs. Layout checking found 7,468 generated buffers on
+disjoint cache lines. The local build occupies 109 MiB; source generation
+peaked near 190 MiB RSS, native compilation near 1.18 GiB, and the single-job
+device build near 668 MiB. These figures describe the build process. The
+Cyclotron cycle count is a functional-model count, not RTL latency.
+
+This establishes a connected software mapping of the complete 48-layer
+dependency order at reduced FP32 widths with synthetic weights. It does not
+run the original 30B parameter values or original tensor dimensions, and it
+does not exercise MX-Gemmini or the FPGA. The three-token prompt is a
+correctness case, not a representative long-context workload.
+
+To reproduce, set `TMPDIR` to a writable task directory and set the Muon and
+Cyclotron toolchain paths for your machine:
+
+```sh
+python3 kernels/model_chain/check_qwen3_moe_topology.py \
+  --out "$TMPDIR/qwen3-moe-topology-check.json"
+RADIANCE_BUILD_JOBS=1 python3 kernels/model_chain/compile_decoder.py \
+  --model qwen3_30b_a3b --layers 48 --prefill 3 --decode-steps 2 \
+  --generation greedy --token-ids 1 2 3 --device-check-all-stages \
+  --stages-per-object 20 --out-root "$TMPDIR/qwen3-moe-48layer-reduced" \
+  --verify-native --build
+python3 kernels/model_chain/run_functional.py --models qwen3_30b_a3b \
+  --generated-root "$TMPDIR/qwen3-moe-48layer-reduced" \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 100000000 --timeout 1200 \
+  --out "$TMPDIR/qwen3-moe-48layer-reduced/functional-results.json"
+python3 kernels/model_chain/verify_functional.py \
+  --result "$TMPDIR/qwen3-moe-48layer-reduced/qwen3_30b_a3b/functional-result.json" \
+  --simulator path/to/chipyard/generators/radiance/cyclotron/target/release/cyclotron \
+  --config "$TMPDIR/qwen3-moe-48layer-reduced/cyclotron-config.toml" \
+  --source-config kernels/evaluation/llm/inputs/qwen3-30b-a3b.json \
+  --out "$TMPDIR/qwen3-moe-48layer-reduced/qwen3_30b_a3b/verification.json"
 ```
 
 ## Qwen3 checkpoint-weight path

@@ -55,6 +55,7 @@
   "config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
   "simulator_cycle_limit": 100000000,
   "log_sha256": "9eeb351862d6d6a0fc25fb6bad9e997f454fc072449a650b3c3ccd8df8bad694",
+  "native_log_sha256": "dff0bca5b3ae8d26c0708d1d0ad25f3751db768a5571db5fa18ac133f6bbfa22",
   "checkpoint_weights": false,
   "original_model_dimensions": false,
   "upstream_execution_equivalent": false,

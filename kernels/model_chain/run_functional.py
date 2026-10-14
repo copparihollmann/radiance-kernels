@@ -157,6 +157,8 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "simulator_cycle_limit": int(re.search(
             r"(?m)^timeout\s*=\s*(\d+)", config.read_text()).group(1)),
         "log_sha256": sha256(target / "functional.log"),
+        "native_log_sha256": (sha256(target / "native.log")
+                               if not checkpoint_weights else None),
         "checkpoint_weights": checkpoint_weights,
         "original_model_dimensions": manifest.get("full_model_dimensions", False),
         "upstream_execution_equivalent": manifest.get("upstream_execution_equivalent", False),
