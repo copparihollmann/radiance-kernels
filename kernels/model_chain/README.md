@@ -26,6 +26,16 @@ still needs the exact target HWDB match and an FPGA run before it can supply
 two-SM latency or throughput. The per-channel INT8 weights are a lossy
 variant of the original checkpoint.
 
+The [DeepSeek-R1-Distill-Qwen-1.5B candidate](evaluation/deepseek-int8-batch2-hbm-candidate.json)
+uses the same mapping for 1,691 stages per request. Both generated C++
+schedules passed 171 selected tensor checks per replica, with maximum
+absolute error `0.00231934` within the same device tolerance, and both
+generated `[22573, 4396]`. The checkpoint-backed first two stages passed
+in Cyclotron when each replica address range was selected separately;
+changing the second replica's input failed its device check. Its compact
+2 GiB hashed ELF passed source and weight byte reconstruction. A concurrent
+two-SM FPGA run remains to be measured.
+
 The kernels in this directory exercise tensor handoffs inside **one Radiance
 executable**. `kernel.cpp` is a small three-stage device check:
 `RMSNorm → FP32 linear → residual`. `compile_decoder.py` reads the decoder

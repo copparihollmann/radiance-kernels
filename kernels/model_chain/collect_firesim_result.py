@@ -18,9 +18,15 @@ EXPECTED_MODELS = {
     "gemma_2_2b_it": (1496, "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a"),
     "smolvla_base": (3673, "7cd549ac2351fb069c0ddb3c34ad2d09cfc92b56a15dccdfc2e41467aaca01eb"),
 }
-EXPECTED_BATCH2_TINYLLAMA = {
-    "selected_tensors": 135,
-    "reference_output_sha256": "657e42c9256223d9427ce85256e4ad0ade329292b486f28e347aa77ed1b5bfab",
+EXPECTED_BATCH2 = {
+    "tinyllama": {
+        "selected_tensors": 135,
+        "reference_output_sha256": "657e42c9256223d9427ce85256e4ad0ade329292b486f28e347aa77ed1b5bfab",
+    },
+    "deepseek_r1_distill_qwen_1_5b": {
+        "selected_tensors": 171,
+        "reference_output_sha256": "b1550ba6488f4c898444db34e234afde01cb8e5c31a176bed8402b570d8c793c",
+    },
 }
 
 
@@ -191,14 +197,15 @@ def check_source(model: str, source: dict, sm_count: int = 1) -> list[str]:
                 transform.get("status_return_sites", 0) < 2):
             problems.append("SmolVLA build lacks its final-action reference check")
     elif sm_count == 2:
-        if (model != "tinyllama" or
+        expected_batch = EXPECTED_BATCH2.get(model)
+        if (expected_batch is None or
                 source.get("scope") != "full_dimension_checkpoint_decoder" or
                 source.get("batch_clusters") != 2 or
                 source.get("device_check_all_stages") is not False or
                 len(source.get("verified_tensors", [])) !=
-                EXPECTED_BATCH2_TINYLLAMA["selected_tensors"] or
+                expected_batch["selected_tensors"] or
                 source.get("reference_output_sha256") !=
-                EXPECTED_BATCH2_TINYLLAMA["reference_output_sha256"] or
+                expected_batch["reference_output_sha256"] or
                 source.get("hbm_verifier_files") != 0 or
                 transform.get("scheduled_calls") != stages or
                 transform.get("status_return_sites", 0) < 1):

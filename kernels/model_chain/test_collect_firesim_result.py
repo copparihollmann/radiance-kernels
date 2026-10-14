@@ -114,6 +114,20 @@ class CollectFiresimResultTest(unittest.TestCase):
             with self.subTest(uart=uart):
                 self.assertEqual(parse_uart_batch2(uart)["status"], "failed")
 
+    def test_deepseek_two_cluster_source_scope(self):
+        path = (Path(__file__).resolve().parent /
+                "evaluation/deepseek-2g-hbm-build.json")
+        source = json.loads(path.read_text())
+        source.update({"batch_clusters": 2, "hbm_launch_clusters": 2,
+                       "target_protocol": "nightly_hbm_printbuf_clusters",
+                       "device_check_all_stages": False,
+                       "verified_tensors": source["verified_tensors"][:171],
+                       "hbm_verifier_files": 0})
+        self.assertEqual(check_source("deepseek_r1_distill_qwen_1_5b", source, 2), [])
+        source["reference_output_sha256"] = "0" * 64
+        self.assertIn("two-cluster decoder build lacks its selected checks",
+                      check_source("deepseek_r1_distill_qwen_1_5b", source, 2))
+
     def test_duplicate_and_partial_reports_are_rejected(self):
         for log in (VALID_UART + "PASS\n",
                     VALID_UART.replace("kernel_cycles64=20\n", ""),

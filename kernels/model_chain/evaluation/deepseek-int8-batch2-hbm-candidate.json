@@ -1,0 +1,80 @@
+{
+  "schema": "radiance.model_chain.batch2_candidate.v1",
+  "model": "DeepSeek-R1-Distill-Qwen-1.5B",
+  "scope": "two independent identical greedy requests on two Radiance clusters",
+  "status": "software_validated_hardware_pending",
+  "stages_per_replica": 1691,
+  "replicas": 2,
+  "active_cores_per_cluster": 1,
+  "prefill_token_ids": [
+    9707
+  ],
+  "decode_steps": 2,
+  "expected_greedy_token_ids": [
+    22573,
+    4396
+  ],
+  "checkpoint_sha256": "58858233513d76b8703e72eed6ce16807b523328188e13329257fb9594462945",
+  "weight_image_sha256": "4a8231489ce916df33e2745262c0a5060eb8f161d2c92db4665f979c25eba49a",
+  "reference_output_sha256": "b1550ba6488f4c898444db34e234afde01cb8e5c31a176bed8402b570d8c793c",
+  "source_manifest_sha256": "fc45957a4b55f496041f645544010cb64e4d40444e200d184571ab7e54959394",
+  "source_device_elf_sha256": "909482656075d52da479b8adff9cb0cda6854e97f2d8b02761558ba92bb0ccfb",
+  "source_soc_elf_sha256": "484a1625f314177edbfd5d65bfa8c43581b6e8da559a152de6243173f1e4bd5b",
+  "packaged_elf_sha256": "b57414a52771bcc85aeecd1f8d06635a39126910d2037ea7a85b689abedc095c",
+  "package_receipt_sha256": "fa050049ce65aa6a3dcd80398899aeb8c6bce406743e6b308281fc48920a5e28",
+  "hash_map": {
+    "gpu_bytes": 2147483648,
+    "unit_bytes": 32,
+    "slices": 4,
+    "compact": true
+  },
+  "package_source_and_image_verified": true,
+  "native_check": {
+    "status": "passed",
+    "checked_tensors_per_replica": 171,
+    "errors_per_replica": {
+      "0": 0,
+      "1": 0
+    },
+    "max_abs_error": 0.00231933594,
+    "tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "result_sha256": "290bed56c085addbba42a4d67147db7cd7ed0495f04dbe762d4e2b2fc3688ec4",
+    "host_threads": 2
+  },
+  "cyclotron_prefix": {
+    "cluster0": {
+      "status": "passed",
+      "tohost": 0,
+      "cycles_functional": 77444,
+      "elf_sha256": "2e858ec0bd9288ba46ca40e04c37cba0a53333323ea09ba14c409af025510028",
+      "log_sha256": "42eb7cc0e07b2944c65b21c83742fcc8dc3fc6b7575d8dfe163d82eb0bc79b4b",
+      "preloaded_image_bytes": 1781318656
+    },
+    "cluster1": {
+      "status": "passed",
+      "tohost": 0,
+      "cycles_functional": 82004,
+      "elf_sha256": "58fb56fec486ee957a60e805294368cc7c7def3b32f0e67f6f504bc36bf1ec9c",
+      "log_sha256": "62a26325547d48010f632e22863dddeee2f57e91abbf5913e6ad696d9dd95b7f",
+      "preloaded_image_bytes": 1781318656
+    },
+    "cluster1_changed_input": {
+      "status": "failed",
+      "tohost": 3061,
+      "cycles_functional": 82017,
+      "elf_sha256": "381a0485b0c1168361c95a52cb6c954370db05f4ac91d6afa10975f0441d4526",
+      "log_sha256": "5ee7b270032bf495c8e171a027c8c615fd76f50d45e43589b5f330e115c6eff9",
+      "preloaded_image_bytes": 1781318656
+    }
+  },
+  "cyclotron_simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "cyclotron_config_sha256": "14c425c441bfceb6b8602b5862787f955bc06ec1298712456c9074d628fe1339",
+  "full_model_device_execution": false,
+  "simultaneous_two_cluster_execution": false,
+  "rtl_or_fpga_execution": false,
+  "hardware_map_match_verified": false,
+  "performance_measurement": false
+}
