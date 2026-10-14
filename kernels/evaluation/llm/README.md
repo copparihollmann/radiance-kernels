@@ -592,6 +592,13 @@ choices. A 155-stage greedy graph selects the same two next tokens `[63, 9]`
 and keeps logits within `1.49e-7`. Omitting top-k score renormalization moves
 the final logits by `0.0130`. Run
 `python3 kernels/evaluation/llm/verify_qwen3_moe_reduced.py` to reproduce it.
+The [low-memory graph control](moe_graph_reference.py) composes the existing
+dense NumPy evaluator with the sparse stages without loading Torch. Its
+[tests](test_moe_graph_reference.py) check a two-layer, three-token prefill and
+two dependent decode steps against a five-token causal pass, check greedy
+token feedback, and reject an oversized expert weight before allocation. The
+four MoE tests peak near 36 MiB RSS. This is a synthetic regression for graph
+ordering; the Transformers comparison above is the upstream numerical check.
 The full-dimension, 48-layer graph has not been numerically executed or
 compiled for Radiance, and it does not include checkpoint weights.
 Regenerate the graph with:

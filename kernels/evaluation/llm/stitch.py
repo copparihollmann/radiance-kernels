@@ -356,7 +356,8 @@ def _olmo3_pass(graph: Graph, spec: dict, phase: str, batch: int,
         raise ValueError(f"{phase}: invalid token input shape")
     hidden = graph.add(f"{phase}.embedding", "embedding", (ids,),
                        (batch, tokens, h), attrs={
-                           "parameter": "embed_tokens", "vocab_size": spec["vocab_size"]})
+                           "parameter": "embed_tokens", "vocab_size": spec["vocab_size"],
+                           "scale": 1.0})
     next_caches = {}
 
     def linear(name: str, source: str, shape: tuple[int, ...], parameter: str) -> str:
@@ -458,7 +459,8 @@ def _qwen3_moe_pass(graph: Graph, spec: dict, phase: str, batch: int,
         raise ValueError(f"{phase}: invalid token input shape")
     hidden = graph.add(f"{phase}.embedding", "embedding", (ids,),
                        (batch, tokens, h), attrs={
-                           "parameter": "embed_tokens", "vocab_size": spec["vocab_size"]})
+                           "parameter": "embed_tokens", "vocab_size": spec["vocab_size"],
+                           "scale": 1.0})
     next_caches = {}
 
     def norm(name: str, source: str, parameter: str) -> str:
