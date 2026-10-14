@@ -127,6 +127,9 @@ def run(model: str, generated_root: Path, simulator: Path, config: Path,
         "tied_embedding_ops_sha256": (sha256(HERE / "pipeline_tied.hpp")
                                       if manifest.get("checkpoint_weight_format") ==
                                       "int8_fp16_tied" else None),
+        "packed_ops_sha256": (sha256(HERE / "pipeline_packed.hpp")
+                              if manifest.get("checkpoint_weight_format") ==
+                              "int5_group64_int6_tied" else None),
         "numpy_reference_sha256": sha256(ROOT / "kernels/evaluation/llm/reference.py"),
         "model_specs_sha256": manifest["source_spec_sha256"],
         "simulator_sha256": sha256(simulator),

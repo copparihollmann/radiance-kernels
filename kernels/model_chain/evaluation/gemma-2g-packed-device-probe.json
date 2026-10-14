@@ -1,0 +1,22 @@
+{
+  "scope": "small fixed INT5/INT6 device arithmetic and stage dataflow probe",
+  "status": "passed",
+  "checked_operations": [
+    "signed_packed_weight_int5",
+    "embedding_i5_group64",
+    "linear_i6",
+    "linear_i5_tied"
+  ],
+  "tohost": 0,
+  "simulation": "Cyclotron functional ISA model",
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "cycles_functional": 3982,
+  "process_exit_code": 0,
+  "device_source_sha256": "ac1e922b104fe42a91c89e9f5773ee6e71263e9975bdec0fd3a2f2b5a87446e5",
+  "device_elf_sha256": "25efdeaf6692fa9a004dcaca5357232a81bc189ee7c6ec5ba6687a203c2972ae",
+  "packed_ops_sha256": "914b8a84ce77a4282241222fd24509d92dc3506b1db5ea2d5ee01d6b7ba0820b",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "config_sha256": "70ef96c088c01caf3093bdff649fdb1926ea60ee68c4fcbd98af5edbf6dbf508",
+  "log_sha256": "aaeb7e3eef0bb864758f107e219a91210aa00d18164778271d5bb2a212cac207"
+}

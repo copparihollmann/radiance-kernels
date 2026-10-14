@@ -323,6 +323,15 @@ differ from the original checkpoint, and neither FPGA correctness nor timing
 has been measured. The original full checkpoint build remains available for
 a larger confirmed GPU memory map.
 
+The [small Cyclotron packed-operator probe](evaluation/gemma-2g-packed-device-probe.json)
+checks INT5 unpacking, group-64 INT5 embedding, INT6 linear, and the tied
+INT5 output head in two dependent Radiance stages. It passed with `tohost=0`
+in 3,982 functional simulator cycles. It uses small fixed arrays and does not
+establish execution of the full 1,496-stage Gemma ELF. Rebuild it with
+`run_packed_device_probe.py --out-dir "$TMPDIR/packed-device-probe"
+--cyclotron-root "$CYCLOTRON_ROOT" --llvm-muon "$LLVM_MUON"
+--riscv-toolchain "$RISCV_TOOLCHAIN_PATH"`.
+
 For the fixed Gemma rebuild, set `GEMMA_CHECKPOINT` to the pinned snapshot and
 choose task-local `WEIGHTS`, `BUILD`, and `HBM` directories. The Muon toolchain
 must be available through `LLVM_MUON`:
