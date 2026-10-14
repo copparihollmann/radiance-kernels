@@ -391,6 +391,22 @@ check against the upstream output before a long-context device run. The
 record also counts linear and attention dot-product MACs by phase; none of its
 byte or MAC counts are measured cache traffic, utilization, or latency.
 
+### Qwen3 sparse expert routing control
+
+[`verify_qwen3_moe_router.py`](verify_qwen3_moe_router.py) isolates the
+sparse-FFN operation in the pinned Qwen3-30B-A3B family. A reduced block has
+16 experts with the pinned top-8 selection and selected-score renormalization.
+It routes seven input tokens, applies each selected expert's gate/up and down
+projections, weights their outputs, and accumulates them in token order. The
+[saved comparison](qwen3-moe-router-reference.json) matches the selected
+expert IDs from Transformers 5.3.0 exactly; the maximum selected-score error
+is `1.19e-7` and the maximum output error is `7.45e-8`. Omitting the
+selected-score renormalization changes the result by `0.0643`, so the control
+detects that mapping mistake. This is one random-weight FFN block, not the
+48-layer decoder, a checkpoint-backed run, or a Radiance executable. Run it
+with `python3 kernels/evaluation/llm/verify_qwen3_moe_router.py` in the
+Transformers environment.
+
 ### Qwen3-0.6B graph control
 
 `stitch.py --model qwen3_0_6b` reads the hash-checked candidate config and
