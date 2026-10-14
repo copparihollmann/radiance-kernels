@@ -332,6 +332,39 @@ establish execution of the full 1,496-stage Gemma ELF. Rebuild it with
 --cyclotron-root "$CYCLOTRON_ROOT" --llvm-muon "$LLVM_MUON"
 --riscv-toolchain "$RISCV_TOOLCHAIN_PATH"`.
 
+An additional [checkpoint-backed Cyclotron probe](evaluation/gemma-2g-embedding-prefix-functional-results.json)
+uses the actual packed Gemma bytes recovered from the compact FireSim ELF.
+The [subset image](evaluation/gemma-2g-embedding-prefix-image.json) contains
+the embedding table and first attention norm only (405,513,216 bytes); both
+parameter hashes match the exporter. The [two-stage Radiance build](evaluation/gemma-2g-embedding-prefix-build.json)
+checked the embedding and norm outputs against the mapped-precision checkpoint
+reference. Cyclotron passed both stages with `tohost=0` in 362,401 functional
+cycles. This checks real checkpoint data on the device ISA model. It does not
+exercise the remaining 1,494 stages or measure FPGA latency.
+
+The extractor reads the stored ELF member in the existing handoff ZIP and
+writes only the requested parameter range; it does not unpack a second model
+ELF. The checkpoint build needs Python with `safetensors`, PyTorch, and NumPy.
+Reproduce the prefix with task-local output directories:
+
+```sh
+python3 kernels/model_chain/extract_hashed_parameter.py \
+  --zip "$GEMMA_HANDOFF_ZIP" \
+  --elf-member gemma-int5-int6-2g/gemma-int5-int6-2g.soc.elf \
+  --parameter embed_tokens --parameter layers.0.attn_norm \
+  --out-dir "$WEIGHTS"
+python3 kernels/model_chain/compile_decoder.py \
+  --model gemma_2_2b_it --layers 26 --prefill 2 --decode-steps 2 \
+  --generation greedy --token-ids 2 100 --stages-per-object 20 \
+  --device-check-all-stages --stage-limit 2 \
+  --checkpoint-dir "$GEMMA_CHECKPOINT" \
+  --weight-image "$WEIGHTS/weights-image.json" --out-root "$BUILD" --build
+python3 kernels/model_chain/run_functional.py \
+  --models gemma_2_2b_it --generated-root "$BUILD" \
+  --cyclotron-root "$CYCLOTRON_ROOT" \
+  --sim-cycles 100000000 --timeout 600 --out "$BUILD/functional-results.json"
+```
+
 For the fixed Gemma rebuild, set `GEMMA_CHECKPOINT` to the pinned snapshot and
 choose task-local `WEIGHTS`, `BUILD`, and `HBM` directories. The Muon toolchain
 must be available through `LLVM_MUON`:

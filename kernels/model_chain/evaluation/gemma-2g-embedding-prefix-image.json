@@ -1,0 +1,98 @@
+{
+  "model": "gemma_2_2b_it",
+  "family": "gemma2",
+  "layers": 26,
+  "pinned_model_layers": 26,
+  "graph_stages": 996,
+  "parameter_uses": 2,
+  "distinct_parameters": 2,
+  "physical_parameters": 2,
+  "dtype": "int5_group64_int6_tied",
+  "linear_layout": "row_major_in_out",
+  "alignment_bytes": 64,
+  "gpu_base_address": 337641472,
+  "gpu_end_address_exclusive": 743154688,
+  "image_size_bytes": 405513216,
+  "fits_32_bit_address_space": true,
+  "warp_stack_reserved_range": [
+    2128609280,
+    2130706432
+  ],
+  "stack_overlap_parameters": [],
+  "segments": [
+    {
+      "index": 0,
+      "image_file": "weights-parameter.bin",
+      "gpu_base_address": 337641472,
+      "image_size_bytes": 405513216,
+      "image_sha256": "017c7baef0b3d51f3991d3d707a78b8c5ae389ae259b51d291976e437d2675cc"
+    }
+  ],
+  "parameters": [
+    {
+      "logical_name": "embed_tokens",
+      "operation": "embedding",
+      "shape": [
+        256000,
+        2304
+      ],
+      "gemma_weight_offset": false,
+      "storage_dtype": "int5_group64",
+      "weight_size_bytes": 368640000,
+      "scale_count": 9216000,
+      "size_bytes": 405504000,
+      "segment_index": 0,
+      "offset_bytes": 0,
+      "gpu_address": 337641472,
+      "scale_offset_bytes": 368640000,
+      "scale_gpu_address": 706281472,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 578708652,
+      "roundtrip_max_abs_error": 0.07421875,
+      "checkpoint_key": "model.embed_tokens.weight",
+      "packed_sha256": "abf1215c030464ddaa0bdd61a1ecf0b1d31769eea2f9a377f4a96a760bf6ff2b"
+    },
+    {
+      "logical_name": "layers.0.attn_norm",
+      "operation": "rmsnorm",
+      "shape": [
+        2304
+      ],
+      "gemma_weight_offset": true,
+      "storage_dtype": "fp32",
+      "weight_size_bytes": 9216,
+      "scale_count": 0,
+      "size_bytes": 9216,
+      "segment_index": 0,
+      "offset_bytes": 405504000,
+      "gpu_address": 743145472,
+      "scale_offset_bytes": null,
+      "scale_gpu_address": null,
+      "overlaps_warp_stacks": false,
+      "roundtrip_changed_elements": 0,
+      "roundtrip_max_abs_error": 0.0,
+      "checkpoint_key": "model.layers.0.input_layernorm.weight",
+      "packed_sha256": "1eb73e3f7aa8e502f6ca31cd19efbb8e4fd9a89692e13e48ac8205545a7fa7e8"
+    }
+  ],
+  "checkpoint_weights": true,
+  "device_execution": false,
+  "checkpoint_config_sha256": "eacec6c5ca317a87ed2c46789d9705b9274db5027e7ba59da739bfae23addb55",
+  "checkpoint_files_sha256": {
+    "model-00001-of-00002.safetensors": "532d792c9178805064170a3ec485b7dedbfccc6fd297b92c31a6091b6c7e41bf",
+    "model-00002-of-00002.safetensors": "6d6d9ce84db398fb6e0191f91542e5da0a73da2cb695e172a24edc2146dc8d20",
+    "model.safetensors.index.json": "ada0043f3e3b2e5ab2f445cad9c0fbbf9d91ad444675e6a82b822591c63abf5a"
+  },
+  "checkpoint_weight_sha256": "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a",
+  "image_sha256": "017c7baef0b3d51f3991d3d707a78b8c5ae389ae259b51d291976e437d2675cc",
+  "roundtrip_changed_elements": 3179221973,
+  "roundtrip_max_abs_error": 0.07421875,
+  "probe_subset": {
+    "parameters": [
+      "embed_tokens",
+      "layers.0.attn_norm"
+    ],
+    "source_zip": "gemma-int5-int6-2g-handoff.zip",
+    "source_elf_sha256": "83fdc22f12cd03a366a6132d32cfa449b9a60a5546991fa8157c2b7262d25d6d"
+  }
+}
