@@ -16,6 +16,8 @@ class DecoderCompilerTest(unittest.TestCase):
             ("tinyllama", 1, "teacher_forced"),
             ("deepseek_r1_distill_qwen_1_5b", 1, "teacher_forced"),
             ("gemma_2_2b_it", 1, "teacher_forced"),
+            ("qwen3_0_6b", 2, "teacher_forced"),
+            ("qwen3_0_6b", 2, "greedy"),
             ("tinyllama", 2, "greedy"),
         ]
         with tempfile.TemporaryDirectory() as temporary:
@@ -82,6 +84,13 @@ class DecoderCompilerTest(unittest.TestCase):
                              {"prefill.token_ids": [1, 2, 3]})
             self.assertEqual(manifest["native_verified_integer_stages"], 2)
             self.assertIn("errors=0", verify_native(target))
+
+    def test_qwen3_checkpoint_mode_requires_weight_mapping(self):
+        with self.assertRaisesRegex(ValueError, "Qwen3 checkpoint weight-image"):
+            generate("qwen3_0_6b", 1, 1, 0, "teacher_forced",
+                     Path("unused"), device_check_all_stages=True,
+                     stages_per_object=16, checkpoint_dir=Path("unused"),
+                     weight_image=Path("unused"))
 
     def test_two_cluster_buffers_and_second_output_are_checked(self):
         with tempfile.TemporaryDirectory() as temporary:

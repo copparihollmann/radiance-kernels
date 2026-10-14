@@ -69,6 +69,44 @@ The reduction preserves stage order and the grouped-query head ratio, but it
 does not preserve every width ratio of the original network.
 Generated ELF files and logs remain local under `generated/`.
 
+## Qwen3 reduced device control
+
+The candidate [Qwen3-0.6B graph](../evaluation/llm/qwen3-0.6b-graph.json)
+keeps query/key head normalization before RoPE, the pinned RoPE base,
+per-layer KV carry, and the tied embedding/output head. A separate
+[Transformers comparison](../evaluation/llm/qwen3-reduced-reference.json)
+checks prefill and two cached decode outputs with the same random weights at
+reduced dimensions. `compile_decoder.py` now emits the head-norm and tied-head
+stages in the connected Radiance program. Its [one-layer device control](evaluation/qwen3-reduced-functional.json)
+ran one prefill token and one cached decode token: native C++ matched all 44
+stage outputs (maximum absolute error `1.31e-6`), and Cyclotron completed all
+44 device stage checks with `tohost=0` after 67,496 functional ISA cycles.
+The [two-layer greedy control](evaluation/qwen3-reduced-greedy-functional.json)
+starts with three prefill tokens, selects two more from its own logits, and
+carries each layer's KV cache between calls. Its 123 floating-point and two
+integer stage checks passed in Cyclotron with `tohost=0` after 304,914
+functional ISA cycles; the native C++ check's maximum absolute error was
+`1.55e-6`. The device controls use `compile_decoder.py`'s deterministic
+weight fixture; the independent Transformers comparison uses a different
+random fixture and checks the same graph structure.
+This is a correctness control, not a latency measurement. It uses generated
+FP32 weights and reduced tensor widths, not the Qwen3 checkpoint. The
+checkpoint weight-image mapping and full-dimension device run remain open;
+the compiler rejects that unsupported Qwen3 checkpoint mode explicitly.
+
+Reproduce the reduced control with the Muon toolchain and Cyclotron paths set:
+
+```sh
+python3 kernels/model_chain/compile_decoder.py --model qwen3_0_6b \
+  --layers 1 --prefill 1 --decode-steps 1 \
+  --out-root path/to/generated --device-check-all-stages \
+  --stages-per-object 16 --device-opt O1 --verify-native --build
+python3 kernels/model_chain/run_functional.py --models qwen3_0_6b \
+  --generated-root path/to/generated \
+  --cyclotron-root path/to/chipyard/generators/radiance/cyclotron \
+  --sim-cycles 100000000 --timeout 600 --out path/to/result.json
+```
+
 ## Checkpoint-weight device path
 
 `export_decoder_weights.py` packs pinned safetensors into the row-major FP32

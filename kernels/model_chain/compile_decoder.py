@@ -33,7 +33,8 @@ from export_decoder_weights import WARP_STACK_BOTTOM, WARP_STACK_TOP  # noqa: E4
 from split_decoder_weights import image_segments, verify_image  # noqa: E402
 
 
-MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it")
+MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
+          "qwen3_0_6b")
 
 
 def symbol(name: str) -> str:
@@ -77,14 +78,17 @@ def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
     op, attrs = stage["op"], stage["attrs"]
     if op == "embedding":
         width, vocab = stage["shape"][-1], attrs["vocab_size"]
-        data = np.stack([reference.parameter(f"{attrs['parameter']}.{i}", (width,))
-                         for i in range(vocab)])
+        data = (reference.parameter(attrs["parameter"], (vocab, width))
+                if attrs.get("tied_lm_head") else
+                np.stack([reference.parameter(f"{attrs['parameter']}.{i}", (width,))
+                          for i in range(vocab)]))
     elif op == "rmsnorm":
         width = stage["shape"][-1]
         data = reference.parameter(attrs["parameter"], (width,)) + 1.0
     elif op == "linear":
         shape = tuple(attrs["weight_shape"])
         data = reference.parameter(attrs["parameter"], shape,
+                                   0.05 if attrs.get("weight_transposed") else
                                    1.0 / np.sqrt(shape[0]))
     elif op == "bias_add":
         data = reference.parameter(attrs["parameter"], tuple(stage["shape"][2:]))
@@ -121,8 +125,14 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
     elif op == "rmsnorm":
         body = f"rmsnorm({ins[0]}, {parameter}, {out}, {count // shape[-1]}, {shape[-1]}, {literal(attrs['epsilon'])}, tid, tpb)"
     elif op == "linear":
-        k, n = attrs["weight_shape"]
-        if parameter_dtype == "int6_scaled":
+        k = graph.tensors[stage["reads"][0]]["shape"][-1]
+        n = int(np.prod(shape[2:]))
+        if attrs.get("weight_transposed") and parameter_dtype == "fp32":
+            body = f"linear_tied({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
+        elif attrs.get("weight_transposed") and parameter_dtype not in (
+                "fp16_tied", "int8_tied"):
+            raise ValueError(f"{stage['id']}: unsupported tied weight format")
+        elif parameter_dtype == "int6_scaled":
             body = f"linear_i6({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
         elif parameter_dtype == "int5_tied":
             body = f"linear_i5_tied({ins[0]}, {parameter}, {scale_parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
@@ -206,6 +216,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     external = checkpoint_dir is not None or weight_image is not None
     if external and (checkpoint_dir is None or weight_image is None):
         raise ValueError("checkpoint directory and weight image are both required")
+    if external and model == "qwen3_0_6b":
+        raise ValueError("Qwen3 checkpoint weight-image mapping is not implemented")
     if stage_limit is not None and not external:
         raise ValueError("stage limit is only for checkpoint device probes")
     if external and (model not in MODELS or stages_per_object <= 0
@@ -376,7 +388,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         return image_parameters[logical].get("storage_dtype", "fp32") if logical else "fp32"
     half = spec["head_dim"] // 2
     max_position = prefill + decode
-    inv_freq = np.power(10000.0, -np.arange(half, dtype=np.float32) / half)
+    inv_freq = np.power(spec.get("rope_theta", 10000.0),
+                        -np.arange(half, dtype=np.float32) / half)
     angles = np.arange(max_position, dtype=np.float32)[:, None] * inv_freq
     declarations.append(array_decl("v_rope_cos", np.cos(angles), max_position * half))
     declarations.append(array_decl("v_rope_sin", np.sin(angles), max_position * half))
@@ -388,6 +401,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     uses_packed = external and image_manifest["dtype"] == "int5_group64_int6_tied"
     uses_tied = external and image_manifest["dtype"] in ("int8_fp16_tied",
                                                          "int4_int8_tied")
+    uses_fp32_tied = any(stage["attrs"].get("weight_transposed") and
+                         parameter_dtype(stage) == "fp32" for stage in graph.stages)
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage),
@@ -433,6 +448,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                       + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
                       + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
                       + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
+                      + ("#include \"pipeline_fp32_tied.hpp\"\n" if uses_fp32_tied else "")
                       + externs + "\n" + pointers + "\n"
                       + "\n".join(item.replace("static void stage_", "void stage_", 1)
                                   for item in stage_src[first:last]))
@@ -572,6 +588,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
            + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
            + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
+           + ("#include \"pipeline_fp32_tied.hpp\"\n" if uses_fp32_tied else "")
            + "extern \"C\" uint32_t __mu_num_warps = 1;\n"
            + device_declarations + "\n" + device_stages + "\n" + verify_prototypes +
            "\nint main() {\n"
@@ -605,6 +622,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
               + ("#include \"pipeline_int4.hpp\"\n" if uses_int4 else "")
               + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
               + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
+              + ("#include \"pipeline_fp32_tied.hpp\"\n" if uses_fp32_tied else "")
               + "\n".join(part.replace("__global ", "")
                           for part in declarations + ([] if device_check_all_stages else native_extra))
               + "\n" + "\n".join(stage_src) + "\nint main() {\n"
@@ -635,6 +653,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
         + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
         + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
+        + (f" {HERE / 'pipeline_fp32_tied.hpp'}" if uses_fp32_tied else "")
         + "\n"
         + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
            + f": {HERE / 'pipeline_math.hpp'}"
@@ -642,9 +661,12 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + (f" {HERE / 'pipeline_int4.hpp'}" if uses_int4 else "")
            + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
            + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
+           + (f" {HERE / 'pipeline_fp32_tied.hpp'}" if uses_fp32_tied else "")
            + "\n" if stage_files else ""))
     manifest = {
         "model": model,
+        "source_config_sha256": specs[model]["source_sha256"],
+        "tied_lm_head": bool(spec.get("tied_lm_head")),
         "scope": ("full_dimension_checkpoint_stage_probe" if stage_limit is not None
                   else "full_dimension_checkpoint_decoder") if external
                  else "reduced_synthetic_decoder",
