@@ -133,7 +133,24 @@ make -j1 SMS="1 2" GEN_ARGS="--suite $TMPDIR/xrage5-and-9.json --case 0 --max-la
 
 Save both ELFs and `data/spatter.json` before changing `GEN_ARGS` to
 `--case 1 --collision-policy ordered --max-layout-mib 256` for xRAGE9.
-The ordinary Muon/RV64 toolchain variables described above still apply.
+The local Muon installation used for the recorded ELFs required a one-word
+stack stride, its bundled libc++ headers, and the available RV64 bare-metal
+sysroot for headers. Set `LLVM_MUON` and `RISCV_TOOLCHAIN_PATH` to the actual
+installations, then use these additional make variables for that toolchain:
+
+```sh
+make -j1 SMS="1 2" \
+  LLVM_MUON="$LLVM_MUON" \
+  RISCV_TOOLCHAIN_PATH="$RISCV_TOOLCHAIN_PATH" \
+  RISCV_SYSROOT="$RISCV_TOOLCHAIN_PATH/riscv64-unknown-elf" \
+  RISCV64_TOOLCHAIN_PATH="$RISCV_TOOLCHAIN_PATH" RISCV="$RISCV_TOOLCHAIN_PATH" \
+  MU_LIBC_INCLUDE="$LLVM_MUON/include/c++/v1" MU_STACK_WORD_STRIDE=1 \
+  KERNEL_MU_CFLAGS="-nostdinc++ -isystem $LLVM_MUON/include/c++/v1" \
+  GEN_ARGS="--suite $TMPDIR/xrage5-and-9.json --case 0 --max-layout-mib 256"
+```
+
+The build receipt identifies each ELF by SHA-256; a fresh toolchain may emit
+different bytes and needs its own validation receipt.
 `record_lanl_builds.py` compares both cases' source and complete golden
 hashes with the pinned upstream Spatter serial oracle, checks the one- and
 two-partition Cyclotron device-body results, and verifies all four SoC ELF
