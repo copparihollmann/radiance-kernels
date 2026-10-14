@@ -647,9 +647,18 @@ the final-token selection. Its checkpoint-backed NumPy reference selects the
 same two greedy IDs `[16, 8]`; FP16 storage conversion preserves each top
 token, with at most `8.83e-6` final-logit error. The Muon and SoC ELFs built,
 and the layout check found 3,219 disjoint cache-line-padded buffers. A
-full-width Cyclotron run has been started but has no completed result yet.
-The build receipt records `device_execution=false`; numerical device
-equivalence at full width remains open.
+full-width [Cyclotron run](evaluation/qwen3-prefill-last-full-fp16-functional.json)
+now passes all 1,608 ordered stage checks, including 1,606 float stages and
+two integer token selections, with `tohost=0` after 6,655,924,462 functional
+cycles. The [independent verifier](evaluation/qwen3-prefill-last-full-fp16-verification.json)
+checked the ELF, generated sources, checkpoint image, input config, simulator,
+and completion log against the saved build and run. The
+[paired check](evaluation/qwen3-prefill-last-full-pair.json) binds this run to
+the same checkpoint image, three input tokens, and selected greedy tokens
+`[16, 8]` as the earlier full-logit 1,607-stage run. Selecting only the last
+prefill logit removed 756,497,991 functional cycles, or 10.21%, in this
+three-token case. These counts come from a functional ISA simulator; they do
+not measure FPGA latency, utilization, or memory-system performance.
 
 Reproduce the reduced comparison with `TMPDIR` and the Muon toolchain set
 for your machine:

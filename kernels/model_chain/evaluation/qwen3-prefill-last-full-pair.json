@@ -1,0 +1,28 @@
+{
+  "schema": "radiance.qwen3-full-prefill-selection-pair.v1",
+  "status": "passed",
+  "model": "qwen3_0_6b",
+  "layers": 28,
+  "prefill_tokens": 3,
+  "decode_steps": 2,
+  "generated_token_ids": [
+    16,
+    8
+  ],
+  "baseline_checked_stages": 1607,
+  "last_prefill_checked_stages": 1608,
+  "baseline_cycles_functional": 7412422453,
+  "last_prefill_cycles_functional": 6655924462,
+  "functional_cycle_difference": 756497991,
+  "functional_cycle_reduction_percent": 10.205813,
+  "checkpoint_sha256": "f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+  "weight_image_sha256": "d263d39dfebfffe83ac042039961a5f4e6c4dad18037cbea49f3a3c7cfd6eaaf",
+  "baseline_elf_sha256": "889ce768730fd7796be8550ecd49aadeb06bd741c69217195c5a87c284a3a345",
+  "last_prefill_elf_sha256": "25e51a6574282b9879ab618b9125c93fadc6e0cd7ec8c4c2be00eb7681f9c0da",
+  "baseline_result_sha256": "27779a891d0441f6167480bd0d41883cb9dd6272432227f8a805510d1179a110",
+  "last_prefill_result_sha256": "9c4c6258df4d3e53edd69989c007d23be93d1ed4d959aedbd4d97f2e78adc273",
+  "arithmetic_check_sha256": "ad3465b1b8c8d82055d4085448eef1d448bf50e0b176e99b68f2621fefd95f2a",
+  "rtl_execution": false,
+  "performance_measurement": false,
+  "source_sha256": "f3f06438051baabf96c744ea9c91bf0b8da8f8bc4993fce017b40d7adfab46e5"
+}
