@@ -805,6 +805,15 @@ compiled for Radiance, and it does not include checkpoint weights. A
 [48-layer reduced-width Radiance control](../../model_chain/README.md) now
 executes the same ordered stage dependencies with synthetic FP32 weights;
 the original dimensions and checkpoint remain open.
+
+A [same-fixture upstream check](qwen3-moe-device-fixture-upstream.json) now
+binds its exact 531 generated parameter declarations to Transformers 5.3.0.
+Upstream CPU and the stitched NumPy reference agree at all 144 layer outputs
+and three prefill/decode logits at `rtol=1e-4, atol=1e-5`; all 144 selected
+expert-index arrays match exactly. The separate Cyclotron receipt checks the
+device stages against that NumPy reference. This uses 16 synthetic experts
+and a three-token prompt, so it does not establish checkpoint performance.
+
 Regenerate the graph with:
 
 ```sh

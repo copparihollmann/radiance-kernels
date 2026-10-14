@@ -180,6 +180,17 @@ run the original 30B parameter values or original tensor dimensions, and it
 does not exercise MX-Gemmini or the FPGA. The three-token prompt is a
 correctness case, not a representative long-context workload.
 
+The [same-fixture upstream check](../evaluation/llm/qwen3-moe-device-fixture-upstream.json)
+binds Transformers 5.3.0 to all 531 FP32 parameter declarations in this
+exact generated device source. It compares upstream CPU outputs with the
+stitched NumPy reference used by the separate Cyclotron stage checks. All
+144 layer outputs and three logit tensors pass `rtol=1e-4, atol=1e-5`;
+their maximum errors are `1.05e-5` and `1.13e-6`. All 144 top-8 routing
+index arrays match exactly, and both paths select greedy tokens `[57, 57]`.
+The check verifies the source and ELF hashes against the passing Cyclotron
+receipt. It does not read device logits directly or rerun the device. Peak
+RAM was about 394 MiB. The fixture has 16 experts, not the checkpoint's 128.
+
 To reproduce, set `TMPDIR` to a writable task directory and set the Muon and
 Cyclotron toolchain paths for your machine:
 
@@ -202,6 +213,9 @@ python3 kernels/model_chain/verify_functional.py \
   --config "$TMPDIR/qwen3-moe-48layer-reduced/cyclotron-config.toml" \
   --source-config kernels/evaluation/llm/inputs/qwen3-30b-a3b.json \
   --out "$TMPDIR/qwen3-moe-48layer-reduced/qwen3_30b_a3b/verification.json"
+python3 kernels/evaluation/llm/verify_qwen3_moe_device_fixture.py \
+  --build-dir "$TMPDIR/qwen3-moe-48layer-reduced/qwen3_30b_a3b" \
+  --out "$TMPDIR/qwen3-moe-device-fixture-upstream.json"
 ```
 
 ## OLMo 3 local and full attention control
