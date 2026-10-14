@@ -17,7 +17,7 @@ from zipfile import ZIP_STORED, ZipFile
 
 from package_firesim import (digest_region, file_regions_from_layout,
                              hash_folds, read_physical)
-from split_decoder_weights import image_segments
+from split_decoder_weights import image_segments, verify_image
 
 
 def zip_data_offset(path: Path, header_offset: int) -> int:
@@ -170,6 +170,48 @@ def extract(path: Path, *, elf_member: str, parameters: list[str],
             "manifest": str(manifest)}
 
 
+def extract_all_segments(path: Path, *, elf_member: str, out_dir: Path,
+                         image_manifest_path: Path | None = None) -> dict:
+    """Recover every image segment without holding or copying the full image."""
+    with ZipFile(path) as archive:
+        prefix = elf_member.rsplit("/", 1)[0] + "/"
+        original = json.loads(image_manifest_path.read_text()
+                              if image_manifest_path is not None else
+                              archive.read(prefix + "weights-image.json"))
+    segments = image_segments(original)
+    if len(segments) == 1:
+        return extract(path, elf_member=elf_member, parameters=[],
+                       out_dir=out_dir, image_manifest_path=image_manifest_path,
+                       all_parameters=True)
+    restored = []
+    for segment in segments:
+        index = segment["index"]
+        items = [item for item in original["parameters"]
+                 if item.get("segment_index", 0) == index]
+        if (not items or min(item["gpu_address"] for item in items) !=
+                segment["gpu_base_address"] or
+                max(item["gpu_address"] + item["size_bytes"] for item in items) !=
+                segment["gpu_base_address"] + segment["image_size_bytes"]):
+            raise ValueError(f"segment {index} is not fully covered by parameters")
+        directory = out_dir / f"segment-{index}"
+        result = extract(path, elf_member=elf_member,
+                         parameters=[item["logical_name"] for item in items],
+                         out_dir=directory,
+                         image_manifest_path=image_manifest_path)
+        if (result["bytes"] != segment["image_size_bytes"] or
+                result["image_sha256"] != segment["image_sha256"]):
+            raise ValueError(f"segment {index} differs from exporter")
+        restored.append({**segment,
+                         "image_file": f"segment-{index}/weights-parameter.bin"})
+    manifest = out_dir / "weights-image.json"
+    manifest.write_text(json.dumps({**original, "segments": restored}, indent=2) + "\n")
+    verify_image(manifest)
+    return {"parameters": [item["logical_name"] for item in original["parameters"]],
+            "bytes": original["image_size_bytes"],
+            "image_sha256": original["image_sha256"],
+            "manifest": str(manifest)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zip", type=Path, required=True)
@@ -180,12 +222,15 @@ def main() -> None:
     parser.add_argument("--all-parameters", action="store_true")
     parser.add_argument("--out-dir", type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(extract(args.zip.resolve(), elf_member=args.elf_member,
-                             parameters=args.parameter,
-                             out_dir=args.out_dir.resolve(),
-                             image_manifest_path=(args.image_manifest.resolve()
-                                                  if args.image_manifest else None),
-                             all_parameters=args.all_parameters), indent=2))
+    options = {"elf_member": args.elf_member, "out_dir": args.out_dir.resolve(),
+               "image_manifest_path": (args.image_manifest.resolve()
+                                       if args.image_manifest else None)}
+    if args.all_parameters and not args.parameter:
+        result = extract_all_segments(args.zip.resolve(), **options)
+    else:
+        result = extract(args.zip.resolve(), parameters=args.parameter,
+                         all_parameters=args.all_parameters, **options)
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

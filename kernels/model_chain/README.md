@@ -36,6 +36,19 @@ changing the second replica's input failed its device check. Its compact
 2 GiB hashed ELF passed source and weight byte reconstruction. A concurrent
 two-SM FPGA run remains to be measured.
 
+The [Gemma 2 2B it two-cluster build](evaluation/gemma-int5-int6-batch2-hbm-candidate.json)
+runs the pinned 26-layer graph for input `[2, 100]` and two greedy steps.
+Its 1,496-stage schedule passed 159 selected tensor checks on each CPU
+replica and generated `[109, 235287]` for both, with maximum absolute error
+`0.000128746` at the same device tolerance. The original packed image has two
+segments. Duplicating the activations made the device ELF overlap the second
+segment, so `relocate_decoder_segment.py` moves that segment by 8 MiB in the
+GPU address map without changing its bytes. The rebuilt ELF passes placement
+and compact 2 GiB hash reconstruction. Separate two-stage Cyclotron probes
+passed with cluster 0 and cluster 1 addresses; changing only cluster 1's
+input failed its device check. Full two-cluster device execution and FPGA
+performance remain pending.
+
 The kernels in this directory exercise tensor handoffs inside **one Radiance
 executable**. `kernel.cpp` is a small three-stage device check:
 `RMSNorm → FP32 linear → residual`. `compile_decoder.py` reads the decoder

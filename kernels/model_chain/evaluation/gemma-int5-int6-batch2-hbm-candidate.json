@@ -1,0 +1,97 @@
+{
+  "schema": "radiance.model_chain.batch2_candidate.v1",
+  "model": "Gemma-2-2B-it",
+  "scope": "two independent identical greedy requests on two Radiance clusters",
+  "status": "software_validated_hardware_pending",
+  "stages_per_replica": 1496,
+  "replicas": 2,
+  "active_cores_per_cluster": 1,
+  "prefill_token_ids": [
+    2,
+    100
+  ],
+  "decode_steps": 2,
+  "expected_greedy_token_ids": [
+    109,
+    235287
+  ],
+  "checkpoint_sha256": "1189d2f21b21a2ffce4119ee251a1385902eae85f43647a4fe5bc6bf3f57fe6a",
+  "weight_image_sha256": "d833eed763a829445636a3b08b1c85cc36dfd4e2140ed30a05c3603406b7f091",
+  "weight_image_bytes": 2019513344,
+  "weight_image_segments": 2,
+  "weight_relocation": {
+    "source_manifest": "weights-image.json",
+    "segment_index": 1,
+    "old_base": 337641472,
+    "new_base": 346030080,
+    "delta_bytes": 8388608
+  },
+  "reference_output_sha256": "bd952e0f00ba775024d02e105c38a10143fc26df9cf9df015ea71afbdf9fd7d8",
+  "source_manifest_sha256": "c3cd722edf8896ff391177169b373cb26312c81f89d49d3eaa7aa5065a111004",
+  "source_device_elf_sha256": "34d6bfbd1325d40d6ae6c273f7acba73b1acff0d47414ab5f1fd992497925681",
+  "source_soc_elf_sha256": "d772d87f5da4a3c3ef30728210e1fe29c9bca1f5ffe02674c97b0cd555fe125b",
+  "hbm_device_elf_sha256": "0f9fa1fd102b6a3045eeee8139a24936c19df6a1d8f95a0f927a531ee9a84714",
+  "packaged_elf_sha256": "01840946a78cd6e13fb7c57aa303b7ad1e8cd94ad4f99b48c7bc465722f9d870",
+  "package_receipt_sha256": "4bd55613610fa918537f17c3b800388495326c0bab1604e7f6150068f4739719",
+  "handoff_zip_sha256": "c4744c3ebe0622c0b50b746e200548f23e0ac35ae4b20382d5af4c74a9c2d356",
+  "handoff_zip_bytes": 2173914199,
+  "handoff_members_verified": 15,
+  "hash_map": {
+    "gpu_bytes": 2147483648,
+    "unit_bytes": 32,
+    "slices": 4,
+    "compact": true
+  },
+  "package_source_and_image_verified": true,
+  "weight_placement": {
+    "status": "passed",
+    "elf_end_address_exclusive": "0x1491b7d8",
+    "second_segment_base": "0x14a00000",
+    "gap_bytes": 935976,
+    "stack_gap_bytes": 2359296
+  },
+  "native_check": {
+    "status": "passed",
+    "checked_tensors_per_replica": 159,
+    "errors_per_replica": {
+      "0": 0,
+      "1": 0
+    },
+    "max_abs_error": 0.000128746033,
+    "tolerance": {
+      "rtol": 0.005,
+      "atol": 0.0005
+    },
+    "result_sha256": "247a13a9bb16b8d8f81a1fcb57ba6121c1e27d0d18eb0c60496e11440738df5f",
+    "host_threads": 2
+  },
+  "cyclotron_prefix": {
+    "cluster0": {
+      "status": "passed",
+      "cycles_functional": 158505,
+      "tohost": 0,
+      "elf_sha256": "3b99bf526394b473210918be1a158b2381f51091bb0b5b1cc788268a43ba2b97",
+      "log_sha256": "6862cfd73a5e734f4ceb98717bea2fc0e022a393ec67531d733d336e6019b8b8"
+    },
+    "cluster1": {
+      "status": "passed",
+      "cycles_functional": 173459,
+      "tohost": 0,
+      "elf_sha256": "6a0f6c0d953f46f8c6c089bfef8f70fa8a17d6b807ebe076e4fd879081892d89",
+      "log_sha256": "c37cd6e9624c7e3f17bed79271d9f93cdf4c45ba85a353567df33167102622da"
+    },
+    "cluster1-changed-input": {
+      "status": "failed_as_expected",
+      "cycles_functional": 173450,
+      "tohost": 3269,
+      "elf_sha256": "879eeadd2aa6363b415e4fdb5100e581bee103a27d1dba5b47b8b38748ccbcda",
+      "log_sha256": "76ae31ffe6cb93735ea5fd1e3bbbd581f247eb1d2de7d6c3096a176c04253b16"
+    }
+  },
+  "cyclotron_config_sha256": "9c8e2a1417b22c997a3504a646c6accb72d7493ed85ec75a42e411f26145be84",
+  "full_model_device_execution": false,
+  "simultaneous_two_cluster_execution": false,
+  "rtl_or_fpga_execution": false,
+  "hardware_map_match_verified": false,
+  "performance_measurement": false
+}

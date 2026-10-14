@@ -27,6 +27,10 @@ EXPECTED_BATCH2 = {
         "selected_tensors": 171,
         "reference_output_sha256": "b1550ba6488f4c898444db34e234afde01cb8e5c31a176bed8402b570d8c793c",
     },
+    "gemma_2_2b_it": {
+        "selected_tensors": 159,
+        "reference_output_sha256": "bd952e0f00ba775024d02e105c38a10143fc26df9cf9df015ea71afbdf9fd7d8",
+    },
 }
 
 
