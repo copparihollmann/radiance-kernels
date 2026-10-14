@@ -342,6 +342,36 @@ the pinned model has an MoE FFN in every layer. OLMo, Qwen3-MoE, and Mistral
 now have ordered software schedules and reduced reference controls below.
 Nemotron has an ordered hybrid software schedule, a reduced upstream Mamba
 mixer check, and a connected reduced-width 42-block Radiance execution below.
+
+[`profile_architecture_shapes.py`](profile_architecture_shapes.py) builds each
+pinned graph at batch 1 × 128, batch 8 × 128, and batch 1 × 8,192 tokens,
+followed by two dependent greedy decode steps. The compact
+[architecture shape matrix](architecture-shapes.json) records phase order,
+stage mix, idealized arithmetic counts, named tensor sizes, and K/V storage.
+It loads no model weights. The long-context prefill rows are:
+
+| Candidate | Dense linear MACs | Selected expert MACs | Visible attention dot MACs | Graph K/V after decode | Window-trimmed K/V estimate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Qwen3-0.6B | 4.88 T | 0 | 3.85 T | 0.88 GiB | 0.88 GiB |
+| OLMo-3-7B | 56.42 T | 0 | 7.15 T | 4.00 GiB | 2.50 GiB |
+| Qwen3-30B-A3B | 10.07 T | 14.84 T | 13.20 T | 0.75 GiB | 0.75 GiB |
+| Nemotron-3-Nano-4B | 25.81 T | 0 | 1.37 T | 0.13 GiB | 0.13 GiB |
+| Mistral-7B-v0.3 | 58.27 T | 0 | 8.80 T | 1.00 GiB | 1.00 GiB |
+
+OLMo's graph currently stores full K/V history even for its sliding layers;
+the smaller number requires a window-evicting cache policy. Qwen3-MoE's
+selected expert work is counted separately from dense linear work. Nemotron's
+K/V number excludes Mamba state, which has its own
+[state profile](nemotron-state-profiles.json). These rows distinguish useful
+cache and routing experiments; they do not establish that any model is
+compute-bound or memory-bound. Attention counts include only visible QK and
+weighted-V dot products, and operand bytes are tensor sizes, not measured
+traffic. The graphs also materialize every prefill logit, so several 8,192-
+token named-tensor footprints exceed the current 2 GiB device map before
+weights. The matrix is a workload plan, not an executable long-context or
+timed hardware result. Regenerate with
+`python3 kernels/evaluation/llm/profile_architecture_shapes.py --out
+kernels/evaluation/llm/architecture-shapes.json`.
 Its full checkpoint execution remains open.
 All candidates need full checkpoint, input, and device checks before
 model-level performance comparisons.

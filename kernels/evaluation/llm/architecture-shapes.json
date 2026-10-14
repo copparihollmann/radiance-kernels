@@ -1,0 +1,991 @@
+{
+  "schema": "radiance.llm.architecture_shapes.v1",
+  "scope": "pinned-config and stitched-graph shape estimates; no weights or device execution",
+  "interpretation": {
+    "linear_macs": "dense linear stages only",
+    "expert_macs": "selected expert gate/up and down projections only",
+    "attention_dot_macs": "idealized visible-pair QK and weighted-V dot products; excludes masked pairs and implementation overhead",
+    "operand_bytes": "sum of stage-boundary tensor sizes, not cache misses or HBM transactions",
+    "peak_live_named_mapped_tensor_bytes": "distinct named FP32/32-bit graph tensors, without scratch or in-place reuse",
+    "final_full_history_kv_logical_bytes": "stitched graph retains all K/V positions, including sliding-attention layers",
+    "window_trimmed_kv_logical_bytes": "analytical BF16 K/V with local windows evicted; requires a cache policy the graph does not implement",
+    "mamba_state": "excluded from K/V estimates; see nemotron-state-profiles.json",
+    "cached_decode": "a proposed graph mapping when the checkpoint config has use_cache=false; not a checkpoint execution claim",
+    "performance_measurement": false
+  },
+  "cases": [
+    {
+      "case": "qwen3-0.6b",
+      "graph_key": "qwen3_0_6b",
+      "architecture_class": "dense",
+      "model": "Qwen/Qwen3-0.6B",
+      "revision": "c1899de289a04d12100db370d81485cdf75e47ca",
+      "config_sha256": "660db3b73d788119c04535e48cf9be5f55bc3100841a718637ae695b442f27dd",
+      "layer_counts": {
+        "full_attention+dense_ffn": 28
+      },
+      "checkpoint_use_cache": true,
+      "scenarios": {
+        "short_b1": {
+          "batch": 1,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1607,
+          "operator_counts": {
+            "add": 168,
+            "causal_gqa": 84,
+            "embedding": 3,
+            "gated_activation": 84,
+            "kv_append": 168,
+            "linear": 591,
+            "rmsnorm": 339,
+            "rope": 168,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 535,
+              "linear_macs": 76286001152,
+              "expert_macs": 0,
+              "attention_dot_macs": 946864128,
+              "logical_operand_bytes": 502366720,
+              "mapped_operand_bytes": 1004732928
+            },
+            "decode0": {
+              "stages": 536,
+              "linear_macs": 595984384,
+              "expert_macs": 0,
+              "attention_dot_macs": 14794752,
+              "logical_operand_bytes": 86860552,
+              "mapped_operand_bytes": 173721096
+            },
+            "decode1": {
+              "stages": 536,
+              "linear_macs": 595984384,
+              "expert_macs": 0,
+              "attention_dot_macs": 14909440,
+              "logical_operand_bytes": 48612872,
+              "mapped_operand_bytes": 97225736
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            128,
+            151936
+          ],
+          "prefill_logits_mapped_bytes": 77791232,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 77791232,
+          "peak_live_named_mapped_tensor_bytes": 108541440,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 28,
+          "final_full_history_kv_logical_bytes": 14909440,
+          "window_trimmed_kv_logical_bytes": 14909440,
+          "new_token_kv_write_logical_bytes": 114688
+        },
+        "short_b8": {
+          "batch": 8,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1607,
+          "operator_counts": {
+            "add": 168,
+            "causal_gqa": 84,
+            "embedding": 3,
+            "gated_activation": 84,
+            "kv_append": 168,
+            "linear": 591,
+            "rmsnorm": 339,
+            "rope": 168,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 535,
+              "linear_macs": 610288009216,
+              "expert_macs": 0,
+              "attention_dot_macs": 7574913024,
+              "logical_operand_bytes": 4018933760,
+              "mapped_operand_bytes": 8037863424
+            },
+            "decode0": {
+              "stages": 536,
+              "linear_macs": 4767875072,
+              "expert_macs": 0,
+              "attention_dot_macs": 118358016,
+              "logical_operand_bytes": 694884416,
+              "mapped_operand_bytes": 1389768768
+            },
+            "decode1": {
+              "stages": 536,
+              "linear_macs": 4767875072,
+              "expert_macs": 0,
+              "attention_dot_macs": 119275520,
+              "logical_operand_bytes": 388902976,
+              "mapped_operand_bytes": 777805888
+            }
+          },
+          "prefill_logits_shape": [
+            8,
+            128,
+            151936
+          ],
+          "prefill_logits_mapped_bytes": 622329856,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 622329856,
+          "peak_live_named_mapped_tensor_bytes": 868331520,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 28,
+          "final_full_history_kv_logical_bytes": 119275520,
+          "window_trimmed_kv_logical_bytes": 119275520,
+          "new_token_kv_write_logical_bytes": 917504
+        },
+        "long_b1": {
+          "batch": 1,
+          "prefill_tokens": 8192,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1607,
+          "operator_counts": {
+            "add": 168,
+            "causal_gqa": 84,
+            "embedding": 3,
+            "gated_activation": 84,
+            "kv_append": 168,
+            "linear": 591,
+            "rmsnorm": 339,
+            "rope": 168,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 535,
+              "linear_macs": 4882304073728,
+              "expert_macs": 0,
+              "attention_dot_macs": 3848760459264,
+              "logical_operand_bytes": 32151470080,
+              "mapped_operand_bytes": 64302907392
+            },
+            "decode0": {
+              "stages": 536,
+              "linear_macs": 595984384,
+              "expert_macs": 0,
+              "attention_dot_macs": 939638784,
+              "logical_operand_bytes": 5311816456,
+              "mapped_operand_bytes": 10623632904
+            },
+            "decode1": {
+              "stages": 536,
+              "linear_macs": 595984384,
+              "expert_macs": 0,
+              "attention_dot_macs": 939753472,
+              "logical_operand_bytes": 2823144968,
+              "mapped_operand_bytes": 5646289928
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            8192,
+            151936
+          ],
+          "prefill_logits_mapped_bytes": 4978638848,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 4978638848,
+          "peak_live_named_mapped_tensor_bytes": 6892107264,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 28,
+          "final_full_history_kv_logical_bytes": 939753472,
+          "window_trimmed_kv_logical_bytes": 939753472,
+          "new_token_kv_write_logical_bytes": 114688
+        }
+      }
+    },
+    {
+      "case": "olmo3-7b",
+      "graph_key": "olmo3_7b",
+      "architecture_class": "local-global",
+      "model": "allenai/Olmo-3-7B-Instruct",
+      "revision": "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc",
+      "config_sha256": "6282ae812f9e494bd212e9a3233d68dc4d5f1e2569642423d2b79a3e80373ef8",
+      "layer_counts": {
+        "full_attention+dense_ffn": 8,
+        "sliding_attention+dense_ffn": 24
+      },
+      "checkpoint_use_cache": false,
+      "scenarios": {
+        "short_b1": {
+          "batch": 1,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 2123,
+          "operator_counts": {
+            "add": 192,
+            "causal_gqa": 96,
+            "embedding": 3,
+            "gated_activation": 96,
+            "kv_append": 192,
+            "linear": 675,
+            "reshape_heads": 288,
+            "rmsnorm": 387,
+            "rope_yarn": 192,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 707,
+              "linear_macs": 881503240192,
+              "expert_macs": 0,
+              "attention_dot_macs": 2164260864,
+              "logical_operand_bytes": 2013771776,
+              "mapped_operand_bytes": 4027543040
+            },
+            "decode0": {
+              "stages": 708,
+              "linear_macs": 6886744064,
+              "expert_macs": 0,
+              "attention_dot_macs": 33816576,
+              "logical_operand_bytes": 242730356,
+              "mapped_operand_bytes": 485460704
+            },
+            "decode1": {
+              "stages": 708,
+              "linear_macs": 6886744064,
+              "expert_macs": 0,
+              "attention_dot_macs": 34078720,
+              "logical_operand_bytes": 218832608,
+              "mapped_operand_bytes": 437665208
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            128,
+            100278
+          ],
+          "prefill_logits_mapped_bytes": 51342336,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 51342336,
+          "peak_live_named_mapped_tensor_bytes": 189205208,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 32,
+          "final_full_history_kv_logical_bytes": 68157440,
+          "window_trimmed_kv_logical_bytes": 68157440,
+          "new_token_kv_write_logical_bytes": 524288
+        },
+        "short_b8": {
+          "batch": 8,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 2123,
+          "operator_counts": {
+            "add": 192,
+            "causal_gqa": 96,
+            "embedding": 3,
+            "gated_activation": 96,
+            "kv_append": 192,
+            "linear": 675,
+            "reshape_heads": 288,
+            "rmsnorm": 387,
+            "rope_yarn": 192,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 707,
+              "linear_macs": 7052025921536,
+              "expert_macs": 0,
+              "attention_dot_macs": 17314086912,
+              "logical_operand_bytes": 16110174208,
+              "mapped_operand_bytes": 32220344320
+            },
+            "decode0": {
+              "stages": 708,
+              "linear_macs": 55093952512,
+              "expert_macs": 0,
+              "attention_dot_macs": 270532608,
+              "logical_operand_bytes": 1941842848,
+              "mapped_operand_bytes": 3883685632
+            },
+            "decode1": {
+              "stages": 708,
+              "linear_macs": 55093952512,
+              "expert_macs": 0,
+              "attention_dot_macs": 272629760,
+              "logical_operand_bytes": 1750660864,
+              "mapped_operand_bytes": 3501321664
+            }
+          },
+          "prefill_logits_shape": [
+            8,
+            128,
+            100278
+          ],
+          "prefill_logits_mapped_bytes": 410738688,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 410738688,
+          "peak_live_named_mapped_tensor_bytes": 1513641664,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 32,
+          "final_full_history_kv_logical_bytes": 545259520,
+          "window_trimmed_kv_logical_bytes": 545259520,
+          "new_token_kv_write_logical_bytes": 4194304
+        },
+        "long_b1": {
+          "batch": 1,
+          "prefill_tokens": 8192,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 2123,
+          "operator_counts": {
+            "add": 192,
+            "causal_gqa": 96,
+            "embedding": 3,
+            "gated_activation": 96,
+            "kv_append": 192,
+            "linear": 675,
+            "reshape_heads": 288,
+            "rmsnorm": 387,
+            "rope_yarn": 192,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 707,
+              "linear_macs": 56416207372288,
+              "expert_macs": 0,
+              "attention_dot_macs": 7147496669184,
+              "logical_operand_bytes": 128881393664,
+              "mapped_operand_bytes": 257762754560
+            },
+            "decode0": {
+              "stages": 708,
+              "linear_macs": 6886744064,
+              "expert_macs": 0,
+              "attention_dot_macs": 1342242816,
+              "logical_operand_bytes": 14543589236,
+              "mapped_operand_bytes": 29087178464
+            },
+            "decode1": {
+              "stages": 708,
+              "linear_macs": 6886744064,
+              "expert_macs": 0,
+              "attention_dot_macs": 1342308352,
+              "logical_operand_bytes": 12902407904,
+              "mapped_operand_bytes": 25804815800
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            8192,
+            100278
+          ],
+          "prefill_logits_mapped_bytes": 3285909504,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 3285909504,
+          "peak_live_named_mapped_tensor_bytes": 12011609816,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 32,
+          "final_full_history_kv_logical_bytes": 4296015872,
+          "window_trimmed_kv_logical_bytes": 2684616704,
+          "new_token_kv_write_logical_bytes": 524288
+        }
+      }
+    },
+    {
+      "case": "qwen3-30b-a3b",
+      "graph_key": "qwen3_30b_a3b",
+      "architecture_class": "moe",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+      "config_sha256": "2850ddb3bf7aecad20b611e2d44f3077fc8193f4827c93beddd4c02ad63c2297",
+      "layer_counts": {
+        "full_attention+moe": 48
+      },
+      "checkpoint_use_cache": true,
+      "scenarios": {
+        "short_b1": {
+          "batch": 1,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 3467,
+          "operator_counts": {
+            "add": 288,
+            "causal_gqa": 144,
+            "embedding": 3,
+            "expert_down": 144,
+            "expert_gate_up": 144,
+            "expert_group": 144,
+            "expert_swiglu": 144,
+            "expert_weighted_reduce": 144,
+            "kv_append": 288,
+            "linear": 723,
+            "rmsnorm": 579,
+            "rope": 288,
+            "softmax": 144,
+            "token_select": 2,
+            "topk_indices": 144,
+            "topk_scores": 144
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 1155,
+              "linear_macs": 157403840512,
+              "expert_macs": 231928233984,
+              "attention_dot_macs": 3246391296,
+              "logical_operand_bytes": 2219213312,
+              "mapped_operand_bytes": 4427612672
+            },
+            "decode0": {
+              "stages": 1156,
+              "linear_macs": 1229717504,
+              "expert_macs": 1811939328,
+              "attention_dot_macs": 50724864,
+              "logical_operand_bytes": 93981960,
+              "mapped_operand_bytes": 187879432
+            },
+            "decode1": {
+              "stages": 1156,
+              "linear_macs": 1229717504,
+              "expert_macs": 1811939328,
+              "attention_dot_macs": 51118080,
+              "logical_operand_bytes": 55685128,
+              "mapped_operand_bytes": 111285768
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            128,
+            151936
+          ],
+          "prefill_logits_mapped_bytes": 77791232,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 77791232,
+          "peak_live_named_mapped_tensor_bytes": 104056320,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 48,
+          "final_full_history_kv_logical_bytes": 12779520,
+          "window_trimmed_kv_logical_bytes": 12779520,
+          "new_token_kv_write_logical_bytes": 98304
+        },
+        "short_b8": {
+          "batch": 8,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 3467,
+          "operator_counts": {
+            "add": 288,
+            "causal_gqa": 144,
+            "embedding": 3,
+            "expert_down": 144,
+            "expert_gate_up": 144,
+            "expert_group": 144,
+            "expert_swiglu": 144,
+            "expert_weighted_reduce": 144,
+            "kv_append": 288,
+            "linear": 723,
+            "rmsnorm": 579,
+            "rope": 288,
+            "softmax": 144,
+            "token_select": 2,
+            "topk_indices": 144,
+            "topk_scores": 144
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 1155,
+              "linear_macs": 1259230724096,
+              "expert_macs": 1855425871872,
+              "attention_dot_macs": 25971130368,
+              "logical_operand_bytes": 17753706496,
+              "mapped_operand_bytes": 35420901376
+            },
+            "decode0": {
+              "stages": 1156,
+              "linear_macs": 9837740032,
+              "expert_macs": 14495514624,
+              "attention_dot_macs": 405798912,
+              "logical_operand_bytes": 751855680,
+              "mapped_operand_bytes": 1503035456
+            },
+            "decode1": {
+              "stages": 1156,
+              "linear_macs": 9837740032,
+              "expert_macs": 14495514624,
+              "attention_dot_macs": 408944640,
+              "logical_operand_bytes": 445481024,
+              "mapped_operand_bytes": 890286144
+            }
+          },
+          "prefill_logits_shape": [
+            8,
+            128,
+            151936
+          ],
+          "prefill_logits_mapped_bytes": 622329856,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 622329856,
+          "peak_live_named_mapped_tensor_bytes": 832450560,
+          "peak_live_stage": "decode1.layer00.k_cache",
+          "attention_layers": 48,
+          "final_full_history_kv_logical_bytes": 102236160,
+          "window_trimmed_kv_logical_bytes": 102236160,
+          "new_token_kv_write_logical_bytes": 786432
+        },
+        "long_b1": {
+          "batch": 1,
+          "prefill_tokens": 8192,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 3467,
+          "operator_counts": {
+            "add": 288,
+            "causal_gqa": 144,
+            "embedding": 3,
+            "expert_down": 144,
+            "expert_gate_up": 144,
+            "expert_group": 144,
+            "expert_swiglu": 144,
+            "expert_weighted_reduce": 144,
+            "kv_append": 288,
+            "linear": 723,
+            "rmsnorm": 579,
+            "rope": 288,
+            "softmax": 144,
+            "token_select": 2,
+            "topk_indices": 144,
+            "topk_scores": 144
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 1155,
+              "linear_macs": 10073845792768,
+              "expert_macs": 14843406974976,
+              "attention_dot_macs": 13195750146048,
+              "logical_operand_bytes": 142029651968,
+              "mapped_operand_bytes": 283367211008
+            },
+            "decode0": {
+              "stages": 1156,
+              "linear_macs": 1229717504,
+              "expert_macs": 1811939328,
+              "attention_dot_macs": 3221618688,
+              "logical_operand_bytes": 4922576136,
+              "mapped_operand_bytes": 9845067784
+            },
+            "decode1": {
+              "stages": 1156,
+              "linear_macs": 1229717504,
+              "expert_macs": 1811939328,
+              "attention_dot_macs": 3222011904,
+              "logical_operand_bytes": 2433855496,
+              "mapped_operand_bytes": 4867626504
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            8192,
+            151936
+          ],
+          "prefill_logits_mapped_bytes": 4978638848,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 4978638848,
+          "peak_live_named_mapped_tensor_bytes": 6656360448,
+          "peak_live_stage": "prefill.lm_head",
+          "attention_layers": 48,
+          "final_full_history_kv_logical_bytes": 805502976,
+          "window_trimmed_kv_logical_bytes": 805502976,
+          "new_token_kv_write_logical_bytes": 98304
+        }
+      }
+    },
+    {
+      "case": "nemotron3-nano-4b",
+      "graph_key": "nemotron3_nano_4b",
+      "architecture_class": "hybrid",
+      "model": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "revision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+      "config_sha256": "fde9241f66cd414458df444a80eb535f53aef2b4b240a91f092e651fa6f27219",
+      "layer_counts": {
+        "full_attention": 4,
+        "mamba2": 21,
+        "mlp_only": 17
+      },
+      "checkpoint_use_cache": true,
+      "scenarios": {
+        "short_b1": {
+          "batch": 1,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1322,
+          "operator_counts": {
+            "add": 126,
+            "causal_gqa": 12,
+            "embedding": 3,
+            "kv_append": 24,
+            "linear": 279,
+            "mamba_channel_slice": 189,
+            "mamba_conv_state": 63,
+            "mamba_depthwise_conv": 63,
+            "mamba_gated_rmsnorm": 63,
+            "mamba_projection_slice": 189,
+            "mamba_scan_state": 63,
+            "mamba_selective_scan": 63,
+            "relu_squared": 51,
+            "rmsnorm": 129,
+            "select_last_token": 3,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 440,
+              "linear_macs": 403630194688,
+              "expert_macs": 0,
+              "attention_dot_macs": 338165760,
+              "logical_operand_bytes": 1820115712,
+              "mapped_operand_bytes": 3557655552
+            },
+            "decode0": {
+              "stages": 441,
+              "linear_macs": 3561191424,
+              "expert_macs": 0,
+              "attention_dot_macs": 5283840,
+              "logical_operand_bytes": 273016904,
+              "mapped_operand_bytes": 298307720
+            },
+            "decode1": {
+              "stages": 441,
+              "linear_macs": 3561191424,
+              "expert_macs": 0,
+              "attention_dot_macs": 5324800,
+              "logical_operand_bytes": 273066056,
+              "mapped_operand_bytes": 298406024
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            1,
+            131072
+          ],
+          "prefill_logits_mapped_bytes": 524288,
+          "largest_mapped_tensor": "prefill.layer00.in_proj",
+          "largest_mapped_tensor_bytes": 8962048,
+          "peak_live_named_mapped_tensor_bytes": 105480192,
+          "peak_live_stage": "prefill.layer40.dt",
+          "attention_layers": 4,
+          "final_full_history_kv_logical_bytes": 2129920,
+          "window_trimmed_kv_logical_bytes": 2129920,
+          "new_token_kv_write_logical_bytes": 16384
+        },
+        "short_b8": {
+          "batch": 8,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1322,
+          "operator_counts": {
+            "add": 126,
+            "causal_gqa": 12,
+            "embedding": 3,
+            "kv_append": 24,
+            "linear": 279,
+            "mamba_channel_slice": 189,
+            "mamba_conv_state": 63,
+            "mamba_depthwise_conv": 63,
+            "mamba_gated_rmsnorm": 63,
+            "mamba_projection_slice": 189,
+            "mamba_scan_state": 63,
+            "mamba_selective_scan": 63,
+            "relu_squared": 51,
+            "rmsnorm": 129,
+            "select_last_token": 3,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 440,
+              "linear_macs": 3229041557504,
+              "expert_macs": 0,
+              "attention_dot_macs": 2705326080,
+              "logical_operand_bytes": 14560925696,
+              "mapped_operand_bytes": 28461244416
+            },
+            "decode0": {
+              "stages": 441,
+              "linear_macs": 28489531392,
+              "expert_macs": 0,
+              "attention_dot_macs": 42270720,
+              "logical_operand_bytes": 2184135232,
+              "mapped_operand_bytes": 2386461760
+            },
+            "decode1": {
+              "stages": 441,
+              "linear_macs": 28489531392,
+              "expert_macs": 0,
+              "attention_dot_macs": 42598400,
+              "logical_operand_bytes": 2184528448,
+              "mapped_operand_bytes": 2387248192
+            }
+          },
+          "prefill_logits_shape": [
+            8,
+            1,
+            131072
+          ],
+          "prefill_logits_mapped_bytes": 4194304,
+          "largest_mapped_tensor": "prefill.layer00.in_proj",
+          "largest_mapped_tensor_bytes": 71696384,
+          "peak_live_named_mapped_tensor_bytes": 843841536,
+          "peak_live_stage": "prefill.layer40.dt",
+          "attention_layers": 4,
+          "final_full_history_kv_logical_bytes": 17039360,
+          "window_trimmed_kv_logical_bytes": 17039360,
+          "new_token_kv_write_logical_bytes": 131072
+        },
+        "long_b1": {
+          "batch": 1,
+          "prefill_tokens": 8192,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1322,
+          "operator_counts": {
+            "add": 126,
+            "causal_gqa": 12,
+            "embedding": 3,
+            "kv_append": 24,
+            "linear": 279,
+            "mamba_channel_slice": 189,
+            "mamba_conv_state": 63,
+            "mamba_depthwise_conv": 63,
+            "mamba_gated_rmsnorm": 63,
+            "mamba_projection_slice": 189,
+            "mamba_scan_state": 63,
+            "mamba_selective_scan": 63,
+            "relu_squared": 51,
+            "rmsnorm": 129,
+            "select_last_token": 3,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 440,
+              "linear_macs": 25806436827136,
+              "expert_macs": 0,
+              "attention_dot_macs": 1374557306880,
+              "logical_operand_bytes": 111164891392,
+              "mapped_operand_bytes": 222247174656
+            },
+            "decode0": {
+              "stages": 441,
+              "linear_macs": 3561191424,
+              "expert_macs": 0,
+              "attention_dot_macs": 335585280,
+              "logical_operand_bytes": 669378632,
+              "mapped_operand_bytes": 1091031176
+            },
+            "decode1": {
+              "stages": 441,
+              "linear_macs": 3561191424,
+              "expert_macs": 0,
+              "attention_dot_macs": 335626240,
+              "logical_operand_bytes": 669427784,
+              "mapped_operand_bytes": 1091129480
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            1,
+            131072
+          ],
+          "prefill_logits_mapped_bytes": 524288,
+          "largest_mapped_tensor": "prefill.layer00.in_proj",
+          "largest_mapped_tensor_bytes": 573571072,
+          "peak_live_named_mapped_tensor_bytes": 1600094208,
+          "peak_live_stage": "prefill.layer40.dt",
+          "attention_layers": 4,
+          "final_full_history_kv_logical_bytes": 134250496,
+          "window_trimmed_kv_logical_bytes": 134250496,
+          "new_token_kv_write_logical_bytes": 16384
+        }
+      }
+    },
+    {
+      "case": "mistral-7b-v03",
+      "graph_key": "mistral_7b_v03",
+      "architecture_class": "held-out",
+      "model": "mistralai/Mistral-7B-v0.3",
+      "revision": "caa1feb0e54d415e2df31207e5f4e273e33509b1",
+      "config_sha256": "affafc6478ec0fd07a32f0ca57aa2fc57743f4d17d6730f86a96ac24d1507f99",
+      "layer_counts": {
+        "full_attention+dense_ffn": 32
+      },
+      "checkpoint_use_cache": true,
+      "scenarios": {
+        "short_b1": {
+          "batch": 1,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1643,
+          "operator_counts": {
+            "add": 192,
+            "causal_gqa": 96,
+            "embedding": 3,
+            "gated_activation": 96,
+            "kv_append": 192,
+            "linear": 675,
+            "rmsnorm": 195,
+            "rope": 192,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 547,
+              "linear_macs": 910533066752,
+              "expert_macs": 0,
+              "attention_dot_macs": 2164260864,
+              "logical_operand_bytes": 1572864512,
+              "mapped_operand_bytes": 3145728512
+            },
+            "decode0": {
+              "stages": 548,
+              "linear_macs": 7113539584,
+              "expert_macs": 0,
+              "attention_dot_macs": 33816576,
+              "logical_operand_bytes": 71008264,
+              "mapped_operand_bytes": 142016520
+            },
+            "decode1": {
+              "stages": 548,
+              "linear_macs": 7113539584,
+              "expert_macs": 0,
+              "attention_dot_macs": 34078720,
+              "logical_operand_bytes": 63078408,
+              "mapped_operand_bytes": 126156808
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            128,
+            32768
+          ],
+          "prefill_logits_mapped_bytes": 16777216,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 16777216,
+          "peak_live_named_mapped_tensor_bytes": 57671680,
+          "peak_live_stage": "prefill.layer31.activation",
+          "attention_layers": 32,
+          "final_full_history_kv_logical_bytes": 17039360,
+          "window_trimmed_kv_logical_bytes": 17039360,
+          "new_token_kv_write_logical_bytes": 131072
+        },
+        "short_b8": {
+          "batch": 8,
+          "prefill_tokens": 128,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1643,
+          "operator_counts": {
+            "add": 192,
+            "causal_gqa": 96,
+            "embedding": 3,
+            "gated_activation": 96,
+            "kv_append": 192,
+            "linear": 675,
+            "rmsnorm": 195,
+            "rope": 192,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 547,
+              "linear_macs": 7284264534016,
+              "expert_macs": 0,
+              "attention_dot_macs": 17314086912,
+              "logical_operand_bytes": 12582916096,
+              "mapped_operand_bytes": 25165828096
+            },
+            "decode0": {
+              "stages": 548,
+              "linear_macs": 56908316672,
+              "expert_macs": 0,
+              "attention_dot_macs": 270532608,
+              "logical_operand_bytes": 568066112,
+              "mapped_operand_bytes": 1136132160
+            },
+            "decode1": {
+              "stages": 548,
+              "linear_macs": 56908316672,
+              "expert_macs": 0,
+              "attention_dot_macs": 272629760,
+              "logical_operand_bytes": 504627264,
+              "mapped_operand_bytes": 1009254464
+            }
+          },
+          "prefill_logits_shape": [
+            8,
+            128,
+            32768
+          ],
+          "prefill_logits_mapped_bytes": 134217728,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 134217728,
+          "peak_live_named_mapped_tensor_bytes": 461373440,
+          "peak_live_stage": "prefill.layer31.activation",
+          "attention_layers": 32,
+          "final_full_history_kv_logical_bytes": 136314880,
+          "window_trimmed_kv_logical_bytes": 136314880,
+          "new_token_kv_write_logical_bytes": 1048576
+        },
+        "long_b1": {
+          "batch": 1,
+          "prefill_tokens": 8192,
+          "greedy_cached_decode_steps": 2,
+          "stage_count": 1643,
+          "operator_counts": {
+            "add": 192,
+            "causal_gqa": 96,
+            "embedding": 3,
+            "gated_activation": 96,
+            "kv_append": 192,
+            "linear": 675,
+            "rmsnorm": 195,
+            "rope": 192,
+            "token_select": 2
+          },
+          "phase_work": {
+            "prefill": {
+              "stages": 547,
+              "linear_macs": 58274116272128,
+              "expert_macs": 0,
+              "attention_dot_macs": 8797166764032,
+              "logical_operand_bytes": 100663328768,
+              "mapped_operand_bytes": 201326624768
+            },
+            "decode0": {
+              "stages": 548,
+              "linear_macs": 7113539584,
+              "expert_macs": 0,
+              "attention_dot_macs": 2147745792,
+              "logical_operand_bytes": 3770384392,
+              "mapped_operand_bytes": 7540768776
+            },
+            "decode1": {
+              "stages": 548,
+              "linear_macs": 7113539584,
+              "expert_macs": 0,
+              "attention_dot_macs": 2148007936,
+              "logical_operand_bytes": 3233972232,
+              "mapped_operand_bytes": 6467944456
+            }
+          },
+          "prefill_logits_shape": [
+            1,
+            8192,
+            32768
+          ],
+          "prefill_logits_mapped_bytes": 1073741824,
+          "largest_mapped_tensor": "prefill.lm_head",
+          "largest_mapped_tensor_bytes": 1073741824,
+          "peak_live_named_mapped_tensor_bytes": 3690987520,
+          "peak_live_stage": "prefill.layer31.activation",
+          "attention_layers": 32,
+          "final_full_history_kv_logical_bytes": 1074003968,
+          "window_trimmed_kv_logical_bytes": 1074003968,
+          "new_token_kv_write_logical_bytes": 131072
+        }
+      }
+    }
+  ]
+}
