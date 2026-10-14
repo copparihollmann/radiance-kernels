@@ -23,6 +23,12 @@ def sha(array: np.ndarray) -> str:
     return hashlib.sha256(np.ascontiguousarray(array).tobytes()).hexdigest()
 
 
+def prepare_dt(raw_dt: np.ndarray, bias: np.ndarray,
+               dt_min: float, dt_max: float) -> np.ndarray:
+    z = np.asarray(raw_dt + bias, dtype=np.float32)
+    return np.clip(np.logaddexp(np.float32(0), z), dt_min, dt_max).astype(np.float32)
+
+
 def reference(x, b, c, dt, a, d, initial, prefill: int,
               reset_at_decode: bool = False):
     state = initial.copy()
@@ -47,12 +53,16 @@ def reference(x, b, c, dt, a, d, initial, prefill: int,
     return y, state
 
 
-def emit_fixture(out: Path, *, x, b, c, dt, a, d, initial,
+def emit_fixture(out: Path, *, x, b, c, raw_dt, dt_bias, dt_min, dt_max,
+                 a, d, initial,
                  gold_y, gold_state, source: str, provenance: dict) -> dict:
+    dt = prepare_dt(raw_dt, dt_bias, dt_min, dt_max)
     expected_shapes = ((x, (TOKENS, HEADS * HEAD_DIM)),
                        (b, (TOKENS, GROUPS, STATE_SIZE)),
                        (c, (TOKENS, GROUPS, STATE_SIZE)),
-                       (dt, (TOKENS, HEADS)), (a, (HEADS,)),
+                       (raw_dt, (TOKENS, HEADS)),
+                       (dt_bias, (HEADS,)), (dt, (TOKENS, HEADS)),
+                       (a, (HEADS,)),
                        (d, (HEADS,)),
                        (initial, (HEADS * HEAD_DIM, STATE_SIZE)),
                        (gold_y, (TOKENS, HEADS * HEAD_DIM)),
@@ -67,12 +77,15 @@ def emit_fixture(out: Path, *, x, b, c, dt, a, d, initial,
         raise ValueError("prefill-to-decode state control is too weak")
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w") as stream:
+        stream.write(f"#define DT_MIN {dt_min:.9e}f\n")
+        stream.write(f"#define DT_MAX {dt_max:.9e}f\n")
         for name, value in (("HEADS", HEADS), ("HEAD_DIM", HEAD_DIM),
                             ("GROUPS", GROUPS), ("STATE_SIZE", STATE_SIZE),
                             ("TOKENS", TOKENS), ("PREFILL_TOKENS", PREFILL)):
             stream.write(f"#define {name} {value}\n")
         for name, array in (("x_raw", x), ("b_raw", b), ("c_raw", c),
-                            ("dt_raw", dt), ("a_raw", a), ("d_raw", d),
+                            ("dt_raw", raw_dt), ("dt_bias_raw", dt_bias),
+                            ("a_raw", a), ("d_raw", d),
                             ("state_raw", initial), ("gold_y_raw", gold_y),
                             ("gold_state_raw", gold_state)):
             G.emit_f32(stream, name, array.ravel(),
@@ -83,8 +96,11 @@ def emit_fixture(out: Path, *, x, b, c, dt, a, d, initial,
         "heads": HEADS, "head_dim": HEAD_DIM,
         "groups": GROUPS, "state_size": STATE_SIZE,
         "tokens": TOKENS, "prefill_tokens": PREFILL,
+        "dt_min": dt_min, "dt_max": dt_max,
         "input_sha256": {name: sha(array) for name, array in
-                         (("x", x), ("b", b), ("c", c), ("dt", dt),
+                         (("x", x), ("b", b), ("c", c),
+                          ("raw_dt", raw_dt), ("dt_bias", dt_bias),
+                          ("prepared_dt", dt),
                           ("a", a), ("d", d), ("initial_state", initial))},
         "gold_y_sha256": sha(gold_y),
         "gold_final_state_sha256": sha(gold_state),
@@ -98,12 +114,18 @@ def generate(out: Path) -> dict:
     x = rng.normal(0, 0.35, (TOKENS, HEADS * HEAD_DIM)).astype(np.float32)
     b = rng.normal(0, 0.2, (TOKENS, GROUPS, STATE_SIZE)).astype(np.float32)
     c = rng.normal(0, 0.2, (TOKENS, GROUPS, STATE_SIZE)).astype(np.float32)
-    dt = rng.uniform(0.005, 0.12, (TOKENS, HEADS)).astype(np.float32)
+    desired_dt = rng.uniform(0.005, 0.12, (TOKENS, HEADS)).astype(np.float32)
+    dt_bias = rng.normal(0, 0.3, HEADS).astype(np.float32)
+    raw_dt = (np.log(np.expm1(desired_dt)) - dt_bias).astype(np.float32)
+    dt_min, dt_max = 0.0, float(np.finfo(np.float32).max)
+    dt = prepare_dt(raw_dt, dt_bias, dt_min, dt_max)
     a = -rng.uniform(0.3, 1.6, HEADS).astype(np.float32)
     d = rng.uniform(0.5, 1.2, HEADS).astype(np.float32)
     initial = rng.normal(0, 0.03, (HEADS * HEAD_DIM, STATE_SIZE)).astype(np.float32)
     gold_y, gold_state = reference(x, b, c, dt, a, d, initial, PREFILL)
-    return emit_fixture(out, x=x, b=b, c=c, dt=dt, a=a, d=d,
+    return emit_fixture(out, x=x, b=b, c=c, raw_dt=raw_dt,
+                        dt_bias=dt_bias, dt_min=dt_min, dt_max=dt_max,
+                        a=a, d=d,
                         initial=initial, gold_y=gold_y, gold_state=gold_state,
                         source="numpy_synthetic", provenance={"seed": 19})
 

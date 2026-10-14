@@ -1,5 +1,6 @@
-// One-token-at-a-time Mamba2 SSM recurrence. Inputs are post-convolution X/B/C,
-// positive dt after softplus/clamp, and pretransformed A = -exp(A_log).
+// One-token-at-a-time Mamba2 SSM recurrence. X/B/C are post-convolution;
+// dt is the raw projection slice, with bias and limits applied here.
+// A is pretransformed once from A_log as -exp(A_log).
 #include <mu_intrinsics.h>
 #include <mu_schedule.h>
 #include <stdint.h>
@@ -27,6 +28,25 @@ static float decay_exp(float z) {
   return sum;
 }
 
+// softplus(z) = max(z, 0) + log(1 + exp(-abs(z))). The atanh series for
+// log(1+u) converges quickly because u/(2+u) is at most 1/3.
+static float prepare_dt(float raw, float bias) {
+  const float z = raw + bias;
+  const float mag = z < 0.0f ? -z : z;
+  const float u = decay_exp(-mag);
+  const float q = u / (2.0f + u);
+  const float q2 = q * q;
+  float power = q, log1p = 0.0f;
+  for (uint32_t n = 1; n <= 15; n += 2) {
+    log1p += power / static_cast<float>(n);
+    power *= q2;
+  }
+  float dt = (z > 0.0f ? z : 0.0f) + 2.0f * log1p;
+  if (dt < DT_MIN) dt = DT_MIN;
+  if (dt > DT_MAX) dt = DT_MAX;
+  return dt;
+}
+
 static void scan(void* raw, uint32_t tid, uint32_t tpb, uint32_t) {
   const ScanArgs* a = reinterpret_cast<const ScanArgs*>(raw);
   constexpr uint32_t CHANNELS = HEADS * HEAD_DIM;
@@ -39,7 +59,7 @@ static void scan(void* raw, uint32_t tid, uint32_t tpb, uint32_t) {
       state[n] = state_raw[channel * STATE_SIZE + n];
     for (uint32_t t = a->start; t < a->start + a->length; ++t) {
       const float x = x_raw[t * CHANNELS + channel];
-      const float dt = dt_raw[t * HEADS + head];
+      const float dt = prepare_dt(dt_raw[t * HEADS + head], dt_bias_raw[head]);
       const float decay = decay_exp(dt * a_raw[head]);
       float out = d_raw[head] * x;
       for (uint32_t n = 0; n < STATE_SIZE; ++n) {

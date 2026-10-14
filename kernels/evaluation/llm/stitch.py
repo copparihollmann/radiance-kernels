@@ -599,13 +599,8 @@ def _nemotron_pass(graph: Graph, spec: dict, phase: str, batch: int,
             conv_input = graph.add(f"{base}.conv_input", "mamba_projection_slice",
                                    (proj,), (batch, tokens, conv_channels),
                                    attrs={"part": "conv_input"})
-            dt_raw = graph.add(f"{base}.dt", "mamba_projection_slice", (proj,),
-                               (batch, tokens, mh), attrs={"part": "dt"})
-            dt = graph.add(f"{base}.dt_activated", "mamba_dt_prepare", (dt_raw,),
-                           (batch, tokens, mh), attrs={
-                               "parameter": f"{mixer}.dt_bias",
-                               "activation": "softplus",
-                               "limit": "config_default"})
+            dt = graph.add(f"{base}.dt", "mamba_projection_slice", (proj,),
+                           (batch, tokens, mh), attrs={"part": "dt"})
             old_conv, old_ssm = caches.get(layer, (None, None))
             conv_reads = ((conv_input,) if old_conv is None
                           else (old_conv, conv_input))
@@ -632,9 +627,10 @@ def _nemotron_pass(graph: Graph, spec: dict, phase: str, batch: int,
             scan = graph.add(f"{base}.selective_scan", "mamba_selective_scan",
                              scan_reads, (batch, tokens, inner),
                              "mamba_selective_scan", attrs={
-                                 "parameters": [f"{mixer}.A_log", f"{mixer}.D"],
+                                 "parameters": [f"{mixer}.A_log", f"{mixer}.D",
+                                                f"{mixer}.dt_bias"],
                                  "A_preprocessing": "negative_exp",
-                                 "dt_contract": "positive_after_bias_softplus",
+                                 "dt_preprocessing": "bias_softplus_config_limit",
                                  "chunk_size": spec["chunk_size"],
                                  "mode": "prefill" if past == 0 else "decode",
                                  "state_shape": [batch, mh, md, state]})

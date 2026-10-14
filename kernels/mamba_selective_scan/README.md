@@ -8,8 +8,9 @@ each token, head, channel and state element, it applies
 and emits `D * x[t] + sum(s[t] * C[t])`. The scan carries its final state from
 a prefill launch into a decode launch. The inputs are already split from the
 projection and depthwise convolution: `x`, `B`, and `C` are post-convolution;
-`dt` is positive after bias and softplus (plus any configured limit); `A` is
-already `-exp(A_log)`.
+`dt` is the raw projected time step. The kernel adds `dt_bias`, applies
+softplus and the configured limits, and then performs the recurrence. `A` is
+already `-exp(A_log)`; that transform can be done once when binding weights.
 
 This is one primitive, not a full Mamba block or a runnable Nemotron network.
 The projection, convolution, gate, norm, graph binding, real weights and
@@ -32,8 +33,9 @@ Cyclotron result checks device output with FP32 tolerance and independently
 compares the dumped output and final state with the NumPy golden. Its cycle
 count is a functional simulator diagnostic, not a hardware performance result.
 
-For a second input source, `gen_upstream_data.py` extracts `x`, `B`, `C`, `dt`,
-`A`, and `D` from a seven-token, random-weight Transformers Mamba2 mixer. It
+For a second input source, `gen_upstream_data.py` extracts `x`, `B`, `C`, raw
+`dt`, `dt_bias`, `A`, and `D` from a seven-token, random-weight Transformers
+Mamba2 mixer. It
 runs a five-token prefill followed by two cached decode calls. A hook captures
 the upstream scan output; the NumPy recurrence checks that output, the final
 SSM state, and the mixer output after its existing gate/norm and projection.
@@ -48,7 +50,8 @@ python3 kernels/mamba_selective_scan/test_device.py --source upstream \
 
 The [recorded reduced upstream check](evaluation/transformers-reduced-cyclotron.json)
 has `8.94e-8` maximum scan-output error and `2.24e-8` final-state error
-between NumPy and the Transformers CPU fallback. Cyclotron then passes on
-those exact extracted inputs. This checks the scan contract for one reduced
+between NumPy and the Transformers CPU fallback. On those extracted inputs,
+Cyclotron differs from the NumPy golden by at most `1.19e-7` in scan output
+and `6.41e-7` in final state. This checks the scan contract for one reduced
 mixer with random weights. It does not use the pinned Nemotron checkpoint or
 validate a connected full model.

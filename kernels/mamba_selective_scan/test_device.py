@@ -128,13 +128,13 @@ kernel.mu.o: data
         raise AssertionError("device golden output differs from NumPy golden")
     if hashlib.sha256(gold_state).hexdigest() != fixture["gold_final_state_sha256"]:
         raise AssertionError("device golden state differs from NumPy golden")
-    if not np.allclose(np.frombuffer(y, dtype="<f4"),
-                       np.frombuffer(gold_y, dtype="<f4"),
-                       rtol=3e-5, atol=3e-6):
+    actual_y = np.frombuffer(y, dtype="<f4")
+    expected_y = np.frombuffer(gold_y, dtype="<f4")
+    actual_state = np.frombuffer(state, dtype="<f4")
+    expected_state = np.frombuffer(gold_state, dtype="<f4")
+    if not np.allclose(actual_y, expected_y, rtol=3e-5, atol=3e-6):
         raise AssertionError("dumped output differs from NumPy golden")
-    if not np.allclose(np.frombuffer(state, dtype="<f4"),
-                       np.frombuffer(gold_state, dtype="<f4"),
-                       rtol=3e-5, atol=3e-6):
+    if not np.allclose(actual_state, expected_state, rtol=3e-5, atol=3e-6):
         raise AssertionError("dumped final state differs from NumPy golden")
     report = {
         "schema": "radiance.mamba-selective-scan-device-check.v1",
@@ -144,6 +144,9 @@ kernel.mu.o: data
         "functional_cycles": int(cycle_matches[0]),
         "checked_output_elements": y_bytes // 4,
         "checked_final_state_elements": state_bytes // 4,
+        "output_max_abs_error": float(np.max(np.abs(actual_y - expected_y))),
+        "final_state_max_abs_error": float(
+            np.max(np.abs(actual_state - expected_state))),
         "fixture": fixture,
         "output_sha256": hashlib.sha256(y).hexdigest(),
         "final_state_sha256": hashlib.sha256(state).hexdigest(),

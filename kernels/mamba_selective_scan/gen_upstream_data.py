@@ -19,7 +19,7 @@ from transformers.models.nemotron_h.modeling_nemotron_h import (
 )
 
 from gen_data import (GROUPS, HEADS, HEAD_DIM, PREFILL, STATE_SIZE, TOKENS,
-                      emit_fixture, reference, sha)
+                      emit_fixture, prepare_dt, reference, sha)
 
 
 def file_sha(path: Path) -> str:
@@ -68,8 +68,8 @@ def generate(out: Path) -> dict:
         x, b, c = conv.split(
             [mixer.intermediate_size, GROUPS * STATE_SIZE,
              GROUPS * STATE_SIZE], dim=-1)
-        dt = torch.nn.functional.softplus(raw_dt + mixer.dt_bias)
-        dt = torch.clamp(dt, mixer.time_step_min)
+        torch_dt = torch.nn.functional.softplus(raw_dt + mixer.dt_bias)
+        torch_dt = torch.clamp(torch_dt, mixer.time_step_min)
         a = -torch.exp(mixer.A_log.float())
         d = mixer.D
 
@@ -78,7 +78,10 @@ def generate(out: Path) -> dict:
         x_np = as_np(x[0])
         b_np = as_np(b[0].reshape(TOKENS, GROUPS, STATE_SIZE))
         c_np = as_np(c[0].reshape(TOKENS, GROUPS, STATE_SIZE))
-        dt_np, a_np, d_np = as_np(dt[0]), as_np(a), as_np(d)
+        raw_dt_np, dt_bias_np = as_np(raw_dt[0]), as_np(mixer.dt_bias)
+        dt_min, dt_max = float(mixer.time_step_min), float(np.finfo(np.float32).max)
+        dt_np = prepare_dt(raw_dt_np, dt_bias_np, dt_min, dt_max)
+        a_np, d_np = as_np(a), as_np(d)
         initial = np.zeros((HEADS * HEAD_DIM, STATE_SIZE), dtype=np.float32)
         gold_y, gold_state = reference(
             x_np, b_np, c_np, dt_np, a_np, d_np, initial, PREFILL)
@@ -93,6 +96,7 @@ def generate(out: Path) -> dict:
     scan_error = float(np.max(np.abs(gold_y - upstream_scan)))
     state_error = float(np.max(np.abs(gold_state - upstream_state)))
     output_error = float(np.max(np.abs(mapped_output - upstream_output)))
+    dt_error = float(np.max(np.abs(dt_np - as_np(torch_dt[0]))))
     if (not np.allclose(gold_y, upstream_scan, rtol=3e-5, atol=3e-6)
             or not np.allclose(gold_state, upstream_state,
                                rtol=3e-5, atol=3e-6)
@@ -112,10 +116,13 @@ def generate(out: Path) -> dict:
         "upstream_output_sha256": sha(upstream_output),
         "numpy_vs_upstream_scan_max_abs": scan_error,
         "numpy_vs_upstream_state_max_abs": state_error,
+        "numpy_vs_torch_prepared_dt_max_abs": dt_error,
         "mapped_vs_upstream_output_max_abs": output_error,
         "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
     }
-    return emit_fixture(out, x=x_np, b=b_np, c=c_np, dt=dt_np,
+    return emit_fixture(out, x=x_np, b=b_np, c=c_np,
+                        raw_dt=raw_dt_np, dt_bias=dt_bias_np,
+                        dt_min=dt_min, dt_max=dt_max,
                         a=a_np, d=d_np, initial=initial,
                         gold_y=gold_y, gold_state=gold_state,
                         source="transformers_reduced", provenance=provenance)
