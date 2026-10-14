@@ -234,6 +234,8 @@ def collect(*, model: str, sm_count: int, job_id: str, bitstream_id: str,
             workload_config: Path, uart_log: Path,
             firesim_exit_code: int, counter_files: list[Path],
             native_result: Path | None = None) -> dict:
+    if sm_count not in (1, 2):
+        raise ValueError("only one-SM and two-SM reports are supported")
     receipt_data = json.loads(receipt.read_text())
     source_data = json.loads(source_manifest.read_text())
     elf_digest = sha256(elf)
@@ -313,7 +315,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True,
                         choices=tuple(EXPECTED_MODELS))
-    parser.add_argument("--sm-count", type=int, required=True)
+    parser.add_argument("--sm-count", type=int, choices=(1, 2), required=True)
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--bitstream-id", required=True)
     parser.add_argument("--elf", type=Path, required=True)
@@ -328,8 +330,6 @@ def main() -> None:
                         help="required for a two-SM model batch")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    if args.sm_count not in (1, 2, 4):
-        parser.error("SM count must be 1, 2, or 4")
     result = collect(model=args.model, sm_count=args.sm_count,
                      job_id=args.job_id, bitstream_id=args.bitstream_id,
                      elf=args.elf, receipt=args.receipt,

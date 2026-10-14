@@ -74,6 +74,15 @@ class CollectFiresimResultTest(unittest.TestCase):
         self.assertEqual(parse_uart(VALID_UART.replace(
             "model_status=600d0000", "model_status=0x600d0000"))["status"], "passed")
 
+    def test_unsupported_four_sm_report_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "only one-SM and two-SM"):
+            collect(model="tinyllama", sm_count=4, job_id="test-four",
+                    bitstream_id="test-four-sm", elf=self.elf,
+                    receipt=self.receipt, source_manifest=self.source,
+                    hwdb_config=self.hwdb, workload_config=self.workload,
+                    uart_log=self.uart, firesim_exit_code=0,
+                    counter_files=[])
+
     def test_two_cluster_report_binds_both_statuses_and_native_check(self):
         source = json.loads(self.source.read_text())
         source.update({"batch_clusters": 2, "hbm_launch_clusters": 2,
