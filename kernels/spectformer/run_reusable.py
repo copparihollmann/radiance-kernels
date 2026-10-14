@@ -16,6 +16,22 @@ from prepare import sha256
 from reference import load_input, logits
 
 
+def scan_cyclotron_log(path: Path, weight_bytes: int, weight_address: int,
+                       input_bytes: int, input_address: int) -> dict:
+    """Read completion evidence without retaining the simulator log in RAM."""
+    weight_line = f"preloaded {weight_bytes} bytes of weights @0x{weight_address:x}"
+    input_line = f"preloaded {input_bytes} bytes of weights @0x{input_address:x}"
+    found = {"passed": 0, "weights": 0, "input": 0, "cycles": []}
+    with path.open(errors="replace") as stream:
+        for line in stream:
+            found["passed"] += line.count("isa-test passed with tohost=0")
+            found["weights"] += line.count(weight_line)
+            found["input"] += line.count(input_line)
+            found["cycles"].extend(int(value) for value in re.findall(
+                r"simulation finished after (\d+) cycles", line))
+    return found
+
+
 def upstream_output(image: dict, pixels: np.ndarray, kind: str) -> np.ndarray:
     if kind == "logits":
         if image["format"] == "spectformer.hierarchical.fp32.v1":
@@ -133,25 +149,24 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
     environment["CYCLOTRON_DUMP_GMEM"] = (
         f"0x{int(arenas[0], 16) + output_offset:x}:"
         f"{output_count * 4}:{dump}")
-    try:
-        result = subprocess.run([str(simulator), str(config), "--binary-path", str(elf),
-                                 "--gen-trace", "false"], cwd=simulator_root,
-                                env=environment, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, timeout=timeout)
-        output, exit_code = result.stdout, result.returncode
-    except subprocess.TimeoutExpired as error:
-        output = error.stdout or b""
-        if isinstance(output, bytes):
-            output = output.decode(errors="replace")
-        exit_code = 124
     log = out / "cyclotron.log"
-    log.write_text(output)
-    complete = (exit_code == 0 and "isa-test passed with tohost=0" in output and
-                dump.is_file() and dump.stat().st_size == output_count * 4 and
-                f"preloaded {weights.stat().st_size} bytes of weights "
-                f"@0x{image['base_address']:x}" in output and
-                f"preloaded {input_bytes.stat().st_size} bytes of weights "
-                f"@0x{build['input_address']:x}" in output)
+    with log.open("wb") as log_stream:
+        try:
+            result = subprocess.run([str(simulator), str(config), "--binary-path",
+                                     str(elf), "--gen-trace", "false"],
+                                    cwd=simulator_root, env=environment,
+                                    stdout=log_stream, stderr=subprocess.STDOUT,
+                                    timeout=timeout)
+            exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            exit_code = 124
+    events = scan_cyclotron_log(log, weights.stat().st_size,
+                                image["base_address"], input_bytes.stat().st_size,
+                                build["input_address"])
+    complete = (exit_code == 0 and events["passed"] == 1 and
+                events["weights"] == 1 and events["input"] == 1 and
+                len(events["cycles"]) == 1 and dump.is_file() and
+                dump.stat().st_size == output_count * 4)
     comparison = None
     if expected is not None and dump.is_file() and dump.stat().st_size == expected.nbytes:
         actual = np.fromfile(dump, dtype="<f4")
@@ -170,7 +185,6 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
         }
     passed = complete and (comparison is None if not check_reference else
                            comparison is not None and comparison["all_close"])
-    cycles = re.findall(r"simulation finished after (\d+) cycles", output)
     record = {
         "model": build["model"], "status": "passed" if passed else "failed",
         "output_kind": output_kind, "output_count": output_count,
@@ -189,7 +203,8 @@ def run(target: Path, input_path: Path, out: Path, simulator_root: Path,
         "output_comparison": comparison,
         "logit_comparison": comparison if output_kind == "logits" else None,
         "reference_checked": check_reference,
-        "cycles_functional": int(cycles[0]) if len(cycles) == 1 else None,
+        "cycles_functional": (events["cycles"][0]
+                              if len(events["cycles"]) == 1 else None),
         "performance_measurement": False, "rtl_execution": False,
         "exit_code": exit_code,
     }

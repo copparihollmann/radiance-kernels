@@ -1,0 +1,32 @@
+{
+  "model": "spectformer_vanilla",
+  "status": "passed",
+  "scope": "logits",
+  "output_count": 10,
+  "run_result_sha256": "b74be3b8dcb6f25ed470cf48df21dce2b96b2d20c8ffab7ad19e1c0b1efb39e5",
+  "build_manifest_sha256": "a45cc3dc2b96da31a92b5cfb11a1674fe04972e876832fcb26dd517c8557dae2",
+  "image_manifest_sha256": "954bdf41da6368a80db3c17fd176cd2ce363b78132b71dd09a4b7f13d67b3c6f",
+  "input_sha256": "e810fdff7cf509a4fa860c5c5f035a6d595924dd3276d4a76dc2c193c022c435",
+  "checkpoint_sha256": null,
+  "weights_sha256": "71bfed0a3240b2a78ca9f189092cf95a757c1e100bd173367df390b1b4f28d9a",
+  "elf_sha256": "9e29bfe964f95cd3e319e8f862d87d33f04cbf4665af1f9707c8e2fcae250c60",
+  "simulator_sha256": "180a55b1117d6bdca305aa60a1a3eef220d0791eb93c288cc5cde01411b37a5d",
+  "output_sha256": "c3f8c8263939b7cb8d85a4573c1628028206e2720879dafe82cb69131758700e",
+  "reference_sha256": "471182d6d562c0354db20c4739d56872e373d2992943a734cc5cc1b86a37177f",
+  "reference_environment": {
+    "torch": "2.9.1+cpu",
+    "timm": "0.9.16",
+    "numpy": "2.2.6"
+  },
+  "all_finite": true,
+  "max_abs_error": 0.0005241334438323975,
+  "rms_error": 0.00025783583005943036,
+  "out_of_tolerance": 0,
+  "rtol": 0.005,
+  "atol": 0.001,
+  "top1_agrees": true,
+  "cycles_functional": 430609,
+  "reference_checked": true,
+  "rtl_execution": false,
+  "performance_measurement": false
+}

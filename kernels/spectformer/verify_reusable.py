@@ -13,7 +13,7 @@ import numpy as np
 
 from prepare import sha256
 from reference import load_input
-from run_reusable import upstream_output
+from run_reusable import scan_cyclotron_log, upstream_output
 
 
 def verify(target: Path, input_path: Path, out: Path,
@@ -53,14 +53,12 @@ def verify(target: Path, input_path: Path, out: Path,
     for label, actual, recorded in checks:
         if actual != recorded:
             raise ValueError(f"{label} hash differs from the run receipt")
-    log = (out / "cyclotron.log").read_text()
-    preload_weights = (f"preloaded {weights_path.stat().st_size} bytes of weights "
-                       f"@0x{image['base_address']:x}")
-    preload_input = (f"preloaded {pixels.nbytes} bytes of weights "
-                     f"@0x{build['input_address']:x}")
-    if ("isa-test passed with tohost=0" not in log or
-            f"simulation finished after {run['cycles_functional']} cycles" not in log or
-            preload_weights not in log or preload_input not in log):
+    events = scan_cyclotron_log(out / "cyclotron.log",
+                                weights_path.stat().st_size, image["base_address"],
+                                pixels.nbytes, build["input_address"])
+    if (events["passed"] != 1 or events["weights"] != 1 or
+            events["input"] != 1 or
+            events["cycles"] != [run["cycles_functional"]]):
         raise ValueError("run log does not match completion or preload addresses")
 
     kind = build.get("output_kind", "logits")
