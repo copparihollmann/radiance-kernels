@@ -324,8 +324,9 @@ checkpoints, token inputs, and reference runs before model-level comparisons.
 
 ### OLMo 3 local/global attention control
 
-[`verify_olmo3_reduced.py`](verify_olmo3_reduced.py) checks a four-layer,
-random-weight OLMo 3 against independent Transformers 5.3.0 execution. It
+[`verify_olmo3_reduced.py`](verify_olmo3_reduced.py) executes the emitted
+four-layer, random-weight graph and checks it against a direct NumPy mapping
+and independent Transformers 5.3.0 execution. It
 preserves the pinned order of three sliding-attention layers followed by one
 full-attention layer, but sets the local window to three tokens so six input
 tokens exercise the boundary. The NumPy path implements the model's
@@ -333,14 +334,15 @@ projection-wide Q/K RMSNorm before head splitting, YaRN rotary frequencies,
 causal local/full masks, per-layer K/V carry, post-attention and
 post-feedforward RMSNorm, and the untied output head. The source config sets
 `use_cache=false`; both paths explicitly enable a cache for this test.
-The [saved result](olmo3-reduced-reference.json) checks a four-token prefill
-and two cached decode tokens. Its largest logit difference is `1.79e-7`;
+The [saved result](olmo3-reduced-reference.json) checks all 273 stages across
+a four-token prefill and two cached decode tokens. The staged and direct
+NumPy outputs agree exactly, and the largest upstream logit difference is `1.79e-7`;
 upstream cached and full causal outputs agree within `2.24e-7`.
 Forcing all four mapped layers to full attention changes the final logits by
-`0.227`, so the test detects a lost local mask. The separately calculated
+`0.227` in both NumPy paths, so the test detects a lost local mask. The separately calculated
 YaRN inverse frequencies are also checked against upstream. Reproduce with
 `python3 kernels/evaluation/llm/verify_olmo3_reduced.py` in the pinned
-Transformers environment. This is a reduced operation-order check; a pinned
+Transformers environment. This is a reduced graph and operation-order check; a pinned
 checkpoint, full-size Radiance executable, and performance run remain open.
 
 `stitch.py --model olmo3_7b` also emits a pinned, full-dimension tensor

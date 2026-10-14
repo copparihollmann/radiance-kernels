@@ -13,6 +13,8 @@ import numpy as np
 import torch
 import transformers
 
+from stitch import build, model_specs
+
 
 CONFIG = Path(__file__).parent / "inputs/olmo3-7b.json"
 
@@ -113,6 +115,93 @@ def mapped_pass(ids: np.ndarray, config: dict, tensors: dict[str, np.ndarray],
     return logits, next_cache
 
 
+def parameter_key(name: str) -> str:
+    if name == "embed_tokens":
+        return "model.embed_tokens.weight"
+    if name == "lm_head":
+        return "lm_head.weight"
+    if name == "final_norm":
+        return "model.norm.weight"
+    prefix, layer, component = name.split(".")
+    if prefix != "layers":
+        raise ValueError(f"unknown graph parameter {name}")
+    stem = f"model.layers.{layer}."
+    if component in {"q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm"}:
+        return stem + f"self_attn.{component}.weight"
+    if component == "post_attn_norm":
+        return stem + "post_attention_layernorm.weight"
+    if component == "post_ffn_norm":
+        return stem + "post_feedforward_layernorm.weight"
+    if component in {"gate_proj", "up_proj", "down_proj"}:
+        return stem + f"mlp.{component}.weight"
+    raise ValueError(f"unknown graph parameter {name}")
+
+
+def execute_graph(graph, inputs: dict[str, np.ndarray],
+                  tensors: dict[str, np.ndarray],
+                  *, force_full_attention: bool = False) -> dict[str, np.ndarray]:
+    """Execute the emitted stages and their named dependencies at reduced size."""
+    values = dict(inputs)
+    for stage in graph.stages:
+        name, op, attrs = stage["id"], stage["op"], stage["attrs"]
+        reads = [values[source] for source in stage["reads"]]
+        if op == "embedding":
+            result = tensors[parameter_key(attrs["parameter"])][reads[0]]
+        elif op == "linear":
+            result = linear(reads[0], tensors, parameter_key(attrs["parameter"]))
+        elif op == "rmsnorm":
+            result = rms_norm(reads[0], tensors[parameter_key(attrs["parameter"])],
+                              attrs["epsilon"])
+        elif op == "reshape_heads":
+            result = reads[0].reshape(stage["shape"])
+        elif op == "rope_yarn":
+            frequency = yarn_frequencies({"rope_scaling": attrs["scaling"],
+                                          "rope_theta": attrs["theta"]},
+                                         stage["shape"][-1])
+            positions = np.arange(attrs["position_start"],
+                                  attrs["position_start"] + stage["shape"][1])
+            result = np.stack([rotary(batch, positions, frequency,
+                                      attrs["scaling"]["attention_factor"])
+                               for batch in reads[0]], axis=0)
+        elif op == "kv_append":
+            result = reads[0] if len(reads) == 1 else np.concatenate(reads, axis=1)
+        elif op == "causal_gqa":
+            query, key, value = reads
+            repeats = attrs["q_heads"] // attrs["kv_heads"]
+            outputs = []
+            for q, k, v in zip(query, key, value):
+                repeated_k = np.repeat(k, repeats, axis=1)
+                repeated_v = np.repeat(v, repeats, axis=1)
+                scores = np.einsum("thd,shd->ths", q, repeated_k)
+                scores /= math.sqrt(attrs["head_dim"])
+                positions = np.arange(attrs["query_start"],
+                                      attrs["query_start"] + q.shape[0])
+                key_positions = np.arange(k.shape[0])
+                allowed = key_positions[None, :] <= positions[:, None]
+                if attrs["window"] is not None and not force_full_attention:
+                    allowed &= key_positions[None, :] > positions[:, None] - attrs["window"]
+                scores = np.where(allowed[:, None, :], scores, -np.inf)
+                scores -= np.max(scores, axis=-1, keepdims=True)
+                probabilities = np.exp(scores)
+                probabilities /= np.sum(probabilities, axis=-1, keepdims=True)
+                outputs.append(np.einsum("ths,shd->thd", probabilities, repeated_v)
+                               .reshape(q.shape[0], -1))
+            result = np.stack(outputs, axis=0)
+        elif op == "gated_activation":
+            gate, up = reads
+            result = (gate / (1.0 + np.exp(-gate))) * up
+        elif op == "add":
+            result = reads[0] + reads[1]
+        elif op == "token_select":
+            result = np.argmax(reads[0][:, -1, :], axis=-1).astype(np.int32)[:, None]
+        else:
+            raise ValueError(f"unsupported OLMo graph stage {name}: {op}")
+        if list(result.shape) != stage["shape"] or not np.isfinite(result).all():
+            raise AssertionError(f"{name}: invalid output shape or non-finite value")
+        values[name] = result
+    return values
+
+
 def check() -> dict:
     torch.set_num_threads(1)
     torch.manual_seed(23)
@@ -144,22 +233,36 @@ def check() -> dict:
         - model.model.rotary_emb.inv_freq.detach().cpu().numpy())))
     ids = np.array([1, 2, 3, 4, 5, 6], dtype=np.int64)
     phases = (ids[:4], ids[4:5], ids[5:6])
+    small_spec = {**model_specs()["olmo3_7b"], **{
+        key: small[key] for key in ("hidden_size", "intermediate_size",
+                                    "num_hidden_layers", "num_attention_heads",
+                                    "num_key_value_heads", "vocab_size",
+                                    "sliding_window", "layer_types")}}
+    small_spec["head_dim"] = small["hidden_size"] // small["num_attention_heads"]
+    graph = build("olmo3_7b", prefill=4, decode_steps=2,
+                  specs={"olmo3_7b": small_spec})
+    inputs = {f"{name}.token_ids": phase[None, :] for name, phase in
+              zip(("prefill", "decode0", "decode1"), phases)}
+    graph_values = execute_graph(graph, inputs, tensors)
     mapped_cache = None
     upstream_cache = None
     comparisons = []
     with torch.no_grad():
-        for name, phase in zip(("prefill", "decode0", "decode1"), phases):
+        for name, phase, output_name in zip(("prefill", "decode0", "decode1"),
+                                            phases, graph.outputs):
             mapped, mapped_cache = mapped_pass(phase, small, tensors, mapped_cache)
             upstream = model(input_ids=torch.from_numpy(phase[None, :]),
                              past_key_values=upstream_cache, use_cache=True)
             upstream_cache = upstream.past_key_values
             expected = upstream.logits[0].detach().cpu().numpy()
+            staged = graph_values[output_name][0]
             comparisons.append({
-                "phase": name, "shape": list(mapped.shape),
-                "max_abs_error": float(np.max(np.abs(mapped - expected))),
+                "phase": name, "shape": list(staged.shape),
+                "max_abs_error": float(np.max(np.abs(staged - expected))),
                 "allclose_atol_1e-5_rtol_1e-5": bool(np.allclose(
-                    mapped, expected, atol=1e-5, rtol=1e-5)),
-                "mapped_sha256": hashlib.sha256(mapped.tobytes()).hexdigest(),
+                    staged, expected, atol=1e-5, rtol=1e-5)),
+                "graph_vs_direct_max_abs_error": float(np.max(np.abs(staged - mapped))),
+                "mapped_sha256": hashlib.sha256(staged.tobytes()).hexdigest(),
                 "upstream_sha256": hashlib.sha256(expected.tobytes()).hexdigest(),
             })
         full = model(input_ids=torch.from_numpy(ids[None, :]),
@@ -169,13 +272,18 @@ def check() -> dict:
         incorrect, incorrect_cache = mapped_pass(
             phase, small, tensors, incorrect_cache, force_full_attention=True)
     incorrect_delta = float(np.max(np.abs(incorrect[-1] - full)))
+    incorrect_graph = execute_graph(graph, inputs, tensors, force_full_attention=True)
+    incorrect_graph_delta = float(np.max(np.abs(
+        incorrect_graph[graph.outputs[-1]][0, -1] - full)))
     cached_full_error = float(np.max(np.abs(expected[-1] - full)))
     passed = (all(row["allclose_atol_1e-5_rtol_1e-5"] for row in comparisons)
               and cached_full_error < 1e-5 and incorrect_delta > 1e-4
-              and yarn_error < 1e-6)
+              and yarn_error < 1e-6 and incorrect_graph_delta > 1e-4
+              and all(row["graph_vs_direct_max_abs_error"] < 1e-5
+                      for row in comparisons))
     return {
         "status": "passed" if passed else "failed",
-        "scope": "four-layer random-weight OLMo 3 local/global prefill and cached decode; no checkpoint or Radiance execution",
+        "scope": "four-layer random-weight OLMo 3 staged graph, direct mapping, and upstream prefill/cached decode; no checkpoint or Radiance execution",
         "pinned_config_sha256": hashlib.sha256(config_bytes).hexdigest(),
         "source_model": "allenai/Olmo-3-7B-Instruct",
         "small_config": {key: small[key] for key in (
@@ -185,10 +293,12 @@ def check() -> dict:
         "torch_version": torch.__version__,
         "transformers_version": transformers.__version__,
         "seed": 23, "token_ids": ids.tolist(),
+        "graph_stage_count": len(graph.stages),
         "comparisons": comparisons,
         "upstream_cached_vs_full_max_abs_error": cached_full_error,
         "yarn_inverse_frequency_max_abs_error": yarn_error,
         "force_full_attention_max_abs_logit_delta": incorrect_delta,
+        "force_full_attention_graph_max_abs_logit_delta": incorrect_graph_delta,
     }
 
 
