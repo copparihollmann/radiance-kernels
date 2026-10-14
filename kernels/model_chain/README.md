@@ -1295,6 +1295,19 @@ with `tohost=0` after 167,726,096 functional cycles. A separate
 also passed. These are one-stage correctness checks; the other 3,672 stages
 and FPGA latency remain unmeasured for the compact package.
 
+The [stage-1 warp control](evaluation/smolvla-stage1-warp-control.json)
+rebuilds that same exact-input check with four scheduled warps. All 786,432
+outputs pass against the same PyTorch golden image (`tohost=0`). Cyclotron
+reports 69,556,543 functional cycles, versus 167,726,096 for the original
+one-warp ELF. The verifier checks the ELFs, logs, and preloaded image hashes
+before comparing the counts. An eight-warp build is retained as a negative
+resource control: Cyclotron exits before validation because 256 distinct
+register destinations exhaust this configuration's global rename pool. The
+generator now accepts one, two, or four warps; only one and four have been
+checked here. These functional cycle counts are not latency or utilization
+measurements, and the four-warp result covers one stage rather than the full
+action chunk. No FPGA result is implied.
+
 The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
 uses the generated C++ stage with real checkpoint weights and byte-exact
 camera input. Its 1024 by 768 patch tokens match a PyTorch convolution plus

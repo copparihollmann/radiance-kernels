@@ -234,9 +234,14 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              input_image: Path | None = None,
              golden_output: Path | None = None,
              stage_golden_image: Path | None = None,
-             stage_golden_sha256: str | None = None) -> Path:
+             stage_golden_sha256: str | None = None,
+             warps: int = 1) -> Path:
     if stages_per_object <= 0:
         raise ValueError("stages per object must be positive")
+    # Eight warps exhaust the current 256-entry global rename pool before
+    # this kernel reaches its first output check.
+    if warps not in (1, 2, 4):
+        raise ValueError("warps must be one of 1, 2, or 4")
     if golden_output is not None and stage_golden_image is not None:
         raise ValueError("choose the full-policy golden or a stage golden")
     if (stage_golden_image is None) != (stage_golden_sha256 is None):
@@ -324,9 +329,11 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         return (f"alignas(64) __global float {name}[{len(values)}] = {{" +
                 ", ".join(literal(x) for x in values) + "};\n")
 
+    scratch_count = ("MU_NUM_THREADS * 1024" if warps == 1 else
+                     f"MU_NUM_THREADS * {warps} * 1024")
     data = ("#include <mu_intrinsics.h>\n#include <stdint.h>\n"
             f"alignas(64) __global unsigned char v_arena[{storage['arena_bytes']}] = {{0}};\n"
-            "alignas(64) __global float v_attention_scratch[MU_NUM_THREADS * 1024] = {0};\n"
+            f"alignas(64) __global float v_attention_scratch[{scratch_count}] = {{0}};\n"
             + declaration("v_rope_cos", np.cos(angles).ravel())
             + declaration("v_rope_sin", np.sin(angles).ravel())
             + declaration("v_time_embedding", table)
@@ -392,16 +399,17 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     final = stages[-1]["writes"]
     final_count = product(graph.tensors[final]["shape"])
     final_offset = allocation[final]["offset_bytes"]
-    schedule = "  mu_schedule(init_inputs, nullptr, 1);\n  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();\n"
+    schedule = (f"  mu_schedule(init_inputs, nullptr, {warps});\n"
+                "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();\n")
     for stage in stages:
-        schedule += (f"  mu_schedule(stage_{symbol(stage['id'])}, nullptr, 1);\n"
+        schedule += (f"  mu_schedule(stage_{symbol(stage['id'])}, nullptr, {warps});\n"
                      "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();\n")
     prototypes = "\n".join(
         f"void stage_{symbol(stage['id'])}(void*, uint32_t, uint32_t, uint32_t);"
         for stage in stages)
     kernel = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
               "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
-              "extern \"C\" uint32_t __mu_num_warps = 1;\n"
+              f"extern \"C\" uint32_t __mu_num_warps = {warps};\n"
               "extern __global unsigned char v_arena[];\n"
               + ("extern __global float v_golden_output[];\n"
                  if golden_values is not None else "")
@@ -466,6 +474,7 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         "input_image_sha256": input_manifest["image_sha256"] if input_manifest else None,
         "upstream_execution_equivalent": False,
         "stage_limit": stage_limit, "stages": len(stages),
+        "scheduled_warps_per_stage": warps,
         "full_graph_stages": len(graph.stages),
         "execution_schedule_sha256": storage["execution_schedule_sha256"],
         "checkpoint_weight_format": "fp32",
@@ -494,12 +503,13 @@ def main() -> None:
     parser.add_argument("--golden-output", type=Path)
     parser.add_argument("--stage-golden-image", type=Path)
     parser.add_argument("--stage-golden-sha256")
+    parser.add_argument("--warps", type=int, default=1)
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
     target = generate(args.weight_image, args.out_root, args.stage_limit,
                       args.stages_per_object, args.input_image,
                       args.golden_output, args.stage_golden_image,
-                      args.stage_golden_sha256)
+                      args.stage_golden_sha256, args.warps)
     if args.build:
         build_device(target)
     print(target)
