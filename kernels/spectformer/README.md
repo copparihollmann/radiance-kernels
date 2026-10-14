@@ -143,6 +143,10 @@ The [connected-model evaluation receipt](evaluation/connected-models.json) recor
 | Trained XS isolated block 11 | With the corrected attention exponential, the [ten-stage block-11 probe](evaluation/xs-trained-block11-seeded-cyclotron.json) starts from the pinned upstream block-10 tensor and passes all 75,264 values against an independently recomputed upstream block-11 hook: maximum absolute error `1.91e-6`, 309,740,550 functional cycles. This checks a late attention input distribution, not accumulated full-model logits. |
 | Hierarchical S device run | Before the FFT/GELU fix, [block 1.0](evaluation/hs-trained-old-block1-0-cyclotron.json) completed 21 stages but 171,209/200,704 elements failed tolerance (maximum error `0.239`). The corrected [21-stage block 1.0 run](evaluation/hs-trained-block1-0-cyclotron.json) passes all 200,704 values with maximum error `1.73e-4`. The prior [full 233-stage run](evaluation/hs-trained-old-full-cyclotron.json) produced 1,000 NaN logits. The [FFT/GELU-corrected full run](evaluation/hs-trained-fixed-full-cyclotron.json) had 193/1,000 logits outside tolerance. With the attention exponential correction, the [233-stage full run](evaluation/hs-trained-expfix-full-cyclotron.json) passed all 1,000 logits against the pinned, locally trained checkpoint in the upstream network: maximum absolute error `5.72e-6`, RMS error `7.87e-7`, matching top-1, and `tohost=0` after 3,714,237,968 Cyclotron functional cycles. These are functional ISA cycles, not hardware timing. |
 
+`current-variant-builds.json` records build-time checks. Its
+`full_device_logits_checked: false` fields predate the separate XS and
+hierarchical S full-device runs above.
+
 The corrected vanilla XS [build manifest](evaluation/xs-trained-expfix-full-build.json)
 and [raw run receipt](evaluation/xs-trained-expfix-full-run.json), and the
 hierarchical S [build manifest](evaluation/hs-trained-expfix-full-build.json)
@@ -173,11 +177,10 @@ python kernels/spectformer/probe_mx_spike.py \
 ```
 
 The isolated vanilla attention check found and corrected one device numerical
-error. Vanilla XS now passes a full-size, full-vector device check on one
-held-out input with the corrected attention path. Hierarchical S has a new
-full-size run in progress; its complete logit comparison is still required.
-Scalar convolutions and dense
-projections, especially at 56×56, are likely cost centers; stage-level
+error. Vanilla XS and hierarchical S now pass full-size, full-vector device
+checks on one held-out input each. The three other compiled variants have
+host graph checks but no full-model device logit result. Scalar convolutions
+and dense projections, especially at 56×56, are likely cost centers; stage-level
 simulator progress and tile mappings should be measured before claiming
 performance. MX-Gemmini projections and a Spike check are separate
 integration steps. No RTL, FPGA bitstream, or hardware performance result is
