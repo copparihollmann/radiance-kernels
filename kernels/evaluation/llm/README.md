@@ -423,6 +423,9 @@ PyTorch 2.9.1; it does not validate or diagnose the pinned checkpoint's
 runtime. Reproduce with
 `python3 kernels/evaluation/llm/verify_nemotron_mamba_cache.py --out
 kernels/evaluation/llm/nemotron-mamba-cache-control.json` in that environment.
+The hybrid graph therefore records a reference comparison rule: use the
+same prefill length and one-token cached decode partition for the primary
+phase-by-phase check, then report the full-sequence comparison separately.
 
 ### OLMo 3 local/global attention control
 

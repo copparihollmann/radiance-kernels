@@ -724,6 +724,10 @@ def decoder_graph(model: str, spec: dict, batch: int, prefill: int,
             graph.execution_schedule["layer_kinds"] = spec["layer_kinds"]
             graph.execution_schedule["pinned_attention_cache_handoff"] = (
                 "missing_in_block_call")
+            graph.execution_schedule["reference_partition"] = (
+                "compare each phase with a reference using the same prefill "
+                "length and one-token cached decode steps; full-sequence "
+                "execution is a separate chunk-boundary control")
     for step in range(decode_steps):
         previous_caches = caches
         first_stage = len(graph.stages)

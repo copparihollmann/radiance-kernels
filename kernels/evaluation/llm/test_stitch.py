@@ -210,6 +210,7 @@ class ModelStitchTest(unittest.TestCase):
         self.assertEqual(len(graph.outputs), 3)
         self.assertEqual(graph.execution_schedule["layer_kinds"],
                          spec["layer_kinds"])
+        self.assertIn("same prefill", graph.execution_schedule["reference_partition"])
         self.assertEqual(graph.report()["pinned_attention_cache_handoff"],
                          "missing_in_block_call")
         self.assertEqual(len(graph.execution_schedule["decode_loop"][0]
