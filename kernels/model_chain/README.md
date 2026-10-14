@@ -1307,6 +1307,11 @@ generator now accepts one, two, or four warps; only one and four have been
 checked here. These functional cycle counts are not latency or utilization
 measurements, and the four-warp result covers one stage rather than the full
 action chunk. No FPGA result is implied.
+The [full four-warp build check](evaluation/smolvla-four-warp-full-build.json)
+also confirms that a 3,673-stage ELF was linked with the same checkpoint,
+input, upstream FP32 golden, execution schedule, and 92 unchanged stage source
+chunks as the previous one-warp build. This is a build and source comparison;
+the full four-warp action chunk has not yet passed a device run.
 
 The [native first-stage comparison](evaluation/smolvla-stage1-upstream-reference.json)
 uses the generated C++ stage with real checkpoint weights and byte-exact
