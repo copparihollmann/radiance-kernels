@@ -516,7 +516,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 f"SOC_DIR := {ROOT / 'soc'}\n"
                 f"LLVM_MUON ?= {ROOT / 'llvm/llvm-muon'}\n"
                 f"EXTRA_MU_CFLAGS += -I{HERE}\n"
-                f"include {ROOT / 'kernels/common.mk'}\n"
+                + ("EXTRA_MU_CFLAGS += -ffp-contract=off\n" if use_mx_vpu else "")
+                + f"include {ROOT / 'kernels/common.mk'}\n"
                 f"kernel.mu.o: {HERE / 'pipeline_smolvla.hpp'}"
                 + (f" {ROOT / 'lib/include/rad_tapeout.h'}" if all_cores else "")
                 + (f" {ROOT / 'lib/include/VX_config.h'}" if progress_every else "")

@@ -67,6 +67,23 @@ latency. Full checkpoint native runners preserve their existing image mappings
 and link the model when the backend is selected. Full-checkpoint device
 execution, original-output acceptance and HBM evaluation need their own receipts.
 
+Full-depth generated C++ checks now pass the independent format reference for
+TinyLlama (1133 stages), DeepSeek (1691), Gemma (1496), and SmolVLA (3673 executed
+stages, 1600 final action values checked). The three decoder fixtures use
+`q_proj` and two greedy decode steps; all six tokens match their original
+checkpoint references. SmolVLA's action-input projection variant still fails
+the original action comparison above. Its format-reference pass is separate.
+These are host executions of the generated schedule linked to the real C API,
+not full checkpoint Cyclotron ISA or RTL passes.
+
+`fp32_reference.py` defines the fallback reduction and polynomial operation
+order independently in NumPy. FP32 BLAS/libm differences can cross FP8/BF16
+rounding boundaries, so this variant disables FP contraction in device/native
+builds. An earlier full TinyLlama comparison failed before that reference-order
+correction; no tolerance was changed. `run_full_models.py` serializes reference
+generation, native checks and optional device builds and saves each command,
+log hash and failure. Device builds alone do not establish execution.
+
 The pinned hardware remains blocked: Radiance forces external shared scratchpad
 memory, while Gemmini's VPU requires internal fixed-latency SRAM. See Chipyard's
 `docs/radiance-mx-vpu-hbm/README.md` for the failing elaboration. This does not
@@ -111,8 +128,18 @@ Sources may use only letters, digits, periods, underscores and hyphens, up to
 
 The paired FireSim `AXI4TraceReplay` target streams one physical path into one
 HBM channel. Its C++ reader enforces the same routing, order and burst bounds.
-That infrastructure has passed compilation and elaboration checks only. No
-complete HBM replay or Ramulator legality result is available. Offline replay
+The captured MX L2-fill control has passed replay on all four GPU paths: 274
+requests, 8768 bytes, and all request addresses, directions, lengths and order
+match at the HBM scheduler. All 314 issued HBM commands pass pinned Ramulator
+2.1 (`b30320bc938`) with zero legality violations. A separate synthetic control
+exercises all five paths, reads/writes, backpressure, long AXI bursts, and
+refresh; empty and deliberately illegal command traces are rejected. The
+synthetic long-burst check validates transport and issued-command legality;
+the pinned HBM scheduler issues one CAS per AXI transaction and has not been
+validated for timing of transactions spanning multiple physical DRAM bursts.
+See FireSim's `scripts/hbm-validation/run_axi_replay.py` and the hardware
+checkpoint evidence for commands, complete runtime plusargs and failed runs.
+Offline replay
 does not feed memory timing back into the running program and must not be
 reported as whole-program latency. SIMT physical writeback addresses, combined
 Muon/MX cache traffic and multi-SM capture remain unimplemented/unverified.

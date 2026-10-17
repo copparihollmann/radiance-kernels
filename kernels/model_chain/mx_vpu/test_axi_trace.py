@@ -2,10 +2,12 @@ import csv
 import gzip
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
-from axi_trace import Event, GPU_BASE, GPU_SIZE, HASH, bursts, convert, physical, route
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from mx_vpu.axi_trace import Event, GPU_BASE, GPU_SIZE, HASH, bursts, convert, physical, route
 
 
 def event(**updates):

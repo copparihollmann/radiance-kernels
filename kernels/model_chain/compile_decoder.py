@@ -34,7 +34,7 @@ from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
                         SafeTensorWeights, TiedFP16INT8GemmaWeights,
                         TiedINT8INT4GemmaWeights, TiedINT5INT6GemmaWeights)
 from export_decoder_weights import WARP_STACK_BOTTOM, WARP_STACK_TOP  # noqa: E402
-from split_decoder_weights import image_segments, verify_image  # noqa: E402
+from split_decoder_weights import image_segments, verify_image, verify_image_placement  # noqa: E402
 from mx_vpu import reference as mx_reference  # noqa: E402
 from mx_vpu import fp32_reference  # noqa: E402
 
@@ -1098,6 +1098,16 @@ def build_device(target: Path) -> None:
                     str(toolchain / "bin/riscv64-unknown-elf-nm")], check=True)
     manifest_path = target / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
+    images = [verify_image(Path(manifest[key]))[0]
+              for key in ("weight_image_manifest", "input_image_manifest", "stage_golden_image_manifest")
+              if manifest.get(key)]
+    if images:
+        verify_image_placement(target / "kernel.radiance.elf", images)
+        if manifest.get("execution_backend") == "rakanic_mx_vpu":
+            if any(s["gpu_base_address"] + s["image_size_bytes"] > 1 << 31
+                   for image in images for s in image_segments(image)):
+                raise ValueError("MX+VPU target images exceed the 2 GiB GPU region")
+        manifest["image_placement_verified"] = True
     manifest["device_elf_built"] = True
     manifest["radiance_elf_sha256"] = hashlib.sha256(
         (target / "kernel.radiance.elf").read_bytes()).hexdigest()

@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -42,10 +43,12 @@ def main():
     if args.phase_timeout <= 0: parser.error("timeout must be positive")
     config = json.loads(args.config.read_text())
     output = args.out_root.resolve()
-    output.mkdir(parents=True,exist_ok=True)
+    output.mkdir(parents=True,exist_ok=False)
     specs = model_specs()
     records = dict(schema="radiance-rakanic-mx-vpu-full-decoder-v1",models={},
-                   whole_program_latency_valid=False,config_sha256=digest(args.config))
+                   device_execution=False,whole_program_latency_valid=False,
+                   acceptance_scope="native generated schedule and optional ELF build",
+                   config_sha256=digest(args.config))
     env=os.environ.copy()
     env.update(OMP_NUM_THREADS="1",OPENBLAS_NUM_THREADS="1",MKL_NUM_THREADS="1",
                RADIANCE_BUILD_JOBS="1",PYTHONDONTWRITEBYTECODE="1")
@@ -58,9 +61,15 @@ def main():
             print(f"{model}: {name}",flush=True)
             with log.open("w") as stream:
                 try:
-                    result=subprocess.run(command,env=env,stdout=stream,stderr=subprocess.STDOUT,timeout=args.phase_timeout)
-                    code=result.returncode
+                    process=subprocess.Popen(command,env=env,stdout=stream,
+                        stderr=subprocess.STDOUT,start_new_session=True)
+                    code=process.wait(timeout=args.phase_timeout)
                 except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(process.pid,signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
                     code=124
             record["phases"].append(dict(name=name,command=command,returncode=code,
                 elapsed_seconds=time.monotonic()-start,log=str(log),log_sha256=digest(log)))
@@ -81,12 +90,17 @@ def main():
         manifest=json.loads((target/"manifest.json").read_text())
         record["original_checkpoint_greedy_exact"]=manifest["format_comparison"].get("original_checkpoint_greedy_exact")
         record["format_reference_passed"]=True
-        record["accepted"]=record["original_checkpoint_greedy_exact"] is True
+        record["numerically_accepted"]=record["original_checkpoint_greedy_exact"] is True
+        record["accepted"]=record["numerically_accepted"]
         record["native_result_sha256"]=digest(result)
         if args.build_device:
             # Build the already-generated target; do not regenerate/requantize.
             code="import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from compile_decoder import build_device; build_device(Path(sys.argv[2]))"
-            phase("build",[sys.executable,"-c",code,str(CHAIN),str(target)])
+            record["device_build_passed"]=phase("build",[sys.executable,"-c",code,str(CHAIN),str(target)])
+            record["accepted"] &= record["device_build_passed"]
+            if record["device_build_passed"]:
+                record["device_elf_sha256"]=digest(target/"kernel.radiance.elf")
+                record["soc_elf_sha256"]=digest(target/"kernel.soc.elf")
         (output/"results.json").write_text(json.dumps(records,indent=2)+"\n")
     print(json.dumps({m:dict(format_reference_passed=r.get("format_reference_passed",False),
         original_checkpoint_greedy_exact=r.get("original_checkpoint_greedy_exact"),accepted=r["accepted"])

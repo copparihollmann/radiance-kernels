@@ -25,7 +25,8 @@ def sha256(path):
 
 
 def one_case(case_id, partitions, out, suite, cyclotron_root, toolchain, llvm_muon,
-             timeout, sim_cycles, collision_policy, max_layout_mib):
+             timeout, sim_cycles, collision_policy, max_layout_mib,
+             simulator=None, base_config=None, gmem_transport="environment"):
     out.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, str(HERE / "gen_data.py"),
                "--suite", str(suite), "--case", str(case_id),
@@ -92,12 +93,21 @@ kernel.mu.o: spatter_data.h spatter_body.hpp
     if build.returncode:
         raise RuntimeError(f"device build failed: {out / 'build.log'}")
 
-    config = (cyclotron_root / "config.toml").read_text()
+    config = (base_config or cyclotron_root / "config.toml").read_text()
     config, count = re.subn(r"(?m)^timeout\s*=\s*\d+", f"timeout = {sim_cycles}",
                             config, count=1)
     if count != 1:
         raise ValueError("Cyclotron config lacks unique timeout")
     config = config.replace('"config/timing/', f'"{cyclotron_root}/config/timing/')
+    config = config.replace('"timing/', f'"{cyclotron_root}/config/timing/')
+    if gmem_transport == "config":
+        loads = [dict(address=region * 0x20000000,
+                      bytes=(out / f"data/spatter.region{region}.bin").stat().st_size,
+                      path=str(out / f"data/spatter.region{region}.bin")) for region in (1, 2, 3)]
+        dumps = [dict(address=output_address, bytes=output_bytes, path=str(out / "output.bin"))]
+        def render(items):
+            return "[" + ", ".join("{address="+str(r["address"])+",bytes="+str(r["bytes"])+",path="+json.dumps(r["path"])+"}" for r in items) + "]"
+        config = config.replace("[sim]", "[sim]\ngmem_load="+render(loads)+"\ngmem_dump="+render(dumps), 1)
     (out / "cyclotron-config.toml").write_text(config)
     env["RADIANCE_DISABLE_CYCLOTRON_TRACE"] = "1"
     env["CYCLOTRON_WEIGHTS"] = ",".join(
@@ -105,7 +115,7 @@ kernel.mu.o: spatter_data.h spatter_body.hpp
         for region in (1, 2, 3))
     env["CYCLOTRON_DUMP_GMEM"] = (
         f"0x{output_address:x}:{output_bytes}:{out / 'output.bin'}")
-    simulator = cyclotron_root / "target/release/cyclotron"
+    simulator = simulator or cyclotron_root / "target/release/cyclotron"
     run = subprocess.run([str(simulator), str(out / "cyclotron-config.toml"),
                           "--binary-path", str(out / "kernel.radiance.elf"),
                           "--gen-trace", "false"], cwd=cyclotron_root,
@@ -140,6 +150,7 @@ kernel.mu.o: spatter_data.h spatter_body.hpp
         "simulator_sha256": sha256(simulator),
         "rtl_execution": False, "performance_measurement": False,
         "two_sm_execution": False,
+        "gmem_transport": gmem_transport,
     }
     (out / "result.json").write_text(json.dumps(record, indent=2) + "\n")
     return record
@@ -159,6 +170,9 @@ def main():
     parser.add_argument("--cyclotron-root", type=Path, required=True)
     parser.add_argument("--toolchain", type=Path, required=True)
     parser.add_argument("--llvm-muon", type=Path, required=True)
+    parser.add_argument("--simulator", type=Path)
+    parser.add_argument("--base-config", type=Path)
+    parser.add_argument("--gmem-transport", choices=("environment", "config"), default="environment")
     args = parser.parse_args()
     suite = args.suite.resolve()
     case_ids = (args.case if args.case is not None else
@@ -171,7 +185,10 @@ def main():
                               suite, args.cyclotron_root.resolve(),
                               args.toolchain.resolve(), args.llvm_muon.resolve(),
                               args.timeout, args.sim_cycles,
-                              args.collision_policy, args.max_layout_mib)
+                              args.collision_policy, args.max_layout_mib,
+                              args.simulator.resolve() if args.simulator else None,
+                              args.base_config.resolve() if args.base_config else None,
+                              args.gmem_transport)
             results.append(result)
             print(case_id, partitions, result["status"],
                   result["cycles_functional"], flush=True)
