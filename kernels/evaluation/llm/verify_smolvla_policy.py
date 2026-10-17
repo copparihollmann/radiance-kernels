@@ -19,7 +19,8 @@ from smolvla_action_reference import Checkpoint, action_embedding
 from verify_smolvla_checkpoint import sha256
 
 
-def run(checkpoint_dir: Path, promote_fp32: bool = False) -> dict:
+def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=None,
+        projection_module: str = "action_in_proj") -> dict:
     spec = model_specs()["smolvla_base"]
     if sha256(checkpoint_dir / "config.json") != spec["source_sha256"]:
         raise ValueError("SmolVLA config hash differs from pinned source")
@@ -114,8 +115,18 @@ def run(checkpoint_dir: Path, promote_fp32: bool = False) -> dict:
             raise ValueError(f"action embedding differs from upstream: {suffix_max_error}")
         counts.clear()
         events.clear()
+        projection_calls = []
+        if action_projection is not None:
+            module = getattr(model, projection_module)
+            def projected(value):
+                projection_calls.append(tuple(value.shape))
+                return action_projection(value, module.weight, module.bias)
+            module.forward = projected
         output = model.sample_actions(images, img_masks, lang_tokens,
                                       lang_masks, state, noise=noise)
+        expected_projections = spec["num_denoise_steps"] if projection_module == "action_in_proj" else 1
+        if action_projection is not None and len(projection_calls) != expected_projections:
+            raise ValueError("format reference action projection loop count differs from graph")
     for handle in handles:
         handle.remove()
     expected_counts = {"vision_model": spec["image_cameras"],

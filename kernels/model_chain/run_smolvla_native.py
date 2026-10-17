@@ -18,7 +18,7 @@ import re
 import subprocess
 import sys
 
-from compile_decoder import symbol, write_if_changed
+from compile_decoder import symbol, verify_backend_sources, write_if_changed
 from split_decoder_weights import image_segments, verify_image
 
 
@@ -39,12 +39,16 @@ def sha256(path: Path) -> str:
 
 def generate(target: Path, extra_trace_stages: tuple[str, ...] = ()) -> Path:
     manifest = json.loads((target / "manifest.json").read_text())
+    verify_backend_sources(manifest)
     graph = build("smolvla_base")
     storage = plan(graph)
+    expected_validation = ("all_elements_vs_mx_vpu_format_reference"
+                           if manifest.get("execution_backend") == "rakanic_mx_vpu"
+                           else "all_elements_vs_upstream_policy")
     if (manifest["stages"] != len(graph.stages) or
             manifest["execution_schedule_sha256"] !=
             storage["execution_schedule_sha256"] or
-            manifest["output_validation"] != "all_elements_vs_upstream_policy"):
+            manifest["output_validation"] != expected_validation):
         raise ValueError("native run requires the full exact-golden ELF sources")
     images = []
     for key, digest in (("weight_image_manifest", "weight_image_sha256"),
@@ -178,12 +182,18 @@ def compile_native(target: Path, jobs: int = 2,
                 "-I", str(HERE)]
     sources = [target / "model_data.cpp", *sorted(target.glob("stage_chunk_*.cpp")),
                native / "main.cpp"]
+    use_mx = json.loads((target/"manifest.json").read_text()).get("execution_backend") == "rakanic_mx_vpu"
+    if use_mx:
+        sources.append(target/"mx_vpu_runtime.cpp")
+        compiler += ["-ffp-contract=off", "-I", os.environ["RADIANCE_LIBGEMMINI_ROOT"]]
 
     def compile_one(source: Path) -> Path:
         obj = native / (source.stem + ".o")
         dependencies = [source, native / "mu_intrinsics.h",
                         native / "mu_schedule.h", HERE / "pipeline_smolvla.hpp",
                         HERE / "pipeline_math.hpp"]
+        if use_mx:
+            dependencies.append(HERE/"mx_vpu/backend.hpp")
         if (not obj.exists() or obj.stat().st_mtime <
                 max(path.stat().st_mtime for path in dependencies)):
             result = subprocess.run(compiler + ["-c", str(source), "-o", str(obj)],
@@ -195,7 +205,8 @@ def compile_native(target: Path, jobs: int = 2,
     with ThreadPoolExecutor(max_workers=jobs) as executor:
         objects = list(executor.map(compile_one, sources))
     binary = native / "smolvla_native"
-    subprocess.run(["g++", "-fopenmp", *map(str, objects), "-o", str(binary)],
+    subprocess.run(["g++", "-fopenmp", *map(str, objects),
+                    *([os.environ["RADIANCE_LIBGEMMINI_ARCHIVE"]] if use_mx else []), "-o", str(binary)],
                    check=True)
     return binary
 
@@ -241,17 +252,26 @@ def main() -> None:
                                 env=env)
     build_manifest = json.loads((target / "manifest.json").read_text())
     log_text = log_path.read_text()
+    model_counts = re.search(r"MX_VPU_MODEL commands=(\d+) mx=(\d+) vpu=(\d+) cycles=(\d+)", log_text)
     match = re.search(
         r"actions=(\d+) failures=(\d+) first_failure=(\d+) max_abs_error=([\deE+.-]+)",
         log_text)
     if args.stage_limit is None and not match:
         raise ValueError("native full-action run did not report its output comparison")
+    if args.stage_limit is None and build_manifest.get("execution_backend") == "rakanic_mx_vpu" and (
+            model_counts is None or int(model_counts[2]) == 0 or int(model_counts[3]) == 0):
+        raise ValueError("full MX+VPU graph did not execute both command families")
     record = {"model": "smolvla_base", "scope": "generated_stage_cpp_on_cpu",
               "stage_count": args.stage_limit or 3673,
               "host_threads": args.threads,
               "status": "passed" if result.returncode == 0 else "failed",
               "process_exit_code": result.returncode,
-              "upstream_golden_compared": args.stage_limit is None,
+              "execution_backend": build_manifest.get("execution_backend", "muon"),
+              "model_commands": ({key: int(value) for key, value in zip(
+                  ("total", "mx", "vpu", "cycles_excluding_muon_work"), model_counts.groups())} if model_counts else None),
+              "original_action_comparison": build_manifest.get("original_action_comparison"),
+              "upstream_golden_compared": args.stage_limit is None and build_manifest.get("execution_backend", "muon") == "muon",
+              "format_reference_compared": args.stage_limit is None and build_manifest.get("execution_backend") == "rakanic_mx_vpu",
               "golden_output_sha256": build_manifest["golden_output_sha256"],
               "golden_policy_precision": build_manifest["golden_policy_precision"],
               "comparison_tolerance": (build_manifest["output_check_tolerance"]
@@ -264,7 +284,8 @@ def main() -> None:
               "generated_source_sha256": hashlib.sha256(
                   "".join(sha256(target / name) for name in build_manifest[
                       "device_source_files"]).encode()).hexdigest(),
-              "device_elf_sha256": build_manifest["radiance_elf_sha256"],
+              "device_elf_sha256": build_manifest.get("radiance_elf_sha256"),
+              "device_elf_built": build_manifest.get("device_elf_built", False),
               "log_sha256": sha256(log_path),
               "log_path": str(log_path),
               "log_tail": log_text[-1200:],

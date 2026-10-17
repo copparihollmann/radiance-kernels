@@ -35,6 +35,8 @@ from checkpoint import (MixedFP16Weights, QuantizedINT8Weights,  # noqa: E402
                         TiedINT8INT4GemmaWeights, TiedINT5INT6GemmaWeights)
 from export_decoder_weights import WARP_STACK_BOTTOM, WARP_STACK_TOP  # noqa: E402
 from split_decoder_weights import image_segments, verify_image  # noqa: E402
+from mx_vpu import reference as mx_reference  # noqa: E402
+from mx_vpu import fp32_reference  # noqa: E402
 
 
 MODELS = ("tinyllama", "deepseek_r1_distill_qwen_1_5b", "gemma_2_2b_it",
@@ -77,6 +79,13 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def verify_backend_sources(manifest: dict) -> None:
+    if manifest.get("execution_backend") == "rakanic_mx_vpu":
+        for name, expected in manifest["backend_source_sha256"].items():
+            if sha256_file(HERE / "mx_vpu" / name) != expected:
+                raise ValueError(f"backend source changed since generation: {name}; regenerate this target")
 
 
 def param_data(stage: dict) -> tuple[str, np.ndarray] | None:
@@ -136,7 +145,8 @@ def extra_param_symbols(stage: dict, graph: stitch.Graph) -> list[str]:
 def emit_stage(index: int, stage: dict, graph: stitch.Graph,
                parameter: str | None, parameter_dtype: str = "fp32",
                scale_parameter: str | None = None,
-               batch_clusters: int = 1) -> str:
+               batch_clusters: int = 1,
+               execution_backend: str = "muon", mx_linear_policy: str = "all") -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
     def tensor_pointer(name: str) -> str:
         base = symbol(name)
@@ -165,7 +175,7 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
         n = int(np.prod(shape[2:]))
         if attrs.get("weight_transposed") and parameter_dtype == "fp32":
             body = f"linear_tied({ins[0]}, {parameter}, {out}, {count // n}, {k}, {n}, tid, tpb)"
-        elif attrs.get("weight_transposed") and parameter_dtype not in (
+        elif execution_backend == "muon" and attrs.get("weight_transposed") and parameter_dtype not in (
                 "fp16", "fp16_tied", "int8_tied"):
             raise ValueError(f"{stage['id']}: unsupported tied weight format")
         elif parameter_dtype == "int6_scaled":
@@ -291,6 +301,20 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
         body = f"relu_squared({ins[0]}, {out}, {count}, tid, tpb)"
     else:
         raise ValueError(f"unsupported operation {op} at {stage['id']}")
+    if execution_backend == "rakanic_mx_vpu":
+        if op == "linear" and (mx_linear_policy == "all" or attrs.get("parameter", "").endswith(".q_proj")):
+            tied = attrs.get("weight_transposed", False)
+            storage = {"fp32": "F32_TIED" if tied else "F32", "fp16": "F16_TIED" if tied else "F16",
+                       "fp16_tied": "F16_TIED", "int8_scaled": "I8", "int4_scaled": "I4",
+                       "int6_scaled": "I6", "int8_tied": "I8_TIED", "int5_tied": "I5_TIED"}[parameter_dtype]
+            k = graph.tensors[stage["reads"][0]]["shape"][-1]
+            n = int(np.prod(shape[2:]))
+            body = (f"mx_vpu_linear({ins[0]}, {parameter}, {scale_parameter or 'nullptr'}, {out}, "
+                    f"model_chain::mx_model::{storage}, {count // n}, {k}, {n}, tid, tpb)")
+        elif op in ("add", "bias_add"):
+            right = parameter if op == "bias_add" else ins[1]
+            right_width = int(np.prod(shape[2:])) if op == "bias_add" else count
+            body = f"mx_vpu_add({ins[0]}, {right}, {out}, {count}, {right_width}, tid, tpb)"
     return (f"static void stage_{index}(void* context, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
             + ("  const uint32_t replica = (uint32_t)(uintptr_t)context;\n"
                if batch_clusters != 1 else "") +
@@ -317,7 +341,23 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              prefill_logits: str = "all",
              control_sliding_window: int | None = None,
              native_rtol: float = 1e-4,
-             native_atol: float = 1e-5) -> Path:
+             native_atol: float = 1e-5,
+             execution_backend: str = "muon", mx_linear_policy: str = "all") -> Path:
+    if execution_backend not in ("muon", "rakanic_mx_vpu"):
+        raise ValueError("unknown execution backend")
+    use_mx_vpu = execution_backend == "rakanic_mx_vpu"
+    if mx_linear_policy not in ("all", "q_proj"):
+        raise ValueError("unknown MX linear policy")
+    def mx_selected(stage):
+        return stage["op"] == "linear" and (mx_linear_policy == "all" or
+               stage["attrs"].get("parameter", "").endswith(".q_proj"))
+    if use_mx_vpu and model not in MODELS[:3]:
+        raise ValueError("MX+VPU decoder backend currently supports TinyLlama, DeepSeek and Gemma")
+
+    def backend_source(source):
+        return source.replace('#include "pipeline_math.hpp"\n',
+                              '// MX variant: sequential FP32 fallbacks, FP contraction disabled.\n'
+                              '#include "pipeline_math.hpp"\n#include "mx_vpu/backend.hpp"\n') if use_mx_vpu else source
     if device_opt not in ("O1", "O2", "O3"):
         raise ValueError(f"unsupported device optimization level: {device_opt}")
     if stages_per_object < 0:
@@ -328,6 +368,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("two-cluster builds use final and attention/activation checks")
     if prefill_logits not in ("all", "last"):
         raise ValueError("prefill logits must be all or last")
+    if use_mx_vpu and prefill_logits != "all":
+        raise ValueError("MX+VPU format reference currently requires all prefill logits")
     if not (0 < native_rtol <= 5e-3 and 0 < native_atol <= 5e-4):
         raise ValueError("native tolerance must be positive and no looser than device checks")
     if control_sliding_window is not None and (
@@ -457,7 +499,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                 raise ValueError(f"graph has no teacher-forced input {name}")
             inputs[name] = np.asarray([token_ids[prefill + step]],
                                       dtype=np.int32)[None]
-    def evaluate(weights):
+    def evaluate(weights, accelerator=False):
         if model == "qwen3_30b_a3b":
             return moe_graph_reference.execute(
                 graph, inputs, retain=tuple(stage["writes"] for stage in graph.stages))
@@ -469,14 +511,43 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             return last_token_graph_reference.execute(
                 graph, inputs, weights=weights,
                 retain=tuple(stage["writes"] for stage in graph.stages))
-        return reference.execute(graph, inputs, weights=weights)
+        return reference.execute(graph, inputs, weights=weights,
+                                 linear_fn=mx_reference.linear if accelerator else None,
+                                 add_fn=mx_reference.add if accelerator else None,
+                                 linear_stage_filter=mx_selected if accelerator else None,
+                                 fallbacks=fp32_reference.FALLBACKS if accelerator else None)
 
     values = evaluate(provider)
+    format_comparison = None
+    if use_mx_vpu:
+        baseline = values
+        values = evaluate(provider, accelerator=True)
+        selected = [stage["writes"] for stage in graph.stages if stage["op"] == "token_select"]
+        format_comparison = dict(
+            reference="independent NumPy block-scaled E4M3 mesh and BF16 add",
+            reference_sha256=sha256_file(HERE / "mx_vpu/reference.py"),
+            fallback_reference_sha256=sha256_file(HERE / "mx_vpu/fp32_reference.py"),
+            greedy_tokens={name: dict(original=baseline[name].tolist(), variant=values[name].tolist(),
+                                      exact_equal=bool(np.array_equal(baseline[name], values[name]))) for name in selected},
+            outputs={name: dict(max_abs_error=float(np.max(np.abs(values[name]-baseline[name]))),
+                                original_sha256=hashlib.sha256(baseline[name].tobytes()).hexdigest(),
+                                variant_sha256=hashlib.sha256(values[name].tobytes()).hexdigest()) for name in graph.outputs})
+        format_comparison["original_greedy_exact"] = (
+            all(np.array_equal(baseline[name], values[name]) for name in selected)
+            if generation == "greedy" else None)
     quantization_comparison = None
     if external and image_manifest["dtype"] in ("mixed_fp16", "int8_scaled",
                                                  "int8_fp16_tied", "int4_int8_tied",
                                                  "int5_group64_int6_tied"):
         unquantized = evaluate(source_provider)
+        if use_mx_vpu:
+            token_names = [s["writes"] for s in graph.stages if s["op"] == "token_select"]
+            format_comparison["original_checkpoint_greedy_tokens"] = {
+                name: dict(original=unquantized[name].tolist(), variant=values[name].tolist(),
+                           exact_equal=bool(np.array_equal(unquantized[name], values[name]))) for name in token_names}
+            format_comparison["original_checkpoint_greedy_exact"] = (
+                all(np.array_equal(unquantized[name], values[name]) for name in token_names)
+                if generation == "greedy" else None)
         quantization_comparison = {}
         for name in graph.outputs:
             actual = values[name].astype(np.float64)
@@ -582,7 +653,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage),
-                                    batch_clusters))
+                                    batch_clusters, execution_backend, mx_linear_policy))
     stage_files = []
     if stages_per_object:
         for first in range(0, len(graph.stages), stages_per_object):
@@ -638,7 +709,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                       + externs + "\n" + pointers + "\n"
                       + "\n".join(item.replace("static void stage_", "void stage_", 1)
                                   for item in stage_src[first:last]))
-            write_if_changed(target / filename, source)
+            write_if_changed(target / filename, backend_source(source))
     device_checks = []
     for name in graph.outputs:
         gold = values[name].astype(np.float32)
@@ -788,7 +859,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             else "\n  if (mu_hart_id() != 0) { for (;;) {} }\n") +
            "  uint32_t errors = 0;\n" + verify +
            "\n  mu_tohost(errors ? ((errors << 1) | 1u) : 0u);\n  return 0;\n}\n")
-    write_if_changed(target / "kernel.cpp", cpp)
+    write_if_changed(target / "kernel.cpp", backend_source(cpp))
     native_check_source = "\n".join(
         f"  for (uint32_t i = 0; i < {count}; ++i) {{\n"
         f"    const float delta = __builtin_fabsf({out}[i"
@@ -829,13 +900,17 @@ def generate(model: str, layers: int, prefill: int, decode: int,
               "\n  printf(\"errors=%u max_abs_error=%.9g\\n\", errors, maximum);\n"
               "  return errors ? 1 : 0;\n}\n")
     if not external:
-        write_if_changed(target / "native.cpp", native)
+        write_if_changed(target / "native.cpp", backend_source(native))
     write_if_changed(target / "host.cpp", (HERE / "host.cpp").read_text())
+    if use_mx_vpu:
+        write_if_changed(target / "mx_vpu_runtime.cpp", (HERE / "mx_vpu/runtime.cpp").read_text())
+        device_source_files.append("mx_vpu_runtime.cpp")
     write_if_changed(target / "Makefile",
         "PROJECT = model_chain\nMU_SRCS = kernel.cpp\nHOST_SRCS = host.cpp\n"
         + ("MU_SRC_DEPS = " + " ".join(device_source_files) + "\n"
            if device_source_files else "")
         + (f"EXTRA_MU_CFLAGS += -{device_opt}\n" if device_opt != "O3" else "")
+        + ("EXTRA_MU_CFLAGS += -ffp-contract=off\n" if use_mx_vpu else "")
         + f"RADIANCE_LIB_PATH := {ROOT / 'lib'}\n"
         "RADIANCE_INCLUDE_PATH := $(RADIANCE_LIB_PATH)/include\n"
         "GEMMINI_SW_PATH := $(RADIANCE_LIB_PATH)/mxgemmini\n"
@@ -853,6 +928,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
         + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
         + (f" {HERE / 'pipeline_fp32_tied.hpp'}" if uses_fp32_tied else "")
+        + (f" {HERE / 'mx_vpu/backend.hpp'}" if use_mx_vpu else "")
         + "\n"
         + (" ".join(filename.replace(".cpp", ".mu.o") for filename in stage_files)
            + f": {HERE / 'pipeline_math.hpp'}"
@@ -865,6 +941,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + (f" {HERE / 'pipeline_packed.hpp'}" if uses_packed else "")
            + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
            + (f" {HERE / 'pipeline_fp32_tied.hpp'}" if uses_fp32_tied else "")
+           + (f" {HERE / 'mx_vpu/backend.hpp'}" if use_mx_vpu else "")
            + "\n" if stage_files else ""))
     manifest = {
         "model": model,
@@ -925,20 +1002,61 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "native_verified_integer_stages": len(integer_checks),
         "source_spec_sha256": hashlib.sha256(stitch.SPECS.read_bytes()).hexdigest(),
     }
+    if use_mx_vpu:
+        manifest.update(execution_backend=execution_backend,
+                        mx_linear_policy=mx_linear_policy,
+                        mx_linear_macs=sum(int(np.prod(s["shape"])) * graph.tensors[s["reads"][0]]["shape"][-1]
+                                           for s in graph.stages if mx_selected(s)),
+                        total_linear_macs=sum(int(np.prod(s["shape"])) * graph.tensors[s["reads"][0]]["shape"][-1]
+                                              for s in graph.stages if s["op"] == "linear"),
+                        format_comparison=format_comparison,
+                        backend_source_sha256={name: sha256_file(HERE / "mx_vpu" / name)
+                                               for name in ("backend.hpp", "runtime.cpp", "reference.py", "fp32_reference.py")},
+                        simulator_preset="radiance", simulator_overrides="",
+                        hardware_compatible=False,
+                        stage_backends=[dict(stage=s["id"],
+                            backend="fp8_mx" if mx_selected(s) else
+                                    "bf16_vpu" if s["op"] in ("add", "bias_add") else "muon",
+                            reason=None if mx_selected(s) or s["op"] in ("add", "bias_add") else
+                            "Preserve FP32 arithmetic under the selected projection/norm/attention fallback policy") for s in graph.stages])
     (target / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return target
 
 
 def verify_native(target: Path) -> str:
-    subprocess.run(["clang++", "-O2", "-nostdlib++", "-I", str(HERE), "native.cpp",
-                    "-lm", "-o", "native"], cwd=target, check=True)
+    manifest = json.loads((target / "manifest.json").read_text())
+    verify_backend_sources(manifest)
+    if manifest.get("execution_backend") == "rakanic_mx_vpu":
+        archive = os.environ["RADIANCE_LIBGEMMINI_ARCHIVE"]
+        root = os.environ["RADIANCE_LIBGEMMINI_ROOT"]
+        command = ["g++", "-O2", "-std=c++17", "-ffp-contract=off", "-no-pie",
+                   "-I", str(HERE), "-I", root, "native.cpp", "mx_vpu_runtime.cpp",
+                   archive, "-lm", "-o", "native"]
+    else:
+        command = ["clang++", "-O2", "-nostdlib++", "-I", str(HERE), "native.cpp", "-lm", "-o", "native"]
+    subprocess.run(command, cwd=target, check=True)
     with (target / "native.log").open("w") as log:
         subprocess.run([str(target / "native")], cwd=target,
                        stdout=log, stderr=subprocess.STDOUT, check=True)
+    if manifest.get("execution_backend") == "rakanic_mx_vpu":
+        text = (target / "native.log").read_text()
+        counts = re.search(r"MX_VPU_MODEL commands=(\d+) mx=(\d+) vpu=(\d+) cycles=(\d+)", text)
+        if counts is None or int(counts[2]) == 0 or int(counts[3]) == 0:
+            raise ValueError("MX+VPU graph did not execute both command families")
+        manifest["native_model_check"] = dict(
+            format_reference="passed", original_greedy_exact=manifest["format_comparison"]["original_greedy_exact"],
+            commands=int(counts[1]), mx_commands=int(counts[2]), vpu_commands=int(counts[3]), model_cycles=int(counts[4]),
+            binary_sha256=sha256_file(target / "native"), log_sha256=sha256_file(target / "native.log"),
+            libgemmini_archive_sha256=sha256_file(Path(os.environ["RADIANCE_LIBGEMMINI_ARCHIVE"])),
+            libgemmini_commit=subprocess.check_output(["git", "-C", os.environ["RADIANCE_LIBGEMMINI_ROOT"],
+                                                       "rev-parse", "HEAD"], text=True).strip(),
+            full_checkpoint_execution=False, device_execution=False)
+        (target / "manifest.json").write_text(json.dumps(manifest, indent=2)+"\n")
     return (target / "native.log").read_text().strip()
 
 
 def build_device(target: Path) -> None:
+    verify_backend_sources(json.loads((target / "manifest.json").read_text()))
     jobs = int(os.environ.get("RADIANCE_BUILD_JOBS", "2"))
     if not 1 <= jobs <= 16:
         raise ValueError("RADIANCE_BUILD_JOBS must be between 1 and 16")
@@ -1002,6 +1120,8 @@ def main() -> None:
                         help="short OLMo 3 local window for a reduced mask control")
     parser.add_argument("--native-rtol", type=float, default=1e-4)
     parser.add_argument("--native-atol", type=float, default=1e-5)
+    parser.add_argument("--execution-backend", choices=("muon", "rakanic_mx_vpu"), default="muon")
+    parser.add_argument("--mx-linear-policy", choices=("all", "q_proj"), default="all")
     parser.add_argument("--out-root", type=Path, default=HERE / "generated")
     parser.add_argument("--device-check-all-stages", action="store_true")
     parser.add_argument("--device-opt", choices=("O1", "O2", "O3"), default="O3")
@@ -1027,7 +1147,7 @@ def main() -> None:
                       args.weight_image, args.stage_limit, args.token_ids,
                       args.batch_clusters, args.prefill_logits,
                       args.control_sliding_window, args.native_rtol,
-                      args.native_atol)
+                      args.native_atol, args.execution_backend, args.mx_linear_policy)
     if args.verify_native and args.weight_image:
         parser.error("native C++ checking is not supported for external weight images")
     if args.verify_native or (args.build and args.weight_image is None):

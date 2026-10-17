@@ -18,7 +18,7 @@ import re
 import subprocess
 import sys
 
-from compile_decoder import write_if_changed
+from compile_decoder import verify_backend_sources, write_if_changed
 from split_decoder_weights import image_segments, verify_image, verify_image_placement
 
 
@@ -44,6 +44,8 @@ def generate(target: Path, manifest: dict, image: dict, image_paths: list[Path])
     expected_sources = {"kernel.cpp", "model_data.cpp"}
     expected_sources.update(path.name for path in target.glob("stage_chunk_*.cpp"))
     expected_sources.update(path.name for path in target.glob("verify_chunk_*.cpp"))
+    if manifest.get("execution_backend") == "rakanic_mx_vpu":
+        expected_sources.add("mx_vpu_runtime.cpp")
     if set(manifest["device_source_files"]) != expected_sources:
         raise ValueError("native sources differ from the ELF build manifest")
     write_if_changed(native / "mu_intrinsics.h", "#pragma once\n#define __global\n"
@@ -144,9 +146,15 @@ def build(target: Path, native: Path, jobs: int) -> Path:
                native / "main.cpp"]
     compiler = ["g++", "-std=c++17", "-fopenmp", "-I", str(native),
                 "-I", str(HERE)]
+    use_mx = json.loads((target/"manifest.json").read_text()).get("execution_backend") == "rakanic_mx_vpu"
+    if use_mx:
+        sources.append(target/"mx_vpu_runtime.cpp")
+        compiler += ["-ffp-contract=off", "-I", os.environ["RADIANCE_LIBGEMMINI_ROOT"]]
     dependencies = [native / "mu_intrinsics.h", native / "mu_schedule.h",
                     native / "kernel_verify.h", HERE / "pipeline_math.hpp",
                     HERE / "pipeline_int8.hpp", HERE / "pipeline_tied.hpp"]
+    if use_mx:
+        dependencies.append(HERE/"mx_vpu/backend.hpp")
 
     def compile_one(source: Path) -> Path:
         obj = native / (source.stem + ".o")
@@ -163,18 +171,20 @@ def build(target: Path, native: Path, jobs: int) -> Path:
     with ThreadPoolExecutor(max_workers=jobs) as executor:
         objects = list(executor.map(compile_one, sources))
     binary = native / "checkpoint_native"
-    subprocess.run(["g++", "-fopenmp", *map(str, objects), "-o", str(binary)],
+    subprocess.run(["g++", "-fopenmp", *map(str, objects),
+                    *([os.environ["RADIANCE_LIBGEMMINI_ARCHIVE"]] if use_mx else []), "-o", str(binary)],
                    check=True)
     return binary
 
 
 def run(model: str, generated_root: Path, threads: int, jobs: int,
-        out: Path | None, allow_partial: bool = False) -> dict:
+        out: Path | None, allow_partial: bool = False, source_only: bool = False) -> dict:
     target = (generated_root / model).resolve()
     manifest = json.loads((target / "manifest.json").read_text())
+    verify_backend_sources(manifest)
     specs = model_specs()
     full_layers = specs[model]["num_hidden_layers"]
-    if (manifest["model"] != model or not manifest["device_elf_built"] or
+    if (manifest["model"] != model or (not source_only and not manifest["device_elf_built"]) or
             not manifest["checkpoint_weights"] or
             not manifest["device_check_all_stages"] or
             manifest["stage_limit"] is not None or
@@ -183,12 +193,13 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
         raise ValueError("native check requires a full-depth checkpoint ELF "
                          "unless --allow-partial is set")
     elf = target / "kernel.radiance.elf"
-    if sha256(elf) != manifest["radiance_elf_sha256"]:
+    if not source_only and sha256(elf) != manifest["radiance_elf_sha256"]:
         raise ValueError("ELF differs from its build manifest")
     image, image_paths = verify_image(Path(manifest["weight_image_manifest"]))
     if image["image_sha256"] != manifest["weight_image_sha256"]:
         raise ValueError("checkpoint image differs from its build manifest")
-    verify_image_placement(elf, [image])
+    if not source_only:
+        verify_image_placement(elf, [image])
     native = generate(target, manifest, image, image_paths)
     binary = build(target, native, jobs)
     log = native / "native.log"
@@ -198,6 +209,7 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
         process = subprocess.run([str(binary)], stdout=output,
                                  stderr=subprocess.STDOUT, env=env)
     log_text = log.read_text()
+    model_counts = re.search(r"MX_VPU_MODEL commands=(\d+) mx=(\d+) vpu=(\d+) cycles=(\d+)", log_text)
     success = re.search(r"stages=(\d+) check_chunks=(\d+) tohost=0", log_text)
     failure = re.search(r"stage_check_failed chunk=(\d+) tohost=(\d+)", log_text)
     token_matches = re.findall(r"generated_token_(\d+)=(\d+)", log_text)
@@ -212,6 +224,8 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
               int(success.group(1)) == manifest["stages"] and
               int(success.group(2)) == len(list(target.glob("verify_chunk_*.cpp")))
               and tokens_match)
+    if manifest.get("execution_backend") == "rakanic_mx_vpu":
+        passed = passed and model_counts is not None and int(model_counts[2]) > 0 and int(model_counts[3]) > 0
     record = {
         "model": model,
         "scope": ("full_checkpoint_generated_cpp_on_cpu"
@@ -232,13 +246,18 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
         "reference_output_sha256": manifest["reference_output_sha256"],
         "comparison_tolerance": {"rtol": 5e-3, "atol": 5e-4},
         "status": "passed" if passed else "failed",
+        "execution_backend": manifest.get("execution_backend", "muon"),
+        "model_commands": ({key: int(value) for key, value in zip(
+            ("total", "mx", "vpu", "cycles_excluding_muon_work"), model_counts.groups())} if model_counts else None),
+        "format_comparison": manifest.get("format_comparison"),
         "process_exit_code": process.returncode,
         "failed_check_chunk": int(failure.group(1)) if failure else None,
         "tohost": int(failure.group(2)) if failure else 0 if passed else None,
         "host_threads": threads,
         "native_binary_sha256": sha256(binary),
         "native_main_sha256": sha256(native / "main.cpp"),
-        "device_elf_sha256": sha256(elf),
+        "device_elf_sha256": sha256(elf) if not source_only else None,
+        "elf_binding_verified": not source_only,
         "device_source_files_sha256": {
             name: sha256(target / name)
             for name in manifest["device_source_files"]},
@@ -266,11 +285,13 @@ def main() -> None:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--allow-partial", action="store_true",
                         help="check all stages of a selected checkpoint layer subset")
+    parser.add_argument("--source-only", action="store_true",
+                        help="check generated C++ before building an ELF; records ELF binding as unverified")
     args = parser.parse_args()
     if args.threads <= 0 or args.threads > 32 or args.jobs <= 0:
         parser.error("threads must be 1..32 and jobs must be positive")
     run(args.model, args.generated_root, args.threads, args.jobs, args.out,
-        args.allow_partial)
+        args.allow_partial, args.source_only)
 
 
 if __name__ == "__main__":

@@ -65,7 +65,9 @@ def attention(q: np.ndarray, k: np.ndarray, v: np.ndarray, attrs: dict) -> np.nd
 
 def execute(graph: Graph, inputs: dict[str, np.ndarray],
             max_tensor_elements: int = 1_000_000,
-            weights: WeightProvider | None = None) -> dict[str, np.ndarray]:
+            weights: WeightProvider | None = None,
+            linear_fn=None, add_fn=None, linear_stage_filter=None,
+            fallbacks=None) -> dict[str, np.ndarray]:
     """Execute a decoder graph using shared NumPy tensors.
 
     The default generated weights are for small controls. An explicit provider
@@ -74,6 +76,7 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
     if graph.spec["family"] == "smolvla":
         raise ValueError("SmolVLA's vision and action stages lack a numerical backend")
     values: dict[str, np.ndarray] = {}
+    fallbacks = fallbacks or {}
     for name, value in inputs.items():
         if name not in graph.tensors or tuple(value.shape) != tuple(graph.tensors[name]["shape"]):
             raise ValueError(f"invalid input {name}")
@@ -109,9 +112,12 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
                     gamma = gamma + 1.0
             else:
                 gamma = parameter(attrs["parameter"], (shape[-1],)) + 1.0
-            value = args[0] / np.sqrt(np.mean(args[0] ** 2, axis=-1,
-                                               keepdims=True) + attrs["epsilon"]) * gamma
+            value = (fallbacks["rmsnorm"](args[0], gamma, attrs["epsilon"]) if "rmsnorm" in fallbacks else
+                     args[0] / np.sqrt(np.mean(args[0] ** 2, axis=-1,
+                                               keepdims=True) + attrs["epsilon"]) * gamma)
         elif op == "linear":
+            selected_linear = (linear_fn if linear_stage_filter is None or linear_stage_filter(stage) else None)
+            selected_linear = selected_linear or fallbacks.get("linear")
             weight_shape = tuple(attrs["weight_shape"])
             if np.prod(weight_shape, dtype=np.int64) > max_tensor_elements and weights is None:
                 raise ValueError(f"{name}: synthetic weight exceeds numerical control limit")
@@ -122,7 +128,8 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
                 for block in weights.embedding_blocks(attrs["parameter"],
                                                       *weight_shape):
                     stop = start + block.shape[0]
-                    value[..., start:stop] = args[0] @ block.T
+                    value[..., start:stop] = (selected_linear(args[0], block.T)
+                                             if selected_linear else args[0] @ block.T)
                     start = stop
                 if start != shape[-1]:
                     raise ValueError(f"{name}: tied embedding has wrong vocabulary size")
@@ -133,20 +140,22 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
                                          1.0 / np.sqrt(weight_shape[0])))
                 if attrs.get("weight_transposed"):
                     weight = weight.T
-                value = (args[0] @ weight).reshape(shape)
+                value = (selected_linear(args[0], weight) if selected_linear else args[0] @ weight).reshape(shape)
         elif op == "bias_add":
             bias = (weights(attrs["parameter"], shape[2:]) if weights is not None
                     else parameter(attrs["parameter"], shape[2:]))
-            value = args[0] + bias
+            value = add_fn(args[0], bias) if add_fn else args[0] + bias
         elif op == "rope":
             value = rope(args[0], attrs["position_start"], attrs.get("theta", 10000.0))
         elif op == "kv_append":
             value = np.concatenate(args, axis=1) if len(args) == 2 else args[0]
         elif op == "causal_gqa":
-            value = attention(*args, attrs)
+            value = fallbacks.get("attention", attention)(*args, attrs)
         elif op == "gated_activation":
             gate, up = args
-            if attrs["function"] == "silu":
+            if "gated_activation" in fallbacks:
+                value = fallbacks["gated_activation"](gate, up, attrs["function"])
+            elif attrs["function"] == "silu":
                 value = (gate / (1.0 + np.exp(-gate))) * up
             elif attrs["function"] == "gelu_tanh":
                 value = (0.5 * gate * (1.0 + np.tanh(
@@ -154,9 +163,10 @@ def execute(graph: Graph, inputs: dict[str, np.ndarray],
             else:
                 raise ValueError(attrs["function"])
         elif op == "add":
-            value = args[0] + args[1]
+            value = add_fn(args[0], args[1]) if add_fn else args[0] + args[1]
         elif op == "softcap":
-            value = attrs["cap"] * np.tanh(args[0] / attrs["cap"])
+            value = (fallbacks["softcap"](args[0], attrs["cap"]) if "softcap" in fallbacks else
+                     attrs["cap"] * np.tanh(args[0] / attrs["cap"]))
         else:
             raise ValueError(f"no numerical implementation for {op}")
         if value.shape != shape or not np.isfinite(value).all():
