@@ -180,6 +180,11 @@ inline float attention_score(const RK_GLOBAL float* q, const RK_GLOBAL float* k,
 }
 
 // Each lane owns an entire query/head row, so softmax has no cross-lane state.
+#ifdef RADIANCE_DEVICE
+// RV32's lane-interleaved stack does not support this helper's stack-passed
+// arguments. Keep its complete parameter list in the caller's registers.
+__attribute__((always_inline))
+#endif
 inline void causal_gqa(const RK_GLOBAL float* q, const RK_GLOBAL float* k,
                        const RK_GLOBAL float* v, RK_GLOBAL float* out,
                        uint32_t batch, uint32_t q_tokens, uint32_t kv_tokens,

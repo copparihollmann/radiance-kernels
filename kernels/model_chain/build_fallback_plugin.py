@@ -8,7 +8,10 @@ import subprocess
 
 HERE = Path(__file__).resolve().parent
 SOURCES = ('fallback_abi.hpp','fallback_runtime.cpp','pipeline_math.hpp',
-           'pipeline_smolvla.hpp','pipeline_int8.hpp','pipeline_int4.hpp')
+           'pipeline_smolvla.hpp','pipeline_int8.hpp','pipeline_int4.hpp',
+           'pipeline_packed.hpp','pipeline_tied.hpp','pipeline_fp32_tied.hpp')
+CALL_SOURCES = (*SOURCES, 'fallback_codegen.py')
+HEADERS = tuple(name for name in SOURCES if name.endswith('.hpp'))
 
 
 def build(out):

@@ -44,6 +44,11 @@ def generate(target: Path, manifest: dict, image: dict, image_paths: list[Path])
     expected_sources = {"kernel.cpp", "model_data.cpp"}
     expected_sources.update(path.name for path in target.glob("stage_chunk_*.cpp"))
     expected_sources.update(path.name for path in target.glob("verify_chunk_*.cpp"))
+    if manifest.get("host_stage_checks"):
+        expected_sources.difference_update({"kernel.cpp", "model_data.cpp", *[path.name for path in target.glob("verify_chunk_*.cpp")]})
+        expected_sources.update({"kernel.device.cpp", "model_data.device.cpp"})
+        if set(manifest.get("native_reference_sources", [])) != {"model_data.cpp", *[path.name for path in target.glob("verify_chunk_*.cpp")]}:
+            raise ValueError("host reference source list differs from complete native checks")
     if manifest.get("execution_backend") == "rakanic_mx_vpu":
         expected_sources.add("mx_vpu_runtime.cpp")
     if manifest.get("fallback_call_abi"):
@@ -180,7 +185,8 @@ def build(target: Path, native: Path, jobs: int) -> Path:
         dependencies.append(HERE/"mx_vpu/backend.hpp")
     if json.loads((target/"manifest.json").read_text()).get("fallback_call_abi"):
         sources.append(target/"fallback_runtime.cpp")
-        dependencies.append(HERE/"fallback_abi.hpp")
+        from build_fallback_plugin import HEADERS
+        dependencies.extend(HERE/name for name in HEADERS)
 
     def compile_one(source: Path) -> Path:
         obj = native / (source.stem + ".o")
@@ -212,7 +218,7 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
     full_layers = specs[model]["num_hidden_layers"]
     if (manifest["model"] != model or (not source_only and not manifest["device_elf_built"]) or
             not manifest["checkpoint_weights"] or
-            not manifest["device_check_all_stages"] or
+            not (manifest["device_check_all_stages"] or manifest.get("host_stage_checks")) or
             manifest["stage_limit"] is not None or
             not 1 <= manifest["layers"] <= full_layers or
             (manifest["layers"] != full_layers and not allow_partial)):
@@ -294,6 +300,8 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
         "device_source_files_sha256": {
             name: sha256(target / name)
             for name in manifest["device_source_files"]},
+        "native_reference_sources_sha256": {name:sha256(target/name)
+            for name in manifest.get("native_reference_sources", [])},
         "model_specs_sha256": manifest["source_spec_sha256"],
         "log_sha256": sha256(log), "log_path": str(log),
         "log_tail": log_text[-1200:],

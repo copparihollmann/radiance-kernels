@@ -89,6 +89,28 @@ def summarize(root):
     known_failure = any(m['native_all_checks'] == 'failed' or not m['original_checkpoint_comparison']['passed']
                         or m['isa_status'] == 'failed' or m['functional_isa_status'] == 'failed' for m in models)
     known_failure = known_failure or hpc.get('status') == 'failed' or runtime.get('status') == 'failed' or any(j.get('status') == 'failed' for j in controls.get('jobs', []) if j['kind'] == 'gemm')
+    full_assisted = {}
+    for name in ('smolvla_base','tinyllama','deepseek_r1_distill_qwen_1_5b','gemma_2_2b_it'):
+        if name == 'smolvla_base':
+            folder = audit/'smolvla-stack-fixed-qualification-v1'
+            qualified_path = folder/'qualified-result-v2.json'
+            device_path = folder/'runs/results.json'
+            native_path = None
+        else:
+            folder = audit/'decoder-full-qualification-v1'/name
+            qualified_path = folder/'qualified-result.json'
+            device_path = folder/'device-runs/results.json'
+            native_path = folder/'native-runs/results.json'
+        qualified = read(qualified_path,{})
+        queue = read(device_path,{})
+        full_assisted[name] = dict(
+            status='passed' if qualified.get('passed') is True else queue.get('status','pending'),
+            qualified=qualified.get('passed') is True,
+            qualified_result=str(qualified_path) if qualified else None,
+            native_result=read(native_path,{}) if native_path else None,
+            device_jobs=[{k:j.get(k) for k in ('name','status','pid','progress','result_dir','validation')}
+                         for j in queue.get('jobs',[])],
+            scope='complete one/two SM functional graphs with pure helper assistance; no HBM/program latency')
     complete = (len(models) == 4 and all(m['native_all_checks'] in ('passed', 'failed')
                 and m['isa_status'] in ('passed', 'failed') for m in models)
                 and device_receipt.get('status') in ('passed', 'failed')
@@ -97,7 +119,12 @@ def summarize(root):
     result = dict(updated_utc=datetime.now(timezone.utc).isoformat(),
                   status=('failed' if complete else 'failed_with_checks_outstanding') if known_failure else ('passed' if complete else 'checks_outstanding'),
                   verification_finished=complete, objective_complete=False,
-                  full_one_sm_models=models, full_two_sm_models_status='outstanding',
+                  full_one_sm_models=models,
+                  full_assisted_functional_models=full_assisted,
+                  all_four_full_assisted_functional_qualified=all(m['qualified'] for m in full_assisted.values()),
+                  full_two_sm_models_status='assisted_functional_qualified' if all(m['qualified'] for m in full_assisted.values()) else 'checks_outstanding',
+                  decoder_host_stage_controls=read(audit/'host-stage-controls-v1/qualified-result.json'),
+                  decoder_host_stage_differential=read(audit/'host-stage-controls-v1/assistance-bit-differential.json'),
                   modeling_performance=read(audit / 'packing-compact-performance.json'),
                   activation_reuse_performance=read(audit / 'activation-reuse-performance.json'),
                   activation_reuse_full_native=read(audit / 'activation-reuse-full-native-v1/runs/results.json'),
@@ -125,7 +152,8 @@ def summarize(root):
                   smolvla_boundaries_scope='historical action-input variant before patch-order and compensated-norm fixes; current candidate is separate',
                   limits=['Assisted functional execution is separate from unassisted ISA and timing/HBM execution.',
                           'Native execution is generated stage C++ on the host, not device ISA execution.',
-                          'Full two-SM model runs, complete Radiance RTL/FireSim and FPGA runs are not covered by this queue.',
+                          'Complete assisted functional graphs are reported separately from preserved earlier timing attempts.',
+                          'Full coupled HBM model qualification remains outstanding; RTL/FireSim and FPGA are separate.',
                           'HBM clocks use a 1:1 control ratio, not calibrated Radiance wall time.'],
                   device_queue_result=str(optimized_path if optimized else audit / device_dir / 'results.json'))
     temporary = audit / 'summary.new'

@@ -6,7 +6,7 @@ scheduling, stage wrappers, barriers, MX/VPU instructions and MMIO still execute
 from the ELF. A complete fallback implementation remains in that ELF for
 unassisted differential execution.
 
-Generate SmolVLA with `compile_smolvla.py --fallback-call-abi` to emit a readonly
+Generate SmolVLA or a decoder with `--fallback-call-abi` to emit a readonly
 32-word descriptor and a four-register-argument `rk_fallback_call` around supported
 pure operations. The default generator output is unchanged. Both cluster contexts
 resolve activation and attention-scratch pointers relative to their own arena.
@@ -39,19 +39,48 @@ runs cannot pass as unassisted functional execution or timing/HBM execution.
 
 Qualification receipts live in the managed task's `artifacts/e2e-hbm-audit`:
 
-- `fallback-operations-v4`: all original 17 operations, tails, sparse masks, in-place work,
+- `fallback-operations-v7`: all original 17 operations, tails, sparse masks, in-place work,
   distinct replicas, SP/s2 canaries and actual MX-to-helper-to-VPU dependencies;
   complete RAM dumps match unassisted execution on one and two SMs.
 - `fallback-full-projection-v2`: full-size INT8/FP32 projection, independent
   sequential FP32 golden, poisoned outputs, three alternating one-SM runs and
   a two-SM differential pair. Its speedup is a host-process measurement.
-- `smolvla-fallback-abi-v2`: complete two-replica native numerical qualification;
-  this is host evidence, not a complete device run.
-- `functional-assist-default-hbm-v2`: default unassisted one-/two-SM controls
+- `smolvla-stack-fixed-qualification-v1/qualified-result-v2.json`: complete
+  one-/two-SM assisted SmolVLA, including all format and original action checks.
+- `fallback-partition-control-v3`: FP32 remainder of a mixed projection, retaining
+  actual MX columns, with K/N tails and empty/full partitions on one and two SMs.
+- `compact-helper-control-v3`: seven additional decoder operations, independent
+  FP32 references, prefill/decode/window/cap cases and complete ISA differentials.
+- `host-stage-controls-v1`: all three reduced decoder graphs on one/two SMs with
+  assistance enabled/disabled. Every actual stage buffer matches the frozen
+  reference and is bit-identical between the two execution paths.
+- `functional-assist-default-hbm-v3`: default unassisted one-/two-SM controls
   retain identical complete HBM reports while exercising sparse PC snapshots.
 
-Full-model assisted ISA qualification remains outstanding. The current ABI covers
-18 pure operations; SmolVLA's partitioned projection now assists only its FP32 remainder while keeping the selected columns on actual MX. The direct one-/two-SM partition controls include empty/full ranges and K/N tails. Decoder helper emission and per-replica all-stage verifiers are implemented; their full-checkpoint and additional packed-format qualification remains pending. No full-model completion follows from these controls.
+The ABI covers 25 pure operations. Decoder additions cover I6 linear, grouped I5
+and I8 tied linear, FP16/FP32 tied linear, causal grouped-query attention and logit
+softcap. Packed weights stay compact; each operation uses its existing arithmetic.
+SmolVLA's mixed projection assists only its FP32 remainder while the selected
+columns execute on actual MX. Reduced controls do not establish full-model passes.
+
+On the GPU, calls from the descriptor dispatcher are forced inline. Expanding
+the dispatcher had caused the compiler to outline helpers with more than eight
+arguments; their stack-passed arguments do not work with this toolchain's
+lane-interleaved private stacks. Causal attention and remaining long graph calls
+(RoPE, KV append, packed embedding) also require inlining. Failed outlined-call
+controls are retained separately; no arithmetic or numerical tolerance changed.
+
+For full decoder replicas, `host_stage_checks.prepare(target, frozen_data)` can
+move only test-oracle storage off the GPU. It requires a sharded two-replica
+greedy source bundle and identical frozen golden tensors. All model tensors,
+stage calls, weights and embedded greedy-token checks remain on the GPU. Both
+the manifest and ordinary Makefile select the oracle-free device sources;
+the original CPU reference/verifier sources remain available for native checks.
+The run must dump every typed stage buffer for every active replica. Queue jobs
+must provide `model_manifest` and `host_stage_result_dir`: successful tohost and
+stage entries alone cannot pass. The host compares actual GPU RAM against the
+frozen references using the original FP32 tolerances and exact integer checks.
+This is device output checking, separate from executing the native CPU graph.
 
 The repeated-launch worker stack bug is fixed separately; see `worker_stack.md`.
 The corrected complete one-SM SmolVLA assisted graph now passes all3673stages,

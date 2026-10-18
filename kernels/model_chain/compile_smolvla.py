@@ -645,10 +645,10 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 + (f" {ROOT / 'lib/include/rad_tapeout.h'}" if all_cores else "")
                 + (f" {HERE / 'mx_vpu/backend.hpp'}" if use_mx_vpu else "")
                 + "\n")
+    from build_fallback_plugin import CALL_SOURCES, HEADERS
     if fallback_call_abi:
         makefile += (" ".join(["kernel.mu.o", "fallback_runtime.mu.o", *[name.replace(".cpp", ".mu.o") for name in chunks]])
-                     + ": " + " ".join(str(HERE/name) for name in
-                         ("fallback_abi.hpp", "pipeline_smolvla.hpp", "pipeline_math.hpp", "pipeline_int8.hpp", "pipeline_int4.hpp")) + "\n")
+                     + ": " + " ".join(str(HERE/name) for name in HEADERS) + "\n")
     write_if_changed(target / "Makefile", makefile)
     result = {
         "model": "smolvla_base",
@@ -701,7 +701,7 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         "replica_buffers": replicas,
         "fallback_call_abi": fallback_call_abi,
         "fallback_call_source_sha256": ({name: hashlib.sha256((HERE/name).read_bytes()).hexdigest()
-                                        for name in ('fallback_abi.hpp','fallback_runtime.cpp','fallback_codegen.py')}
+                                        for name in CALL_SOURCES}
                                        if fallback_call_abi else None),
         "source_spec_sha256": hashlib.sha256(
             (ROOT / "kernels/evaluation/llm/pr1-models.json").read_bytes()).hexdigest(),

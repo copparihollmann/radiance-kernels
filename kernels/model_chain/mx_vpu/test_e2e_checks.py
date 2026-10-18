@@ -11,6 +11,35 @@ from run_e2e_queue import validate
 
 
 class CompleteOutputChecks(unittest.TestCase):
+    def test_host_oracles_require_actual_gpu_outputs_from_every_replica(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
+            d = Path(folder)
+            manifest = d/'manifest.json'
+            manifest.write_text(json.dumps(dict(host_stage_checks=True)))
+            reference = d/'gold.bin'
+            reference.write_bytes(bytes.fromhex('0000803f'))  # FP32 1.0
+            refs = dict(stages=1,rtol=.005,atol=.0005,records=[dict(
+                symbol='output',dtype='float32',elements=1,path=str(reference),
+                sha256=hashlib.sha256(reference.read_bytes()).hexdigest())])
+            (d/'host-stage-references.json').write_text(json.dumps(refs))
+            journal = d/'progress.jsonl'
+            journal.write_text(''.join(json.dumps(row)+'\n'for row in (
+                dict(event='stage_entry',cluster=0),dict(event='stage_entry',cluster=1),
+                dict(event='finish',passed=True))))
+            job = dict(kind='isa',num_clusters=2,expected_stages=1,
+                       progress=str(journal),model_manifest=str(manifest))
+            log = ''.join(f'cluster {i} isa-test passed with tohost=0\n'for i in range(2))
+            self.assertFalse(validate(job,log,0)['passed'])
+            job['host_stage_result_dir'] = str(d)
+            (d/'tensors').mkdir()
+            (d/'tensors/0-output.bin').write_bytes(reference.read_bytes())
+            self.assertFalse(validate(job,log,0)['passed'])
+            second = d/'tensors/1-output.bin'
+            second.write_bytes(reference.read_bytes())
+            self.assertTrue(validate(job,log,0)['passed'])
+            second.write_bytes(bytes.fromhex('00000040'))  # FP32 2.0
+            self.assertFalse(validate(job,log,0)['passed'])
+
     def test_native_decoder_needs_every_replica_check_and_greedy_token(self):
         job = dict(kind='native', model='tinyllama', expected_stages=41,
                    num_replicas=2, reference_generated_token_ids=[61])

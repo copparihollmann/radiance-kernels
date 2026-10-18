@@ -82,8 +82,9 @@ def sha256_file(path: Path) -> str:
 
 
 def verify_backend_sources(manifest: dict) -> None:
+    from build_fallback_plugin import CALL_SOURCES
     for name, expected in (manifest.get("fallback_call_source_sha256") or {}).items():
-        if name not in ("fallback_abi.hpp", "fallback_runtime.cpp", "fallback_codegen.py") or sha256_file(HERE / name) != expected:
+        if name not in CALL_SOURCES or sha256_file(HERE / name) != expected:
             raise ValueError("pure helper call source changed since generation; regenerate this target")
     if manifest.get("execution_backend") == "rakanic_mx_vpu":
         for name, expected in manifest["backend_source_sha256"].items():
@@ -333,6 +334,13 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
                             context="context", replica_strides=strides)
         if wrapped is not None:
             descriptor, code = wrapped
+        elif not body.startswith("mx_vpu_"):
+            # The remaining graph operations (e.g. RoPE and KV append) still
+            # execute as ISA. Their long argument lists must also avoid the
+            # lane-interleaved private-stack argument ABI.
+            from fallback_codegen import arguments
+            if len(arguments(body[body.index('(')+1:body.rindex(')')])) > 8:
+                code = '#ifdef RADIANCE_DEVICE\n  [[clang::always_inline]]\n#endif\n  ' + code
     return (descriptor + f"static void stage_{index}(void* context, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
             + ("  const uint32_t replica = (uint32_t)(uintptr_t)context;\n"
                if batch_clusters != 1 else "") +
@@ -362,6 +370,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              native_atol: float = 1e-5,
              execution_backend: str = "muon", mx_linear_policy: str = "all",
              fallback_call_abi: bool = False) -> Path:
+    from build_fallback_plugin import CALL_SOURCES, HEADERS
     if execution_backend not in ("muon", "rakanic_mx_vpu"):
         raise ValueError("unknown execution backend")
     use_mx_vpu = execution_backend == "rakanic_mx_vpu"
@@ -971,8 +980,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + (f" {HERE / 'mx_vpu/backend.hpp'}" if use_mx_vpu else "")
            + "\n" if stage_files else "")
         + ((" ".join(["kernel.mu.o", "fallback_runtime.mu.o", *[name.replace(".cpp", ".mu.o") for name in stage_files]])
-            + ": " + " ".join(str(HERE/name) for name in
-                ("fallback_abi.hpp", "pipeline_smolvla.hpp", "pipeline_math.hpp", "pipeline_int8.hpp", "pipeline_int4.hpp")) + "\n")
+            + ": " + " ".join(str(HERE/name) for name in HEADERS) + "\n")
            if fallback_call_abi else ""))
     manifest = {
         "model": model,
@@ -1036,7 +1044,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     if fallback_call_abi:
         manifest.update(fallback_call_abi=True,
                         fallback_call_source_sha256={name: sha256_file(HERE/name)
-                            for name in ("fallback_abi.hpp", "fallback_runtime.cpp", "fallback_codegen.py")})
+                            for name in CALL_SOURCES})
     if use_mx_vpu:
         manifest.update(execution_backend=execution_backend,
                         mx_linear_policy=mx_linear_policy,

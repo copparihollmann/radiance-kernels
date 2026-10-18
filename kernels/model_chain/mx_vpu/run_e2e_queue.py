@@ -127,6 +127,17 @@ def validate(job, log, returncode):
             result['complete_stage_count_pass'] = all(count == job['expected_stages'] for count in counts.values())
         # Entries prove execution reached an address, not that a stage completed.
         result['journal_scope'] = 'core 0 warp 0 retired function entries; acceptance uses final ELF verification'
+        if job.get('model_manifest'):
+            model_manifest = Path(job['model_manifest']).resolve()
+            model = json.loads(model_manifest.read_text())
+            if model.get('host_stage_checks'):
+                result['host_all_stages_pass'] = False
+                if job.get('host_stage_result_dir'):
+                    from host_stage_checks import check as check_actual_gpu_stages
+                    checks = check_actual_gpu_stages(model_manifest.parent,
+                        Path(job['host_stage_result_dir']), clusters)
+                    result['host_all_stages_pass'] = checks['passed']
+                    result['host_stage_checks'] = checks
     else:
         raise ValueError('Unknown checker: ' + job['kind'])
     if job.get('hbm_report'):

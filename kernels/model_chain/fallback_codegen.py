@@ -22,6 +22,13 @@ OPERATIONS = {
     'gated_activation': (16,5,(0,1,2),()),
     'euler_step': (17,5,(0,1,2),(4,)),
     'linear_except_columns': (18,8,(0,1,2),()),
+    'linear_i6': (19,7,(0,1,2,3),()),
+    'linear_i5_tied': (20,7,(0,1,2,3),()),
+    'linear_i8_tied': (21,7,(0,1,2,3),()),
+    'linear_f16_tied': (22,6,(0,1,2),()),
+    'linear_tied': (23,6,(0,1,2),()),
+    'causal_gqa': (24,13,(0,1,2,3),(12,)),
+    'softcap': (25,4,(0,1),(3,)),
 }
 
 
