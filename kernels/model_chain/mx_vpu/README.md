@@ -1,10 +1,18 @@
 # Rakanic model backend and physical AXI trace preparation
 
-The selected software target is **Rakanic/cyclotron base `26ab403` with its
-unmodified libgemmini `d5e5e8e`**, `mode="both"`, `preset="radiance"`, and no
-Gemmini timing overrides. Its VPU scheduler falls back to one unit when the
+The selected software target is **Rakanic/cyclotron base `26ab403` with
+libgemmini base `d5e5e8e` plus local shared-HBM hooks at `54492d5`**,
+`mode="both"`, `preset="radiance"`, and no Gemmini timing overrides. The hooks
+add optional external-memory completion; MX/VPU arithmetic is unchanged. Its VPU scheduler falls back to one unit when the
 preset's unit count is zero. Optional two-unit timing profiles in the hardware
 checkpoint are separate experiments and are not the selected target.
+
+The current full-device results are recorded separately from the historical
+controls below: complete SmolVLA passes assisted functional ISA on one/two SMs;
+complete TinyLlama passes one SM, with its two-SM run in progress. Full DeepSeek
+and Gemma builds retain all frozen reference tensors and fit two replicas; their
+finished GPU runs are still required. See `functional_assist.md` and the managed
+task's `artifacts/e2e-hbm-audit/summary.json` for live scope and receipts.
 
 `compile_decoder.py --execution-backend rakanic_mx_vpu` connects E4M3 matrix
 operations and BF16 residual/bias additions to TinyLlama, DeepSeek and Gemma's
@@ -138,9 +146,10 @@ on the same columns. Its complete stitched host run passes all 3,673 stages and
 atol=rtol=0.001. It executes 4,608 MX loops and 3,072 VPU commands. Selected MX
 work is 37,748,736 of 354,131,264,512 linear MACs (0.01066%); remaining matrix work
 is explicitly FP32. The complete ELF has both output checks and passes placement,
-but full one/two-SM device execution is still required. Receipts are under
+and the corrected-runtime full one/two-SM assisted executions now pass. Receipts are under
 `smolvla-vision-q16-v1/`, `smolvla-vision-q16-sequential-reference-v2/`, and
-`smolvla-current-candidate.json` in the task audit artifacts.
+`smolvla-current-candidate.json`, and
+`smolvla-stack-fixed-qualification-v1/qualified-result-v2.json` in the task audit artifacts.
 
 `compile_smolvla.py --clusters 2` gives each cluster an independent activation
 arena and attention scratch space below the program region. Every scheduled stage
@@ -156,7 +165,8 @@ Actual one-/two-SM controls use the same emitter with distinct replica inputs an
 check complete attention, partial MX, VPU bias, scratch, padding and guards.
 Deliberate arena aliasing and corruption of the last guard byte are rejected.
 See `smolvla-replicas-v1/`, `smolvla-replica-controls-v1/`, and
-`smolvla-replicas-current.json`. The full two-SM device run remains pending.
+`smolvla-replicas-current.json`. The corrected-runtime full two-SM assisted device run now passes; its immutable
+receipt is `smolvla-stack-fixed-qualification-v1/qualified-result-v2.json`.
 
 Vision MX references use `--fp32-vision-reference`: independent NumPy sequential
 FP32 dots, compensated layernorm, patch convolution, and polynomial vision
@@ -319,3 +329,28 @@ and replica arguments. `relink_e2e_runtime.py` preserves the original ELFs and
 relinks unchanged generated stage objects/reference data with the corrected
 runtime, recording both ELF hashes and checking image placement again. It
 recompiles only auto-removed intermediate objects from their retained sources.
+
+## Audit a finished full decoder
+
+`qualify_decoder.py` rechecks frozen fixtures, built sources/objects, every pinned
+input, complete native replicas, actual GPU tensors, exact per-SM stage order,
+original greedy tokens and fallback MAC coverage. It derives MX loop/mesh tile
+and VPU command counts from graph shapes, then compares them with both native
+and GPU counters. It requires the finished one-/two-SM pair by default. Missing,
+repeated or reordered stages, changed inputs, incorrect command units and a
+running second replica fail the audit.
+
+```bash
+python3 kernels/model_chain/mx_vpu/qualify_decoder.py \
+  --target "$TASK_DIR/artifacts/e2e-hbm-audit/decoder-full-assisted-v1/tinyllama" \
+  --frozen "$TASK_DIR/.tmp/mx-full-canonical/tinyllama" \
+  --native-receipt "$TASK_DIR/artifacts/e2e-hbm-audit/decoder-full-qualification-v1/tinyllama/native-runs/results.json" \
+  --device-receipt "$TASK_DIR/artifacts/e2e-hbm-audit/decoder-full-qualification-v1/tinyllama/device-runs/results.json" \
+  --out "$TASK_DIR/artifacts/e2e-hbm-audit/decoder-full-qualification-v1/tinyllama/audited-result.json"
+```
+
+Use `--clusters 1` for a partial one-SM audit while the second run is active.
+The result explicitly leaves `full_one_two_sm_qualified=false` and binds the
+finished job's immutable result rather than hashing a changing queue as a final
+receipt. These are complete functional graph results with qualified helper
+assistance; HBM behavior and program latency remain separate measurements.

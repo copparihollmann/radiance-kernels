@@ -122,6 +122,8 @@ def summarize(root):
                   full_one_sm_models=models,
                   full_assisted_functional_models=full_assisted,
                   all_four_full_assisted_functional_qualified=all(m['qualified'] for m in full_assisted.values()),
+                  full_decoder_result_audits=read(audit/'full-decoder-audits-v1/supervisor.json'),
+                  smolvla_stage_order_audit=read(audit/'smolvla-stage-order-audit-v1/result.json'),
                   full_two_sm_models_status='assisted_functional_qualified' if all(m['qualified'] for m in full_assisted.values()) else 'checks_outstanding',
                   decoder_host_stage_controls=read(audit/'host-stage-controls-v1/qualified-result.json'),
                   decoder_host_stage_differential=read(audit/'host-stage-controls-v1/assistance-bit-differential.json'),
