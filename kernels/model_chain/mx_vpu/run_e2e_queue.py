@@ -157,6 +157,10 @@ def validate(job, log, returncode):
             report = Path(job['command'][1]).resolve().parent/report
         result['coupled_report_binding_pass'] = bool(report and job.get('hbm_report') and
             report.resolve() == Path(job['hbm_report']).resolve())
+        if job.get('prepared_timing_configuration_sha256'):
+            result['coupled_configuration_pins_pass'] = all(
+                Path(path).is_file() and digest(path) == expected
+                for path,expected in job['prepared_timing_configuration_sha256'].items())
         result['execution_scope'] = 'unassisted core ISA and libgemmini both with shared HBM completion/backpressure; configured software clocks'
     if job.get('hbm_report'):
         report = Path(job['hbm_report'])

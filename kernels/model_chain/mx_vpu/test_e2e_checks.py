@@ -23,8 +23,13 @@ class CompleteOutputChecks(unittest.TestCase):
             report.write_text(json.dumps(hbm))
             job=dict(kind='isa',execution_mode='coupled_timing_hbm',num_clusters=1,expected_stages=1,
                      progress=str(journal),command=['simulator',str(config)],hbm_report=str(report))
+            memory=d/'memory.yaml';memory.write_bytes(b'frozen memory configuration')
+            job['prepared_timing_configuration_sha256']={str(memory):hashlib.sha256(memory.read_bytes()).hexdigest()}
             log='cluster 0 isa-test passed with tohost=0'
             self.assertTrue(validate(job,log,0)['passed'])
+            memory.write_bytes(b'changed configuration with same clock ratio')
+            self.assertFalse(validate(job,log,0)['passed'])
+            memory.write_bytes(b'frozen memory configuration')
             output=d/'output.bin';output.write_bytes(b'complete output')
             hpc=dict(job,kind='hpc',output=str(output),expected_bytes=15,
                      expected_output_sha256=hashlib.sha256(output.read_bytes()).hexdigest())
