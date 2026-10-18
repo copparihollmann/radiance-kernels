@@ -11,6 +11,37 @@ from run_e2e_queue import validate
 
 
 class CompleteOutputChecks(unittest.TestCase):
+    def test_coupled_hbm_needs_timing_report_binding_and_matching_clocks(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
+            d=Path(folder);config=d/'cyclotron.toml';report=d/'hbm.json';journal=d/'progress.jsonl'
+            journal.write_text(json.dumps(dict(event='stage_entry',cluster=0))+'\n'+
+                               json.dumps(dict(event='finish',passed=True))+'\n')
+            text=('[sim]\ntiming=true\n[gemmini]\nenabled=true\nmode="both"\npreset="radiance"\n'
+                  '[timing.gmem.hbm]\nconfig="memory.yaml"\nreport="hbm.json"\nsource_ticks=3\nmemory_ticks=2\n')
+            config.write_text(text)
+            hbm=dict(unconsumed_requests=0,pending_dram=0,source_ticks_per_period=3,memory_ticks_per_period=2)
+            report.write_text(json.dumps(hbm))
+            job=dict(kind='isa',execution_mode='coupled_timing_hbm',num_clusters=1,expected_stages=1,
+                     progress=str(journal),command=['simulator',str(config)],hbm_report=str(report))
+            log='cluster 0 isa-test passed with tohost=0'
+            self.assertTrue(validate(job,log,0)['passed'])
+            output=d/'output.bin';output.write_bytes(b'complete output')
+            hpc=dict(job,kind='hpc',output=str(output),expected_bytes=15,
+                     expected_output_sha256=hashlib.sha256(output.read_bytes()).hexdigest())
+            self.assertTrue(validate(hpc,log,0)['passed'])
+            config.write_text(text.replace('timing=true','timing=false'))
+            self.assertFalse(validate(hpc,log,0)['passed'])
+            for bad in (text.replace('timing=true','timing=false'),text.replace('enabled=true','enabled=false'),
+                        text.replace('"both"','"func"'),text.replace('"radiance"','"e4m3_vpu"'),
+                        text.replace('report="hbm.json"','report="other.json"'),
+                        text.replace('source_ticks=3','source_ticks=2'),
+                        text.replace('source_ticks=3','source_ticks=0')):
+                config.write_text(bad)
+                self.assertFalse(validate(job,log,0)['passed'])
+            config.write_text(text)
+            report.write_text(json.dumps(dict(hbm,memory_ticks_per_period=1)))
+            self.assertFalse(validate(job,log,0)['passed'])
+
     def test_host_oracles_require_actual_gpu_outputs_from_every_replica(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
             d = Path(folder)

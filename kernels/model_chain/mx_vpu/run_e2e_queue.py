@@ -140,11 +140,37 @@ def validate(job, log, returncode):
                     result['host_stage_checks'] = checks
     else:
         raise ValueError('Unknown checker: ' + job['kind'])
+    if job.get('execution_mode') == 'coupled_timing_hbm':
+        config = (tomllib.loads(Path(job['command'][1]).read_text())
+                  if job['kind'] != 'native' and job.get('command') else {})
+        assist_path = config.get('sim',{}).get('functional_assist')
+        hbm_config = config.get('timing',{}).get('gmem',{}).get('hbm',{})
+        result['coupled_timing_config_pass'] = bool(
+            config.get('sim',{}).get('timing') is True and
+            config.get('gemmini',{}).get('enabled') is True and
+            config.get('gemmini',{}).get('mode') == 'both' and
+            config.get('gemmini',{}).get('preset') == 'radiance' and
+            not config.get('gemmini',{}).get('overrides','') and
+            not assist_path and hbm_config.get('config'))
+        report = Path(hbm_config['report']) if hbm_config.get('report') else None
+        if report is not None and not report.is_absolute():
+            report = Path(job['command'][1]).resolve().parent/report
+        result['coupled_report_binding_pass'] = bool(report and job.get('hbm_report') and
+            report.resolve() == Path(job['hbm_report']).resolve())
+        result['execution_scope'] = 'unassisted core ISA and libgemmini both with shared HBM completion/backpressure; configured software clocks'
     if job.get('hbm_report'):
         report = Path(job['hbm_report'])
         hbm = json.loads(report.read_text()) if report.exists() else None
         result['hbm'] = hbm
         result['hbm_drained_pass'] = bool(hbm and hbm['unconsumed_requests'] == 0 and hbm['pending_dram'] == 0)
+        if job.get('execution_mode') == 'coupled_timing_hbm':
+            configured = config.get('timing',{}).get('gmem',{}).get('hbm',{})
+            source_ticks = configured.get('source_ticks',1)
+            memory_ticks = configured.get('memory_ticks',1)
+            result['coupled_hbm_clock_ratio_pass'] = bool(hbm and
+                source_ticks > 0 and memory_ticks > 0 and
+                hbm.get('source_ticks_per_period') == source_ticks and
+                hbm.get('memory_ticks_per_period') == memory_ticks)
     checks = [value for key, value in result.items() if key.endswith('_pass') or key == 'process_ok' or key == 'journal_has_stages']
     result['passed'] = all(checks)
     return result

@@ -314,7 +314,10 @@ cycle bounds stay in their Cyclotron configs. HPC checks compare entire output
 hashes with saved independent oracle hashes. GEMM checks every BF16 output and
 the GPU's mailbox verification reports using the original nightly criterion.
 A dependency receipt reserves the simulator slot; build receipts gate relinked
-ELFs. Progress journals record retired function entries, not stage completion.
+ELFs. Jobs tagged `execution_mode="coupled_timing_hbm"` also require timed ISA,
+`both/radiance` with no overrides or assistance, the report selected by that
+configuration, and matching configured/reported clock periods. A drained report
+cannot qualify a functional-only run or a mismatched clock configuration. Progress journals record retired function entries, not stage completion.
 
 `summarize_e2e.py --task "$TASK_DIR" [--watch]` writes the current verification
 snapshot. Per-job receipts remain authoritative. A failed original-checkpoint
