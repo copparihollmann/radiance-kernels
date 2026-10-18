@@ -20,7 +20,8 @@ from verify_smolvla_checkpoint import sha256
 
 
 def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=None,
-        projection_module: str = "action_in_proj", module_tensor_sink=None) -> dict:
+        projection_module: str = "action_in_proj", module_tensor_sink=None,
+        module_input_sink=None) -> dict:
     spec = model_specs()["smolvla_base"]
     if sha256(checkpoint_dir / "config.json") != spec["source_sha256"]:
         raise ValueError("SmolVLA config hash differs from pinned source")
@@ -122,10 +123,12 @@ def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=N
                 projection_calls.append(tuple(value.shape))
                 return action_projection(value, _module.weight, _module.bias)
             module.forward = projected
-        if module_tensor_sink is not None:
+        if module_tensor_sink is not None or module_input_sink is not None:
             def tensor_hook(name):
                 def hook(_module, _inputs, output):
-                    if torch.is_tensor(output):
+                    if module_input_sink is not None and _inputs and torch.is_tensor(_inputs[0]):
+                        module_input_sink(name, _inputs[0])
+                    if module_tensor_sink is not None and torch.is_tensor(output):
                         module_tensor_sink(name, output)
                 return hook
             for name, module in policy.named_modules():
