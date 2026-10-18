@@ -29,6 +29,7 @@ struct __attribute__((aligned(CACHE_LINE_BYTES))) Context {
  * Must occupy its own cache line (64B) to avoid flush races with adjacent data. */
 static volatile Context schedule_contexts[NUM_CORES_MAX];
 
+static void __attribute__((noinline)) mu_schedule_standalone() asm("__mu_schedule_standalone");
 static void __attribute__ ((noinline)) mu_schedule_standalone() {
     uint32_t cluster_id = 0;
     // TODO: clid not supported in assembler
@@ -72,10 +73,16 @@ static void __attribute__ ((noinline)) mu_schedule_standalone() {
 #endif
 }
 
-static void mu_schedule_workers() {
-    vx_tmc(-1);
-    mu_schedule_standalone();
-    vx_tmc_zero();
+// Worker warps restart at this entry on every launch. A C++ wrapper would
+// allocate a frame and retire at tmc(0) before its epilogue restores SP, leaking
+// one frame per launch into other warps' stacks. This entry owns no frame: the
+// standalone routine returns with SP restored, then the warp retires.
+static void __attribute__((naked, noinline)) mu_schedule_workers() {
+    asm volatile(
+        "li a0, -1\n"
+        ".insn r 0x0b, 0, 0, x0, a0, x0\n"
+        "call __mu_schedule_standalone\n"
+        ".insn r 0x0b, 0, 0, x0, x0, x0\n");
 }
 
 static void mu_schedule_manager() {
