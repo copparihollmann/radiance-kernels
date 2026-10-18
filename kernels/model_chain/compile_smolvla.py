@@ -38,7 +38,7 @@ def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
                all_cores: bool = False, execution_backend: str = "muon",
                projection_module: str = "action_in_proj",
                column_start: int = 0, column_count: int | None = None,
-               replicas: dict | None = None) -> str:
+               replicas: dict | None = None, fallback_call_abi: bool = False) -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
     reads = stage["reads"]
 
@@ -249,6 +249,13 @@ def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
         "timestep_constant", "multimodal_merge",
     }
     code = body if op in control_flow else "model_chain::" + body
+    descriptor = ""
+    if fallback_call_abi and op not in control_flow:
+        from fallback_codegen import emit_call
+        accelerated = emit_call(body, 'rk_desc_' + symbol(stage['id']),
+                                pointer_aliases={'v_attention_scratch':replicas['scratch_offset']} if replicas else None)
+        if accelerated is not None:
+            descriptor, code = accelerated
     core_map = ("" if all_cores else
                 "  if ((tid / MU_NUM_THREADS) % MU_NUM_CORES != 0) return;\n"
                 "  tid = (tid / (MU_NUM_THREADS * MU_NUM_CORES)) * MU_NUM_THREADS\n"
@@ -256,7 +263,7 @@ def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
                 "  tpb /= MU_NUM_CORES;\n")
     drain = ("  RAD_L0D_DRAIN(tid, tpb / MU_NUM_THREADS, 1, 2);\n"
              if all_cores else "")
-    return (
+    return (descriptor +
         f"void stage_{symbol(stage['id'])}({'void* context' if replicas else 'void*'}, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
         + (stage_buffers(replicas) if replicas else "") + core_map +
         f"  {code}\n"
@@ -275,7 +282,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              progress_every: int = 0,
              execution_backend: str = "muon", projection_module: str = "action_in_proj",
              column_start: int = 0, column_count: int | None = None,
-             original_golden: Path | None = None, clusters: int = 1) -> Path:
+             original_golden: Path | None = None, clusters: int = 1,
+             fallback_call_abi: bool = False) -> Path:
     if clusters not in (1, 2):
         raise ValueError("clusters must be one or two")
     if execution_backend not in ("muon", "rakanic_mx_vpu"):
@@ -463,6 +471,7 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         source = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
                   "#include <stdint.h>\n#include \"pipeline_smolvla.hpp\"\n"
                   + ('#include "mx_vpu/backend.hpp"\n' if use_mx_vpu else '')
+                  + ('#include "fallback_abi.hpp"\n' if fallback_call_abi else '')
                   + ("#include \"rad_tapeout.h\"\n" if all_cores else "")
                   + "extern __global unsigned char v_arena[];\n"
                   "extern __global float v_attention_scratch[];\n"
@@ -471,7 +480,7 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                   "extern __global float v_time_embedding[];\n"
                   + "\n".join(emit_stage(stage, graph, allocation, addresses,
                                           all_cores, execution_backend, projection_module,
-                                          column_start, column_count, replicas)
+                                          column_start, column_count, replicas, fallback_call_abi)
                               for stage in stages[first:first + stages_per_object]))
         if replicas:
             source = source.replace("extern __global unsigned char v_arena[];\n", "")
@@ -610,6 +619,9 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     write_if_changed(target / "kernel.cpp", kernel)
     shutil.copyfile(HERE / "host.cpp", target / "host.cpp")
     dependencies = ["model_data.cpp", *chunks]
+    if fallback_call_abi:
+        write_if_changed(target / "fallback_runtime.cpp", (HERE / "fallback_runtime.cpp").read_text())
+        dependencies.append("fallback_runtime.cpp")
     if use_mx_vpu:
         write_if_changed(target / "mx_vpu_runtime.cpp", (HERE / "mx_vpu/runtime.cpp").read_text())
         dependencies.append("mx_vpu_runtime.cpp")
@@ -683,6 +695,10 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         "activation_arena_bytes": storage["arena_bytes"],
         "num_clusters": clusters,
         "replica_buffers": replicas,
+        "fallback_call_abi": fallback_call_abi,
+        "fallback_call_source_sha256": ({name: hashlib.sha256((HERE/name).read_bytes()).hexdigest()
+                                        for name in ('fallback_abi.hpp','fallback_runtime.cpp','fallback_codegen.py')}
+                                       if fallback_call_abi else None),
         "source_spec_sha256": hashlib.sha256(
             (ROOT / "kernels/evaluation/llm/pr1-models.json").read_bytes()).hexdigest(),
         "device_source_files": ["kernel.cpp", *dependencies],
@@ -727,6 +743,8 @@ def main() -> None:
     parser.add_argument("--stage-golden-sha256")
     parser.add_argument("--warps", type=int, default=1)
     parser.add_argument("--clusters", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--fallback-call-abi", action="store_true",
+                        help="explicit pure-helper calls; unassisted ISA remains the default execution")
     parser.add_argument("--all-cores", action="store_true")
     parser.add_argument("--progress-every", type=int, default=0)
     parser.add_argument("--execution-backend", choices=("muon", "rakanic_mx_vpu"), default="muon")
@@ -741,7 +759,7 @@ def main() -> None:
                       args.golden_output, args.stage_golden_image,
                       args.stage_golden_sha256, args.warps, args.all_cores,
                       args.progress_every, args.execution_backend, args.projection_module,
-                      args.column_start, args.column_count,args.original_golden,args.clusters)
+                      args.column_start, args.column_count,args.original_golden,args.clusters,args.fallback_call_abi)
     if args.build:
         build_device(target)
     print(target)

@@ -109,6 +109,8 @@ def summarize(root):
                   owned_writeback_performance=read(audit / 'owned-writeback-performance-v1/result.json'),
                   smolvla_current_candidate=read(audit / 'smolvla-current-candidate.json'),
                   smolvla_two_sm_candidate=read(audit / 'smolvla-replicas-current.json'),
+                  pure_helper_assistance=read(audit / 'functional-assist-current.json'),
+                  tinyllama_stall_diagnosis=read(audit / 'tinyllama-stall-diagnosis-v1/result.json'),
                   simulator_performance=read(audit / 'csr-performance.json'),
                   hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(
                            hpc_queue_path if hpc_queue_path.exists() else
@@ -119,7 +121,8 @@ def summarize(root):
                   runtime_regressions=[{k: j.get(k) for k in ('name', 'status', 'validation', 'simulated_cycles', 'result_dir')} for j in runtime.get('jobs', [])],
                   smolvla_boundaries=read(audit / 'smolvla-boundary-failures.json'),
                   smolvla_boundaries_scope='historical action-input variant before patch-order and compensated-norm fixes; current candidate is separate',
-                  limits=['Native execution is generated stage C++ on the host, not device ISA execution.',
+                  limits=['Assisted functional execution is separate from unassisted ISA and timing/HBM execution.',
+                          'Native execution is generated stage C++ on the host, not device ISA execution.',
                           'Full two-SM model runs, complete Radiance RTL/FireSim and FPGA runs are not covered by this queue.',
                           'HBM clocks use a 1:1 control ratio, not calibrated Radiance wall time.'],
                   device_queue_result=str(optimized_path if optimized else audit / device_dir / 'results.json'))

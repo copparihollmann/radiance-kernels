@@ -83,8 +83,31 @@ class CompleteOutputChecks(unittest.TestCase):
             log='cluster 0 isa-test passed with tohost=0'
             self.assertTrue(validate(job,log,0)['passed'])
             for bad in (text.replace('false','true'),text.replace('"both"','"perf"'),
-                        text+'[timing.gmem.hbm]\nconfig="hbm.yaml"\n'):
+                        text+'[timing.gmem.hbm]\nconfig="hbm.yaml"\n',
+                        text.replace('timing=false','timing=false\nfunctional_assist="assist.json"')):
                 config.write_text(bad)
+                self.assertFalse(validate(job,log,0)['passed'])
+
+    def test_assistance_cannot_be_counted_as_unassisted_or_timed_execution(self):
+        import hashlib
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+            d=Path(temporary);elf=d/'kernel.elf';elf.write_bytes(b'bound ELF bytes')
+            config=d/'cyclotron.toml';plan=d/'assist.json';report=d/'assist-result.json';journal=d/'progress.jsonl'
+            config.write_text('[sim]\ntiming=false\nfunctional_assist="assist.json"\n[gemmini]\nmode="both"\npreset="radiance"\n')
+            journal.write_text(json.dumps(dict(event='stage_entry',cluster=0))+'\n'+json.dumps(dict(event='finish',passed=True))+'\n')
+            binding=dict(elf_sha256=hashlib.sha256(elf.read_bytes()).hexdigest(),plugin_sha256='plugin',combined_source_sha256='source')
+            plan.write_text(json.dumps(dict(report=str(report),**binding)))
+            valid=dict(schema='radiance-pure-fallback-result-v1',completed=True,whole_program_latency_valid=False,
+                       includes_hbm=False,statistics=dict(warp_calls=1,operations={'1':dict(work_items=4)}),**binding)
+            report.write_text(json.dumps(valid))
+            job=dict(kind='isa',execution_mode='assisted_functional_core',num_clusters=1,expected_stages=1,
+                     progress=str(journal),command=['simulator',str(config),'--binary-path',str(elf)],assistance_report=str(report))
+            log='cluster 0 isa-test passed with tohost=0'
+            self.assertTrue(validate(job,log,0)['passed'])
+            for mode in ('functional_core',None):
+                self.assertFalse(validate(dict(job,execution_mode=mode),log,0)['passed'])
+            for changes in (dict(completed=False),dict(elf_sha256='other'),dict(includes_hbm=True),dict(whole_program_latency_valid=True)):
+                report.write_text(json.dumps(dict(valid,**changes)))
                 self.assertFalse(validate(job,log,0)['passed'])
 
 

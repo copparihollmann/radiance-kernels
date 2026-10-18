@@ -45,6 +45,9 @@ def generate(target: Path, extra_trace_stages: tuple[str, ...] = (),
     for name,digest in manifest.get('fallback_source_sha256',{}).items():
         if name not in ('pipeline_smolvla.hpp','pipeline_math.hpp') or sha256(HERE/name) != digest:
             raise ValueError('FP32 fallback source differs from the generated numerical policy')
+    for name,digest in (manifest.get('fallback_call_source_sha256') or {}).items():
+        if name not in ('fallback_abi.hpp','fallback_runtime.cpp','fallback_codegen.py') or sha256(HERE/name) != digest:
+            raise ValueError('pure helper call source differs from the generated graph')
     graph = build("smolvla_base")
     storage = plan(graph)
     expected_validation = ("all_elements_vs_mx_vpu_format_reference"
@@ -293,6 +296,8 @@ def compile_native(target: Path, jobs: int = 2,
     sources = [target / "model_data.cpp", *sorted(target.glob("stage_chunk_*.cpp")),
                native / "main.cpp"]
     use_mx = json.loads((target/"manifest.json").read_text()).get("execution_backend") == "rakanic_mx_vpu"
+    if json.loads((target/'manifest.json').read_text()).get('fallback_call_abi'):
+        sources.append(target/'fallback_runtime.cpp')
     if use_mx:
         sources.append(target/"mx_vpu_runtime.cpp")
         compiler += ["-ffp-contract=off", "-I", os.environ["RADIANCE_LIBGEMMINI_ROOT"]]
@@ -304,6 +309,8 @@ def compile_native(target: Path, jobs: int = 2,
                         HERE / "pipeline_math.hpp"]
         if use_mx:
             dependencies.append(HERE/"mx_vpu/backend.hpp")
+        if (target/'fallback_runtime.cpp').exists():
+            dependencies.append(HERE/'fallback_abi.hpp')
         if source.name == 'main.cpp' and (stage_references is not None or original_golden is not None):
             dependencies.append(native/'reference_checks.hpp')
         if (not obj.exists() or obj.stat().st_mtime <

@@ -76,37 +76,41 @@ class ReplicaTests(unittest.TestCase):
         stage = dict(id='replica_attention', op='bidirectional_mha',
                      attrs=dict(heads=2, head_dim=2), shape=[1, 3, 2, 2],
                      reads=['q', 'k', 'v'], writes='out')
-        source = ('#include <stdint.h>\n#define __global\n#define MU_NUM_THREADS 32\n'
-                  '#define MU_NUM_CORES 1\n#include "pipeline_smolvla.hpp"\n'
-                  + emit_stage(stage, graph, allocation, {}, replicas=plan)
-                  + 'extern "C" void run(void* p) {for(unsigned i=0;i<32;++i)'
-                    'stage_v_replica_attention(p,i,32,0);}\n')
-        with tempfile.TemporaryDirectory() as folder:
-            cpp, lib = Path(folder)/'control.cpp', Path(folder)/'control.so'
-            cpp.write_text(source)
-            subprocess.run(['g++', '-O2', '-ffp-contract=off', '-shared', '-fPIC',
-                            '-I'+str(HERE), str(cpp), '-o', str(lib)], check=True)
-            run = ctypes.CDLL(str(lib)).run
-            run.argtypes = [ctypes.c_void_p]
-            pool = np.full(plan['bytes'], 0xa5, np.uint8)
-            for replica in range(2):
-                start = replica * plan['stride'] + plan['guard_bytes']
-                body = pool[start:start+plan['body_bytes']]
-                body[:] = 0
-                for i, name in enumerate(('q', 'k', 'v')):
-                    values = np.full(12, (replica+1)*(i+1)*0.25, np.float32)
-                    body[i*64:i*64+48] = values.view('u1')
-            untouched = pool[plan['stride']:].copy()
-            run(pool.ctypes.data + plan['guard_bytes'])
-            np.testing.assert_array_equal(pool[plan['stride']:], untouched)
-            run(pool.ctypes.data + plan['stride'] + plan['guard_bytes'])
-            for replica in range(2):
-                start = replica * plan['stride'] + plan['guard_bytes']
-                actual = pool[start+192:start+240].view('f4')
-                np.testing.assert_allclose(actual, (replica+1)*0.75, atol=1e-6, rtol=1e-6)
-                np.testing.assert_array_equal(pool[replica*plan['stride']:start], 0xa5)
-                end = start + plan['body_bytes']
-                np.testing.assert_array_equal(pool[end:end+plan['guard_bytes']], 0xa5)
+        # Exercise the original body and the explicit helper ABI against the
+        # same independent expectation; scratch must stay relative to context.
+        for explicit_abi in (False, True):
+            source = ('#include <stdint.h>\n#define __global\n#define MU_NUM_THREADS 32\n'
+                      '#define MU_NUM_CORES 1\n#include "pipeline_smolvla.hpp"\n'
+                      + '#include \"fallback_abi.hpp\"\n'
+                      + emit_stage(stage, graph, allocation, {}, replicas=plan, fallback_call_abi=explicit_abi)
+                      + 'extern "C" void run(void* p) {for(unsigned i=0;i<32;++i)'
+                        'stage_v_replica_attention(p,i,32,0);}\n')
+            with tempfile.TemporaryDirectory() as folder:
+                cpp, lib = Path(folder)/'control.cpp', Path(folder)/'control.so'
+                cpp.write_text(source)
+                subprocess.run(['g++', '-O2', '-ffp-contract=off', '-shared', '-fPIC',
+                                '-I'+str(HERE), str(cpp), str(HERE/'fallback_runtime.cpp'), '-o', str(lib)], check=True)
+                run = ctypes.CDLL(str(lib)).run
+                run.argtypes = [ctypes.c_void_p]
+                pool = np.full(plan['bytes'], 0xa5, np.uint8)
+                for replica in range(2):
+                    start = replica * plan['stride'] + plan['guard_bytes']
+                    body = pool[start:start+plan['body_bytes']]
+                    body[:] = 0
+                    for i, name in enumerate(('q', 'k', 'v')):
+                        values = np.full(12, (replica+1)*(i+1)*0.25, np.float32)
+                        body[i*64:i*64+48] = values.view('u1')
+                untouched = pool[plan['stride']:].copy()
+                run(pool.ctypes.data + plan['guard_bytes'])
+                np.testing.assert_array_equal(pool[plan['stride']:], untouched)
+                run(pool.ctypes.data + plan['stride'] + plan['guard_bytes'])
+                for replica in range(2):
+                    start = replica * plan['stride'] + plan['guard_bytes']
+                    actual = pool[start+192:start+240].view('f4')
+                    np.testing.assert_allclose(actual, (replica+1)*0.75, atol=1e-6, rtol=1e-6)
+                    np.testing.assert_array_equal(pool[replica*plan['stride']:start], 0xa5)
+                    end = start + plan['body_bytes']
+                    np.testing.assert_array_equal(pool[end:end+plan['guard_bytes']], 0xa5)
 
 
 if __name__ == '__main__':

@@ -57,8 +57,11 @@ def validate(job, log, returncode):
         from check_fp8_gemm import check
         result.update(check(Path(job['output']), Path(job['golden']), log, job['clusters']))
     elif job['kind'] == 'isa':
-        if job.get('execution_mode') == 'functional_core':
-            config = tomllib.loads(Path(job['command'][1]).read_text())
+        config = (tomllib.loads(Path(job['command'][1]).read_text()) if job.get('command') else {})
+        mode = job.get('execution_mode')
+        assist_path = config.get('sim',{}).get('functional_assist')
+        result['assistance_scope_pass'] = not assist_path or mode == 'assisted_functional_core'
+        if mode in ('functional_core','assisted_functional_core'):
             result['functional_mode_config_pass'] = (
                 config.get('sim',{}).get('timing') is False and
                 config.get('gemmini',{}).get('mode') == 'both' and
@@ -67,6 +70,30 @@ def validate(job, log, returncode):
                 not config.get('timing',{}).get('gmem',{}).get('hbm') and
                 not job.get('hbm_report'))
             result['execution_scope'] = 'functional core ISA plus libgemmini both; no HBM timing or program-latency claim'
+            if mode == 'functional_core':
+                result['unassisted_core_pass'] = not assist_path
+            else:
+                result['execution_scope'] = 'pure helper assistance inside functional core ISA; scheduling/MX/VPU remain ISA; no HBM/program latency'
+                result['assistance_completed_pass'] = False
+                if assist_path and job.get('assistance_report'):
+                    config_dir = Path(job['command'][1]).resolve().parent
+                    plan_path = Path(assist_path)
+                    if not plan_path.is_absolute(): plan_path = config_dir/plan_path
+                    plan = json.loads(plan_path.read_text())
+                    report_path = Path(plan['report'])
+                    if not report_path.is_absolute(): report_path = plan_path.parent/report_path
+                    report = json.loads(report_path.read_text()) if report_path.exists() else {}
+                    result['assistance_completed_pass'] = bool(
+                        Path(job['assistance_report']).resolve() == report_path.resolve() and
+                        report.get('schema') == 'radiance-pure-fallback-result-v1' and report.get('completed') is True and
+                        report.get('whole_program_latency_valid') is False and report.get('includes_hbm') is False and
+                        report.get('elf_sha256') == plan.get('elf_sha256') == digest(Path(job['command'][3])) and
+                        report.get('plugin_sha256') == plan.get('plugin_sha256') and
+                        report.get('combined_source_sha256') == plan.get('combined_source_sha256') and
+                        report.get('statistics',{}).get('warp_calls',0) > 0 and
+                        sum(v.get('work_items',0) for v in report.get('statistics',{}).get('operations',{}).values()) > 0)
+                    result['assistance_report'] = report
+
         clusters = job.get('num_clusters')
         if clusters is None:
             config = tomllib.loads(Path(job['command'][1]).read_text())
