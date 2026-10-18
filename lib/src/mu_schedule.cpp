@@ -8,6 +8,7 @@
 
 #include <mu_schedule.h>
 #include <mu_intrinsics.h>
+#include <vx_spawn.h>
 #ifdef MU_TAPEOUT_EPILOGUE
 #include <rad_tapeout.h>
 #endif
@@ -119,7 +120,13 @@ void mu_schedule(mu_schedule_callback callback, void *arg, const uint32_t occupa
     vx_wspawn(occupancy, mu_schedule_workers);
     mu_schedule_manager();
 
-    // TODO: add threadblock barrier
+    // The manager's callback can finish while worker warps are still writing
+    // outputs or reading this launch's context. Do not return to the next
+    // stage (or allow another wspawn) until they have all terminated.
+    if (occupancy > 1) {
+        vx_wspawn_wait();
+        mu_fence();
+    }
 }
 
 } // extern "C"
