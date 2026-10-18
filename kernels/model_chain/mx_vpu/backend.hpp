@@ -61,6 +61,10 @@ inline int block_exponent(float maximum) {
   int e = int((v.u >> 23) & 255u) - 127;
   return e < -126 ? -126 : e > 126 ? 126 : e;
 }
+#ifdef RADIANCE_DEVICE
+// Share conversion code across generated stages without stack-passed arguments.
+__attribute__((noinline))
+#endif
 inline uint8_t fp8(float value) {
   union { float f; uint32_t u; } v{value};
   const uint32_t sign = (v.u >> 24) & 0x80u, magnitude = v.u & 0x7fffffffu;
@@ -98,6 +102,10 @@ inline float weight_at(const RK_GLOBAL void* data, const RK_GLOBAL float* scales
   uint32_t scale = storage == I5_TIED ? column * (k / 64) + inner / 64 : column;
   return float(packed((const RK_GLOBAL uint8_t*)data, index, bits)) * scales[scale];
 }
+#ifdef RADIANCE_DEVICE
+// One initializer body keeps full-model text clear of compact weight images.
+__attribute__((noinline))
+#endif
 inline void initialize() {
   command(7, 0, 0);
   command(30, 0, 0); // LUT disabled; direct E4M3 codes
@@ -198,6 +206,9 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
       }
 }
 
+#ifdef RADIANCE_DEVICE
+__attribute__((noinline)) // share the seven-register-argument VPU helper
+#endif
 inline void mx_vpu_add(const RK_GLOBAL float* left, const RK_GLOBAL float* right,
                        RK_GLOBAL float* output, uint32_t count, uint32_t right_width,
                        uint32_t tid, uint32_t) {

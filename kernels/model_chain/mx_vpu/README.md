@@ -49,10 +49,29 @@ Task artifacts `artifacts/e2e-hbm-audit/packing-v1/` and `packing-warp/` retain
 the separate conversion-only and cooperative-packing experiments, ELFs,
 commands, logs, progress journals, and drained HBM reports.
 
+The compact helper layout subsequently keeps the FP8 converter, initializer,
+and seven-argument VPU helper in shared device functions. This restores the
+full Gemma ELF's fit below its unchanged weight image. Its one/two-SM reduced
+controls pass, with a 115,846-cycle projection (12.24x) and 830,700-cycle full
+control (11.15x). See `packing-compact/`, `packing-compact-performance.json`,
+and `packing-full-v5/gemma_2_2b_it/placement-check.json`. Rejected overlapping
+ELFs and the failed attempt to outline the larger-argument tiler remain in
+separate artifacts; they are not qualification results.
+
+Increasing decoder occupancy also required a runtime fix: `mu_schedule` now
+joins its worker warps and fences memory before returning. The delayed-worker
+device regression (`test_schedule_join.cpp`) originally observed 224 missing
+writes; it passes on one and two SMs with the corrected runtime. An eight-warp
+reduced graph passes both configurations as well. This enables testing higher
+occupancy without letting later stages overtake workers from an earlier one.
+
 `rebuild_e2e_backend.py` rebuilds affected full-model stage objects into a new
 directory using retained link receipts. It checks generated sources against
 their pinned archives and preserves original checkpoints, graphs and goldens.
 Rebuilt native executables and device ELFs still require separate execution.
+The helper accepts `--warps 2|4|8` with an explicit qualified `--runtime`
+archive; it changes the launch occupancy while retaining graph bodies and
+references, and records the resulting schedule and runtime hash.
 
 `reference.py` generates format references independently in NumPy, including
 the pinned model's product floor, truncation, accumulator precision ramp and

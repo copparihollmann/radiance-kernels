@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tarfile
@@ -25,9 +26,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--task', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--warps', type=int, choices=(1, 2, 4, 8), default=1)
+    parser.add_argument('--runtime', type=Path, help='qualified alternate runtime archive')
     parser.add_argument('--model', action='append', choices=[
         'tinyllama', 'deepseek_r1_distill_qwen_1_5b', 'gemma_2_2b_it', 'smolvla_base'])
     args = parser.parse_args()
+    if args.warps > 1 and args.runtime is None:
+        parser.error('multi-warp builds require an explicit qualified --runtime with worker joining')
     root = args.task.resolve()
     args.out.mkdir(parents=True, exist_ok=False)
     audit = root / 'artifacts/e2e-hbm-audit'
@@ -57,16 +62,34 @@ def main():
             source = generated / path.name.replace('.mu.o', '.cpp')
             contents = source.read_bytes()
             assert contents == pinned[source.name], 'generated source changed: ' + str(source)
-            if b'model_chain::mx_vpu_linear(' not in contents:
+            derived_main = source.name == 'kernel.cpp' and args.warps != 1
+            if not derived_main and not any(name in contents for name in
+                                           (b'model_chain::mx_vpu_linear(', b'model_chain::mx_vpu_add(')):
                 continue
+            compile_source = source
+            if derived_main:
+                text, declarations = re.subn(r'(__mu_num_warps\s*=\s*)1;',
+                                             rf'\g<1>{args.warps};', contents.decode())
+                text, calls = re.subn(r'(mu_schedule\([^;\n]+, )1(\);)',
+                                     rf'\g<1>{args.warps}\2', text)
+                assert declarations == 1 and calls > 0, 'unrecognized one-warp driver'
+                compile_source = dest / 'kernel.cpp'
+                compile_source.write_text(text)
             target = dest / path.name
-            command = flags + ['-c', str(source), '-o', str(target)]
+            command = flags + ['-I' + str(generated), '-c', str(compile_source), '-o', str(target)]
             commands.append(command)
             with (dest / (source.stem + '.log')).open('w') as log:
                 subprocess.run(command, cwd=generated, env=env, stdout=log,
                                stderr=subprocess.STDOUT, check=True)
             link[i] = str(target)
-            replacements[source.stem] = dict(source_sha256=sha(source), device_sha256=sha(target))
+            replacements[source.stem] = dict(source_sha256=sha(source),
+                                             compiled_source_sha256=sha(compile_source),
+                                             device_sha256=sha(target))
+        runtime = (args.runtime.resolve() if args.runtime else root / 'radiance-kernels/lib/libmuonrt.a')
+        if args.runtime:
+            original_runtime = str(root / 'radiance-kernels/lib/libmuonrt.a')
+            assert link.count(original_runtime) == 1
+            link[link.index(original_runtime)] = str(runtime)
         link[link.index('-o') + 1] = str(dest / 'kernel.radiance.elf')
         commands.append(link)
         with (dest / 'link.log').open('w') as log:
@@ -76,7 +99,15 @@ def main():
                   ('weight_image_manifest', 'input_image_manifest', 'stage_golden_image_manifest')
                   if manifest.get(key)]
         if images:
-            verify_image_placement(dest / 'kernel.radiance.elf', images)
+            placement = dict(elf_sha256=sha(dest / 'kernel.radiance.elf'))
+            try:
+                verify_image_placement(dest / 'kernel.radiance.elf', images)
+            except ValueError as error:
+                placement.update(passed=False, error=str(error))
+                (dest / 'placement-check.json').write_text(json.dumps(placement, indent=2) + '\n')
+                raise
+            placement['passed'] = True
+            (dest / 'placement-check.json').write_text(json.dumps(placement, indent=2) + '\n')
         # Rebuild the same native stage objects as an additional full graph
         # format check; retain its original independent goldens and driver.
         native_build = json.loads((audit / 'native' / model / 'build.json').read_text())
@@ -106,8 +137,11 @@ def main():
                            stderr=subprocess.STDOUT, check=True)
         assert sha(header) == header_hash, 'backend changed during build'
         result = dict(model=model, backend_sha256=header_hash, replacements=replacements,
-                      commands=commands, elf_sha256=sha(dest / 'kernel.radiance.elf'),
+                      commands=commands, elf=str(dest / 'kernel.radiance.elf'),
+                      elf_sha256=sha(dest / 'kernel.radiance.elf'),
                       native_sha256=sha(dest / 'model-native'), image_placement_verified=True,
+                      scheduled_warps=args.warps, runtime_archive=str(runtime), runtime_sha256=sha(runtime),
+                      device_objects_sha256={x: sha(Path(x)) for x in link if x.endswith('.mu.o')},
                       scope='build only; execution pending')
         (dest / 'build.json').write_text(json.dumps(result, indent=2) + '\n')
         print('Rebuilt', model, len(replacements), 'MX stage chunks', flush=True)
