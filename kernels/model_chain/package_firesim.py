@@ -84,8 +84,8 @@ def image_entries(manifest_path):
         if digest(path) != segment["image_sha256"]:
             raise ValueError(f"{path}: SHA-256 differs from manifest")
         address = GPU_HOST_ALIAS + int(segment["gpu_base_address"])
-        if address % ALIGN or size % 64:
-            raise ValueError(f"{path}: expected page-aligned address and cache-line sized image")
+        if address % ALIGN:
+            raise ValueError(f"{path}: expected page-aligned address")
         entries.append((address, size, path, segment["image_sha256"], 0))
     return entries
 

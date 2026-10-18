@@ -61,6 +61,18 @@ class PackageFireSimTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "SHA-256 differs"):
             package(self.elf, [self.manifest], self.output)
 
+    def test_preserves_unpadded_short_input_image(self):
+        self.image.write_bytes(b'\x01\x02\x03\x04')
+        manifest = json.loads(self.manifest.read_text())
+        manifest['image_size_bytes'] = 4
+        manifest['image_sha256'] = hashlib.sha256(self.image.read_bytes()).hexdigest()
+        self.manifest.write_text(json.dumps(manifest))
+        package(self.elf, [self.manifest], self.output)
+        self.assertEqual(verify_package(self.output.with_suffix('.elf.json'))[
+            'embedded_images_verified'], 1)
+        _, _, segments = read_elf(self.output)
+        self.assertEqual(next(x[5] for x in segments if x[3] == 0x120000000), 4)
+
     def test_hashed_layout_contains_image_and_device_code(self):
         contents = bytearray(self.elf.read_bytes())
         struct.pack_into("<H", contents, 0x38, 2)
