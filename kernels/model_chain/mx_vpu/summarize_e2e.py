@@ -21,6 +21,19 @@ def summarize(root):
     hpc = read(audit / 'hpc-current-runs/results.json', {})
     controls = read(audit / 'cluster-control-runs/results.json', {})
     runtime = read(audit / 'runtime-control-runs/results.json', {})
+    optimized_path = audit / 'optimized-qualification-v3/runs/results.json'
+    optimized = read(optimized_path, {})
+    if optimized:
+        native = [j for j in optimized['jobs'] if j['kind'] == 'native']
+        latest_device = [j for j in optimized['jobs'] if j['kind'] == 'isa']
+        replaced = {j['model'] for j in latest_device}
+        device = latest_device + [j for j in device if j['model'] not in replaced]
+        device_receipt = optimized
+    csr_path = audit / 'csr-regression-v1/runs/results.json'
+    csr = read(csr_path, {})
+    if csr:
+        hpc = dict(status=csr['status'], jobs=[j for j in csr['jobs'] if j['kind'] == 'hpc'])
+        controls = dict(jobs=[j for j in csr['jobs'] if j['kind'] == 'gemm'])
     models = []
     for entry in graph:
         name = entry['model']
@@ -42,11 +55,18 @@ def summarize(root):
     count = lambda jobs: {status: sum(j.get('status') == status for j in jobs) for status in ('passed', 'failed', 'running', 'pending', 'waiting_for_simulator_slot')}
     known_failure = any(m['native_all_checks'] == 'failed' or not m['original_checkpoint_comparison']['passed'] or m['isa_status'] == 'failed' for m in models)
     known_failure = known_failure or hpc.get('status') == 'failed' or runtime.get('status') == 'failed' or any(j.get('status') == 'failed' for j in controls.get('jobs', []) if j['kind'] == 'gemm')
-    complete = bool(device) and device_receipt.get('status') in ('passed', 'failed') and hpc.get('status') in ('passed', 'failed') and runtime.get('status') in ('passed', 'failed')
+    complete = (len(models) == 4 and all(m['native_all_checks'] in ('passed', 'failed')
+                and m['isa_status'] in ('passed', 'failed') for m in models)
+                and device_receipt.get('status') in ('passed', 'failed')
+                and hpc.get('status') in ('passed', 'failed')
+                and runtime.get('status') in ('passed', 'failed'))
     result = dict(updated_utc=datetime.now(timezone.utc).isoformat(),
                   status=('failed' if complete else 'failed_with_checks_outstanding') if known_failure else ('passed' if complete else 'checks_outstanding'),
-                  verification_finished=complete, full_one_sm_models=models,
-                  hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(audit / 'hpc-current-runs/results.json'),
+                  verification_finished=complete, objective_complete=False,
+                  full_one_sm_models=models, full_two_sm_models_status='outstanding',
+                  modeling_performance=read(audit / 'packing-compact-performance.json'),
+                  simulator_performance=read(audit / 'csr-performance.json'),
+                  hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(csr_path if csr else audit / 'hpc-current-runs/results.json'),
                            scope='complete output hashes for STREAM, five Spatter transfer families, original-size xRAGE gather/scatter; 1SM with 1/2 logical partitions'),
                   fp8_gemm=[{k: j.get(k) for k in ('name', 'status', 'validation', 'simulated_cycles', 'result_dir')} for j in controls.get('jobs', []) if j['kind'] == 'gemm'],
                   runtime_regressions=[{k: j.get(k) for k in ('name', 'status', 'validation', 'simulated_cycles', 'result_dir')} for j in runtime.get('jobs', [])],
@@ -54,7 +74,7 @@ def summarize(root):
                   limits=['Native execution is generated stage C++ on the host, not device ISA execution.',
                           'Full two-SM model runs, complete Radiance RTL/FireSim and FPGA runs are not covered by this queue.',
                           'HBM clocks use a 1:1 control ratio, not calibrated Radiance wall time.'],
-                  device_queue_result=str(audit / device_dir / 'results.json'))
+                  device_queue_result=str(optimized_path if optimized else audit / device_dir / 'results.json'))
     temporary = audit / 'summary.new'
     temporary.write_text(json.dumps(result, indent=2) + '\n')
     temporary.replace(audit / 'summary.json')
