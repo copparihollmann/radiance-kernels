@@ -40,8 +40,15 @@ def summarize(root):
         native = prepared['jobs']+[j for j in native if j['model'] not in replaced]
     smolvla = read(audit / 'smolvla-current-candidate.json', {})
     functional_queue = read(audit / 'functional-isa-and-checked-hpc-v1/runs/results.json', {})
-    hpc_queue_path = audit / 'owned-writeback-hpc-v1/runs/results.json'
-    hpc_queue = read(hpc_queue_path, {}) or functional_queue
+    previous_hpc_path = audit/'owned-writeback-hpc-v1/runs/results.json'
+    hpc_queue_path = audit/'helper25-hbm-hpc-regression-v1/runs/results.json'
+    latest_planned = read(audit/'helper25-hbm-hpc-regression-v1/jobs.json',[])
+    hpc_queue = read(hpc_queue_path,{})
+    if not hpc_queue and latest_planned:
+        hpc_queue = dict(status='pending',jobs=[dict(job,status='pending')for job in latest_planned])
+    elif not hpc_queue:
+        hpc_queue_path = previous_hpc_path
+        hpc_queue = read(previous_hpc_path,{}) or functional_queue
     if hpc_queue:
         hpc_jobs = [j for j in hpc_queue['jobs'] if j['kind'] == 'hpc']
         hpc = dict(status='passed' if all(j['status'] == 'passed' for j in hpc_jobs) else
@@ -116,13 +123,30 @@ def summarize(root):
                 and device_receipt.get('status') in ('passed', 'failed')
                 and hpc.get('status') in ('passed', 'failed')
                 and runtime.get('status') in ('passed', 'failed'))
+    model_audits = read(audit/'full-decoder-audits-v1/supervisor.json',{})
+    hbm_regression = read(audit/'helper25-hbm-hpc-regression-v1/supervisor.json',{})
+    long_launch = read(audit/'long-launch-hbm-qualification-v1/supervisor.json',{})
+    goal_audit = read(audit/'software-goal-completion-audit.json',{})
+    scheduled_finished = (all(m['qualified']for m in full_assisted.values()) and
+        model_audits.get('status')=='passed' and hbm_regression.get('status')=='passed' and
+        long_launch.get('status')=='passed')
+    current_failure = (any(m['status'] in ('failed','error','interrupted')for m in full_assisted.values()) or
+        any(item.get('status')=='failed'for item in (model_audits,hbm_regression,long_launch)))
+    objective_done = scheduled_finished and goal_audit.get('objective_complete') is True
     result = dict(updated_utc=datetime.now(timezone.utc).isoformat(),
-                  status=('failed' if complete else 'failed_with_checks_outstanding') if known_failure else ('passed' if complete else 'checks_outstanding'),
-                  verification_finished=complete, objective_complete=False,
-                  full_one_sm_models=models,
+                  status='passed' if objective_done else 'failed_with_checks_outstanding' if current_failure else
+                      'completion_audit_pending' if scheduled_finished else 'checks_outstanding',
+                  verification_finished=objective_done, objective_complete=objective_done,
+                  scheduled_current_checks_finished=scheduled_finished,
+                  historical_one_sm_timing_attempts=models,
+                  historical_timing_attempts_finished=complete,
+                  historical_timing_attempts_have_failure=known_failure,
                   full_assisted_functional_models=full_assisted,
                   all_four_full_assisted_functional_qualified=all(m['qualified'] for m in full_assisted.values()),
-                  full_decoder_result_audits=read(audit/'full-decoder-audits-v1/supervisor.json'),
+                  full_decoder_result_audits=model_audits,
+                  latest_hbm_hpc_regression=hbm_regression,
+                  long_launch_hbm_regression=long_launch,
+                  software_goal_completion_audit=goal_audit,
                   smolvla_stage_order_audit=read(audit/'smolvla-stage-order-audit-v1/result.json'),
                   full_two_sm_models_status='assisted_functional_qualified' if all(m['qualified'] for m in full_assisted.values()) else 'checks_outstanding',
                   decoder_host_stage_controls=read(audit/'host-stage-controls-v1/qualified-result.json'),
@@ -134,7 +158,7 @@ def summarize(root):
                   prepared_query_projection=read(audit / 'prepared-query-full-projection-overlay-v1/result.json'),
                   functional_projection=read(audit / 'prepared-query-functional-projection-v2/result.json'),
                   checked_simulator_regression=functional_queue,
-                  owned_writeback_regression=read(hpc_queue_path),
+                  owned_writeback_regression=read(previous_hpc_path),
                   owned_writeback_performance=read(audit / 'owned-writeback-performance-v1/result.json'),
                   smolvla_current_candidate=read(audit / 'smolvla-current-candidate.json'),
                   smolvla_two_sm_candidate=read(audit / 'smolvla-replicas-current.json'),
@@ -145,6 +169,7 @@ def summarize(root):
                   simulator_performance=read(audit / 'csr-performance.json'),
                   hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(
                            hpc_queue_path if hpc_queue_path.exists() else
+                           audit/'helper25-hbm-hpc-regression-v1/supervisor.json' if latest_planned else
                            audit / 'functional-isa-and-checked-hpc-v1/runs/results.json' if functional_queue else
                            csr_path if csr else audit / 'hpc-current-runs/results.json'),
                            scope='complete output hashes for STREAM, five Spatter transfer families, original-size xRAGE gather/scatter; 1SM with 1/2 logical partitions'),
@@ -161,7 +186,7 @@ def summarize(root):
     temporary = audit / 'summary.new'
     temporary.write_text(json.dumps(result, indent=2) + '\n')
     temporary.replace(audit / 'summary.json')
-    return complete
+    return objective_done
 
 
 def main():
