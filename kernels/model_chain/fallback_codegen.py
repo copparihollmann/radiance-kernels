@@ -21,6 +21,7 @@ OPERATIONS = {
     'scale_values': (15,4,(0,1),(3,)),
     'gated_activation': (16,5,(0,1,2),()),
     'euler_step': (17,5,(0,1,2),(4,)),
+    'linear_except_columns': (18,8,(0,1,2),()),
 }
 
 
@@ -48,7 +49,18 @@ def emit_call(body, name, context='(void*)v_arena', replica_strides=None, pointe
     reference values, operation order, or model dependency is replaced here.
     """
     match = re.fullmatch(r'(?:model_chain::)?(\w+)\((.*)\);?',body.strip(),re.S)
-    if not match or match[1] not in OPERATIONS:
+    if not match:
+        return None
+    if match[1] == 'mx_vpu_linear_partitioned':
+        args = arguments(match[2])
+        # Only the exact FP32 remainder is pure. Keep selected columns on the
+        # original MX helper; all other storage formats retain their old body.
+        if len(args) != 12 or args[4] != 'model_chain::mx_model::F32' or args[2] != 'nullptr':
+            return None
+        pure = 'linear_except_columns('+', '.join([args[0],args[1],args[3],*args[5:]])+');'
+        declaration, call = emit_call(pure,name,context,replica_strides,pointer_aliases)
+        return declaration, call+'\n  model_chain::mx_vpu_linear_columns('+', '.join(args)+');'
+    if match[1] not in OPERATIONS:
         return None
     opcode, count, pointers, floats = OPERATIONS[match[1]]
     args = arguments(match[2])

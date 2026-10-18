@@ -11,6 +11,19 @@ from run_e2e_queue import validate
 
 
 class CompleteOutputChecks(unittest.TestCase):
+    def test_native_decoder_needs_every_replica_check_and_greedy_token(self):
+        job = dict(kind='native', model='tinyllama', expected_stages=41,
+                   num_replicas=2, reference_generated_token_ids=[61])
+        one = 'generated_token_0=61\nstages=41 check_chunks=3 tohost=0\n'
+        log = ''.join(f'REPLICA_BEGIN {i}\n'+one+f'REPLICA_DONE {i} status=0\n'for i in range(2))
+        self.assertTrue(validate(job,log,0)['passed'])
+        for broken in (log.replace('REPLICA_DONE 1 status=0','REPLICA_DONE 1 status=1'),
+                       log.rsplit('generated_token_0=61',1)[0],
+                       log.replace('generated_token_0=61','generated_token_0=62',1),
+                       log.replace('stages=41','stages=40',1),
+                       log.replace('REPLICA_BEGIN 1','REPLICA_BEGIN 0')):
+            self.assertFalse(validate(job,broken,0)['passed'])
+
     def test_gemm_checks_every_element_and_requires_gpu_agreement(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
             directory = Path(temporary)

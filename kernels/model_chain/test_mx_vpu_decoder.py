@@ -51,6 +51,23 @@ class MxVpuDecoderChecks(unittest.TestCase):
             self.assertEqual(sum(s["backend"] == "fp8_mx" for s in manifest["stage_backends"]), 1)
             self.assertLess(manifest["mx_linear_macs"], manifest["total_linear_macs"])
 
+    def test_two_replica_pure_helper_calls_keep_complete_graph_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = generate("tinyllama", 1, 2, 1, "greedy", Path(directory),
+                              device_check_all_stages=True, batch_clusters=2,
+                              execution_backend="rakanic_mx_vpu", mx_linear_policy="q_proj",
+                              fallback_call_abi=True)
+            self.assertIn("errors=0", verify_native(target))
+            text = (target/"native.cpp").read_text()
+            self.assertIn("rk_fallback_call", text)
+            self.assertNotIn("(uintptr_t)(v_prefill", text)
+            self.assertIn("v_decode0_token_ids[i + 16u]", text)
+            needle = "  uint32_t errors = 0; float maximum = 0.0f;"
+            self.assertEqual(text.count(needle), 1)
+            (target/"native.cpp").write_text(text.replace(needle, "  v_decode0_token_ids[16] = -1;\n"+needle))
+            with self.assertRaises(subprocess.CalledProcessError):
+                verify_native(target)
+
 
 if __name__ == "__main__":
     unittest.main()

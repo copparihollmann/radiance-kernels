@@ -46,6 +46,8 @@ def generate(target: Path, manifest: dict, image: dict, image_paths: list[Path])
     expected_sources.update(path.name for path in target.glob("verify_chunk_*.cpp"))
     if manifest.get("execution_backend") == "rakanic_mx_vpu":
         expected_sources.add("mx_vpu_runtime.cpp")
+    if manifest.get("fallback_call_abi"):
+        expected_sources.add("fallback_runtime.cpp")
     if set(manifest["device_source_files"]) != expected_sources:
         raise ValueError("native sources differ from the ELF build manifest")
     write_if_changed(native / "mu_intrinsics.h", "#pragma once\n#define __global\n"
@@ -68,10 +70,14 @@ inline void mu_tohost(uint32_t code) { native_tohost = code; }
             checks != (manifest["native_verified_float_stages"] +
                        manifest["native_verified_integer_stages"])):
         raise ValueError("full device-stage verifier sources are missing")
+    replicas = manifest.get("batch_clusters", 1)
+    if replicas not in (1, 2):
+        raise ValueError("unsupported native replica count")
+    check_argument = "uint32_t" if replicas == 2 else ""
     prototypes = "\n".join(
         [f"void stage_{i}(void*, uint32_t, uint32_t, uint32_t);"
          for i in range(stages)] +
-        [f"bool {path.stem}();" for path in chunks])
+        [f"bool {path.stem}({check_argument});" for path in chunks])
     stage_entries = ", ".join(f"stage_{i}" for i in range(stages))
     verify_entries = ", ".join(path.stem for path in chunks)
     preloads = []
@@ -135,6 +141,23 @@ int main() {
   return 0;
 }
 """
+    if replicas == 2:
+        # Keep one independent buffer set per request. Run and qualify each
+        # complete replica, including its own greedy tokens and verifier tail.
+        source = source.replace("using Check = bool (*)();", "using Check = bool (*)(uint32_t);")
+        source = source.replace('  for (uint32_t i = 0; i < stage_count; ++i) {',
+                                '  for (uint32_t replica = 0; replica < 2; ++replica) {\n'
+                                '  printf("REPLICA_BEGIN %u\\n",replica);\n'
+                                '  for (uint32_t i = 0; i < stage_count; ++i) {')
+        source = source.replace('stages[i](nullptr, tid, 32, 0);',
+                                'stages[i]((void*)(uintptr_t)replica, tid, 32, 0);')
+        source = source.replace('checks[i]()', 'checks[i](replica)')
+        for step in range(greedy_steps):
+            source = source.replace(f'v_decode{step}_token_ids[0]',
+                                    f'v_decode{step}_token_ids[replica*16]')
+        source = source.replace('  return 0;\n}',
+                                '  printf("REPLICA_DONE %u status=0\\n",replica);\n'
+                                '  }\n  return 0;\n}')
     write_if_changed(native / "main.cpp", source)
     return native
 
@@ -155,6 +178,9 @@ def build(target: Path, native: Path, jobs: int) -> Path:
                     HERE / "pipeline_int8.hpp", HERE / "pipeline_tied.hpp"]
     if use_mx:
         dependencies.append(HERE/"mx_vpu/backend.hpp")
+    if json.loads((target/"manifest.json").read_text()).get("fallback_call_abi"):
+        sources.append(target/"fallback_runtime.cpp")
+        dependencies.append(HERE/"fallback_abi.hpp")
 
     def compile_one(source: Path) -> Path:
         obj = native / (source.stem + ".o")
@@ -199,7 +225,7 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
     if image["image_sha256"] != manifest["weight_image_sha256"]:
         raise ValueError("checkpoint image differs from its build manifest")
     if not source_only:
-        verify_image_placement(elf, [image])
+        verify_image_placement(elf, [image], num_clusters=manifest.get("batch_clusters", 1))
     native = generate(target, manifest, image, image_paths)
     binary = build(target, native, jobs)
     log = native / "native.log"
@@ -215,15 +241,18 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
     token_matches = re.findall(r"generated_token_(\d+)=(\d+)", log_text)
     generated_tokens = [int(value) for _, value in token_matches]
     expected_tokens = manifest.get("reference_generated_token_ids")
+    replicas = manifest.get("batch_clusters", 1)
     tokens_match = (expected_tokens is None and not token_matches or
                     expected_tokens is not None and
                     [int(index) for index, _ in token_matches] ==
-                    list(range(len(expected_tokens))) and
-                    generated_tokens == expected_tokens)
+                    list(range(len(expected_tokens)))*replicas and
+                    generated_tokens == expected_tokens*replicas)
     passed = (process.returncode == 0 and success is not None and
               int(success.group(1)) == manifest["stages"] and
               int(success.group(2)) == len(list(target.glob("verify_chunk_*.cpp")))
               and tokens_match)
+    if replicas == 2:
+        passed = passed and re.findall(r'REPLICA_BEGIN (\d+)', log_text) == ['0','1'] and re.findall(r'REPLICA_DONE (\d+) status=0', log_text) == ['0','1'] and len(re.findall(r'stages=\d+ check_chunks=\d+ tohost=0', log_text)) == 2
     if manifest.get("execution_backend") == "rakanic_mx_vpu":
         passed = passed and model_counts is not None and int(model_counts[2]) > 0 and int(model_counts[3]) > 0
     record = {
@@ -232,6 +261,7 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
                   if manifest["layers"] == full_layers else
                   "partial_checkpoint_generated_cpp_on_cpu"),
         "layers": manifest["layers"], "stage_count": manifest["stages"],
+        "num_replicas": replicas, "total_stage_invocations": replicas*manifest["stages"],
         "checked_float_stages": manifest["native_verified_float_stages"],
         "checked_integer_stages": manifest["native_verified_integer_stages"],
         "prefill_tokens": manifest["prefill_tokens"],

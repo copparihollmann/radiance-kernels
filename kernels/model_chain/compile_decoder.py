@@ -82,6 +82,9 @@ def sha256_file(path: Path) -> str:
 
 
 def verify_backend_sources(manifest: dict) -> None:
+    for name, expected in (manifest.get("fallback_call_source_sha256") or {}).items():
+        if name not in ("fallback_abi.hpp", "fallback_runtime.cpp", "fallback_codegen.py") or sha256_file(HERE / name) != expected:
+            raise ValueError("pure helper call source changed since generation; regenerate this target")
     if manifest.get("execution_backend") == "rakanic_mx_vpu":
         for name, expected in manifest["backend_source_sha256"].items():
             if sha256_file(HERE / "mx_vpu" / name) != expected:
@@ -146,7 +149,8 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
                parameter: str | None, parameter_dtype: str = "fp32",
                scale_parameter: str | None = None,
                batch_clusters: int = 1,
-               execution_backend: str = "muon", mx_linear_policy: str = "all") -> str:
+               execution_backend: str = "muon", mx_linear_policy: str = "all",
+               fallback_call_abi: bool = False) -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
     def tensor_pointer(name: str) -> str:
         base = symbol(name)
@@ -315,7 +319,21 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
             right = parameter if op == "bias_add" else ins[1]
             right_width = int(np.prod(shape[2:])) if op == "bias_add" else count
             body = f"mx_vpu_add({ins[0]}, {right}, {out}, {count}, {right_width}, tid, tpb)"
-    return (f"static void stage_{index}(void* context, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
+    descriptor, code = "", "model_chain::" + body + ";"
+    if fallback_call_abi:
+        from fallback_codegen import emit_call
+        pure_body = body
+        strides = {}
+        if batch_clusters == 2:
+            for name in (*stage["reads"], stage["writes"]):
+                size = int(np.prod(graph.tensors[name]["shape"]))
+                strides[symbol(name)] = (size + 15) // 16 * 16 * 4
+                pure_body = pure_body.replace(tensor_pointer(name), symbol(name))
+        wrapped = emit_call(pure_body + ";", f"rk_desc_stage_{index}",
+                            context="context", replica_strides=strides)
+        if wrapped is not None:
+            descriptor, code = wrapped
+    return (descriptor + f"static void stage_{index}(void* context, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
             + ("  const uint32_t replica = (uint32_t)(uintptr_t)context;\n"
                if batch_clusters != 1 else "") +
             "#ifdef RADIANCE_DEVICE\n"
@@ -326,7 +344,7 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
             "      + tid % MU_NUM_THREADS;\n"
             "  tpb /= MU_NUM_CORES;\n"
             "#endif\n"
-            f"  model_chain::{body};\n}}\n")
+            f"  {code}\n}}\n")
 
 
 def generate(model: str, layers: int, prefill: int, decode: int,
@@ -342,10 +360,13 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              control_sliding_window: int | None = None,
              native_rtol: float = 1e-4,
              native_atol: float = 1e-5,
-             execution_backend: str = "muon", mx_linear_policy: str = "all") -> Path:
+             execution_backend: str = "muon", mx_linear_policy: str = "all",
+             fallback_call_abi: bool = False) -> Path:
     if execution_backend not in ("muon", "rakanic_mx_vpu"):
         raise ValueError("unknown execution backend")
     use_mx_vpu = execution_backend == "rakanic_mx_vpu"
+    if fallback_call_abi and not use_mx_vpu:
+        raise ValueError("pure helper ABI requires the explicit MX/VPU backend")
     if mx_linear_policy not in ("all", "q_proj"):
         raise ValueError("unknown MX linear policy")
     def mx_selected(stage):
@@ -355,6 +376,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("MX+VPU decoder backend currently supports TinyLlama, DeepSeek and Gemma")
 
     def backend_source(source):
+        if fallback_call_abi:
+            source = '#include "fallback_abi.hpp"\n' + source
         return source.replace('#include "pipeline_math.hpp"\n',
                               '// MX variant: sequential FP32 fallbacks, FP contraction disabled.\n'
                               '#include "pipeline_math.hpp"\n#include "mx_vpu/backend.hpp"\n') if use_mx_vpu else source
@@ -364,8 +387,6 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError("stages per object cannot be negative")
     if batch_clusters not in (1, 2):
         raise ValueError("batch clusters must be one or two")
-    if batch_clusters == 2 and device_check_all_stages:
-        raise ValueError("two-cluster builds use final and attention/activation checks")
     if prefill_logits not in ("all", "last"):
         raise ValueError("prefill logits must be all or last")
     if use_mx_vpu and prefill_logits != "all":
@@ -653,7 +674,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     for i, stage in enumerate(graph.stages):
         stage_src.append(emit_stage(i, stage, graph, parameter_symbol(stage),
                                     parameter_dtype(stage), scale_symbol(stage),
-                                    batch_clusters, execution_backend, mx_linear_policy))
+                                    batch_clusters, execution_backend, mx_linear_policy, fallback_call_abi))
     stage_files = []
     if stages_per_object:
         for first in range(0, len(graph.stages), stages_per_object):
@@ -769,17 +790,20 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                          + "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();"
                          for i in range(len(graph.stages)))
     if device_check_all_stages:
+        def actual(out, count):
+            return (f"{out}[i + replica * {((count + 15) // 16 * 16)}u]"
+                    if batch_clusters == 2 else f"{out}[i]")
         float_verify = "\n".join(
             f"  errors = 0; uint32_t first_{index} = {count};\n"
             f"  for (uint32_t i = 0; i < {count}; ++i) "
-            f"if (!mu_close({out}[i], {gold}[i], 5e-3f, 5e-4f)) "
+            f"if (!mu_close({actual(out, count)}, {gold}[i], 5e-3f, 5e-4f)) "
             f"{{ if (!errors) first_{index} = i; ++errors; }}\n"
             f"  if (errors) mu_tohost(({index + 1}u << 16) | (first_{index} << 1) | 1u);"
             for index, (out, gold, count) in enumerate(native_checks))
         int_verify = "\n".join(
             f"  errors = 0; uint32_t first_int_{index} = {count};\n"
             f"  for (uint32_t i = 0; i < {count}; ++i) "
-            f"if ({out}[i] != {gold}[i]) "
+            f"if ({actual(out, count)} != {gold}[i]) "
             f"{{ if (!errors) first_int_{index} = i; ++errors; }}\n"
             f"  if (errors) mu_tohost(({len(native_checks) + index + 1}u << 16) "
             f"| (first_int_{index} << 1) | 1u);"
@@ -807,8 +831,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
             checks = []
             for offset, (out, gold, count, dtype) in enumerate(selected):
                 index = first + offset
-                comparison = (f"!mu_close({out}[i], {gold}[i], 5e-3f, 5e-4f)"
-                              if dtype == "float" else f"{out}[i] != {gold}[i]")
+                comparison = (f"!mu_close({actual(out, count)}, {gold}[i], 5e-3f, 5e-4f)"
+                              if dtype == "float" else f"{actual(out, count)} != {gold}[i]")
                 checks.append(
                     f"  errors = 0; uint32_t first_{index} = {count};\n"
                     f"  for (uint32_t i = 0; i < {count}; ++i) "
@@ -820,17 +844,17 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                       "#include \"kernel_verify.h\"\n"
                       + "\n".join(f"extern __global {dtype} {name}[];"
                                   for name, dtype in sorted(externs.items()))
-                      + f"\nbool verify_chunk_{first // stages_per_object:03d}() {{\n"
+                      + f"\nbool verify_chunk_{first // stages_per_object:03d}({'uint32_t replica' if batch_clusters == 2 else ''}) {{\n"
                       "  uint32_t errors = 0;\n" + "\n".join(checks)
                       + "\n  return true;\n}\n")
             write_if_changed(target / filename, source)
         device_source_files.extend(verifier_files)
         device_declarations = ""
         verify = "\n".join(
-            f"  if (!verify_chunk_{index:03d}()) return 0;"
+            f"  if (!verify_chunk_{index:03d}({'replica' if batch_clusters == 2 else ''})) return 0;"
             for index in range(len(verifier_files)))
         verify_prototypes = "\n".join(
-            f"bool verify_chunk_{index:03d}();"
+            f"bool verify_chunk_{index:03d}({'uint32_t' if batch_clusters == 2 else ''});"
             for index in range(len(verifier_files)))
     else:
         verify_prototypes = ""
@@ -905,6 +929,9 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     if use_mx_vpu:
         write_if_changed(target / "mx_vpu_runtime.cpp", (HERE / "mx_vpu/runtime.cpp").read_text())
         device_source_files.append("mx_vpu_runtime.cpp")
+    if fallback_call_abi:
+        write_if_changed(target / "fallback_runtime.cpp", (HERE / "fallback_runtime.cpp").read_text())
+        device_source_files.append("fallback_runtime.cpp")
     write_if_changed(target / "Makefile",
         "PROJECT = model_chain\nMU_SRCS = kernel.cpp\nHOST_SRCS = host.cpp\n"
         + ("MU_SRC_DEPS = " + " ".join(device_source_files) + "\n"
@@ -1002,6 +1029,10 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "native_verified_integer_stages": len(integer_checks),
         "source_spec_sha256": hashlib.sha256(stitch.SPECS.read_bytes()).hexdigest(),
     }
+    if fallback_call_abi:
+        manifest.update(fallback_call_abi=True,
+                        fallback_call_source_sha256={name: sha256_file(HERE/name)
+                            for name in ("fallback_abi.hpp", "fallback_runtime.cpp", "fallback_codegen.py")})
     if use_mx_vpu:
         manifest.update(execution_backend=execution_backend,
                         mx_linear_policy=mx_linear_policy,
@@ -1034,6 +1065,8 @@ def verify_native(target: Path) -> str:
                    archive, "-lm", "-o", "native"]
     else:
         command = ["clang++", "-O2", "-nostdlib++", "-I", str(HERE), "native.cpp", "-lm", "-o", "native"]
+    if manifest.get("fallback_call_abi"):
+        command[1:1] = ["-D__global=", "fallback_runtime.cpp"]
     subprocess.run(command, cwd=target, check=True)
     with (target / "native.log").open("w") as log:
         subprocess.run([str(target / "native")], cwd=target,
@@ -1136,6 +1169,7 @@ def main() -> None:
     parser.add_argument("--native-atol", type=float, default=1e-5)
     parser.add_argument("--execution-backend", choices=("muon", "rakanic_mx_vpu"), default="muon")
     parser.add_argument("--mx-linear-policy", choices=("all", "q_proj"), default="all")
+    parser.add_argument("--fallback-call-abi", action="store_true")
     parser.add_argument("--out-root", type=Path, default=HERE / "generated")
     parser.add_argument("--device-check-all-stages", action="store_true")
     parser.add_argument("--device-opt", choices=("O1", "O2", "O3"), default="O3")
@@ -1161,7 +1195,7 @@ def main() -> None:
                       args.weight_image, args.stage_limit, args.token_ids,
                       args.batch_clusters, args.prefill_logits,
                       args.control_sliding_window, args.native_rtol,
-                      args.native_atol, args.execution_backend, args.mx_linear_policy)
+                      args.native_atol, args.execution_backend, args.mx_linear_policy, args.fallback_call_abi)
     if args.verify_native and args.weight_image:
         parser.error("native C++ checking is not supported for external weight images")
     if args.verify_native or (args.build and args.weight_image is None):

@@ -19,8 +19,27 @@ enum FallbackOperation {
   LinearF32=1, LinearI8=2, LinearI4=3, LinearF16=4,
   LayerNorm=5, RmsNorm=6, PatchEmbed=7, BidirectionalAttention=8,
   MaskedAttention=9, Gelu=10, Silu=11, Residual=12, Bias=13,
-  Copy=14, Scale=15, GatedActivation=16, Euler=17
+  Copy=14, Scale=15, GatedActivation=16, Euler=17, LinearExceptColumns=18
 };
+
+// The FP32 remainder of the mixed MX projection, with the original lane and
+// reduction order. Selected columns are untouched and remain the MX's work.
+inline void linear_except_columns(const RK_GLOBAL float* input,
+                                  const RK_GLOBAL float* weights,
+                                  RK_GLOBAL float* output,
+                                  uint32_t m, uint32_t k, uint32_t n,
+                                  uint32_t first, uint32_t columns,
+                                  uint32_t tid, uint32_t threads) {
+  if (first > n || columns > n-first) return;
+  for (uint32_t index = tid; index < m*n; index += threads) {
+    const uint32_t row = index/n, col = index%n;
+    if (col >= first && col < first+columns) continue;
+    float sum = 0;
+    for (uint32_t inner = 0; inner < k; ++inner)
+      sum += input[row*k+inner] * weights[inner*n+col];
+    output[index] = sum;
+  }
+}
 
 inline uintptr_t fallback_address(const RK_GLOBAL FallbackDescriptor* d,
                                  unsigned index, uintptr_t context, uintptr_t ram) {
@@ -84,6 +103,9 @@ inline bool fallback_dispatch(const RK_GLOBAL FallbackDescriptor* d,
       gated_activation(RK_P(3),RK_P(4),RK_O(5),RK_W(6),RK_W(7)!=0,tid,threads); break;
     case Euler:
       euler_step(RK_P(3),RK_P(4),RK_O(5),RK_W(6),fallback_float(d->word[7]),tid,threads); break;
+    case LinearExceptColumns:
+      linear_except_columns(RK_P(3),RK_P(4),RK_O(5),RK_W(6),RK_W(7),RK_W(8),
+                            RK_W(9),RK_W(10),tid,threads); break;
     default: return false;
   }
 #undef RK_P

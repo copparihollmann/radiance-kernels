@@ -42,10 +42,16 @@ def validate(job, log, returncode):
             result['final_summary'] = actions[0] if actions else None
             result['boundary_summary'] = boundaries[0] if boundaries else None
         else:
-            summary = re.search(r'stages=(\d+) check_chunks=(\d+) tohost=0', log)
-            result['format_all_stage_checks_pass'] = bool(summary and int(summary[1]) == job['expected_stages'] and int(summary[2]) > 0)
+            replicas = job.get('num_replicas', 1)
+            summaries = re.findall(r'stages=(\d+) check_chunks=(\d+) tohost=0', log)
+            result['format_all_stage_checks_pass'] = (len(summaries) == replicas and
+                all(int(stages) == job['expected_stages'] and int(chunks) > 0 for stages,chunks in summaries))
             result['generated_tokens'] = [int(x) for x in re.findall(r'generated_token_\d+=(-?\d+)', log)]
-            result['greedy_tokens_pass'] = result['generated_tokens'] == job['reference_generated_token_ids']
+            result['greedy_tokens_pass'] = result['generated_tokens'] == job['reference_generated_token_ids']*replicas
+            if replicas != 1:
+                result['all_native_replicas_pass'] = (replicas == 2 and
+                    re.findall(r'REPLICA_BEGIN (\d+)', log) == ['0','1'] and
+                    re.findall(r'REPLICA_DONE (\d+) status=0', log) == ['0','1'])
     elif job['kind'] == 'hpc':
         output = Path(job['output'])
         result['tohost_pass'] = 'isa-test passed with tohost=0' in log
