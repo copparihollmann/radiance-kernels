@@ -46,6 +46,11 @@ class CompleteOutputChecks(unittest.TestCase):
             both = one + 'cluster 1 isa-test passed with tohost=0\n'
             self.assertFalse(validate(job, one, 0)['passed'])
             self.assertTrue(validate(job, both, 0)['passed'])
+            job['expected_stages'] = 2
+            self.assertFalse(validate(job, both, 0)['passed'])
+            complete = records[:-1] * 2 + records[-1:]
+            journal.write_text(''.join(json.dumps(r) + '\n' for r in complete))
+            self.assertTrue(validate(job, both, 0)['passed'])
             journal.write_text(''.join(json.dumps(r) + '\n' for r in records[1:]))
             self.assertFalse(validate(job, both, 0)['passed'])
 

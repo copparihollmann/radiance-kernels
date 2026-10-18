@@ -70,6 +70,10 @@ def validate(job, log, returncode):
         result['journal_finished_pass'] = bool(records and records[-1]['event'] == 'finish' and records[-1]['passed'])
         result['journal_has_stages'] = bool(entries)
         result['every_cluster_reached_stages_pass'] = {x['cluster'] for x in entries} == set(range(clusters))
+        if job.get('expected_stages') is not None:
+            counts = {cluster: sum(x['cluster'] == cluster for x in entries) for cluster in range(clusters)}
+            result['stage_entries_per_cluster'] = counts
+            result['complete_stage_count_pass'] = all(count == job['expected_stages'] for count in counts.values())
         # Entries prove execution reached an address, not that a stage completed.
         result['journal_scope'] = 'core 0 warp 0 retired function entries; acceptance uses final ELF verification'
     else:
