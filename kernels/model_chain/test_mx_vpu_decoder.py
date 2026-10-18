@@ -24,7 +24,7 @@ class MxVpuDecoderChecks(unittest.TestCase):
                     self.assertGreater(data["native_model_check"]["mx_commands"], 0)
                     self.assertGreater(data["native_model_check"]["vpu_commands"], 0)
                     self.assertEqual(data["native_model_check"]["libgemmini_commit"],
-                                     "d5e5e8e35d4efe77323f0d495146704d4db53d71")
+                                     "54492d510b9a2655ca886bad5675091af414e986")
                     self.assertFalse(data["native_model_check"]["full_checkpoint_execution"])
                     if model == "gemma_2_2b_it":
                         self.assertFalse(data["format_comparison"]["original_greedy_exact"])
