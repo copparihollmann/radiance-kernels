@@ -1,5 +1,8 @@
 # Portable workload handoffs
 
+The operator-facing instructions are in [FPGA_HANDOFF.md](FPGA_HANDOFF.md).
+Copy that file to `README.md` when preparing the current handoff.
+
 `workload_bundle.py` exports qualified device binaries, launch carriers, load
 images, references and evidence into a relocatable, content-addressed bundle.
 It does not infer FPGA qualification from simulator results.
