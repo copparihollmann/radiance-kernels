@@ -40,11 +40,13 @@ def summarize(root):
         native = prepared['jobs']+[j for j in native if j['model'] not in replaced]
     smolvla = read(audit / 'smolvla-current-candidate.json', {})
     functional_queue = read(audit / 'functional-isa-and-checked-hpc-v1/runs/results.json', {})
-    if functional_queue:
-        hpc_jobs = [j for j in functional_queue['jobs'] if j['kind'] == 'hpc']
+    hpc_queue_path = audit / 'owned-writeback-hpc-v1/runs/results.json'
+    hpc_queue = read(hpc_queue_path, {}) or functional_queue
+    if hpc_queue:
+        hpc_jobs = [j for j in hpc_queue['jobs'] if j['kind'] == 'hpc']
         hpc = dict(status='passed' if all(j['status'] == 'passed' for j in hpc_jobs) else
                    'failed' if any(j['status'] == 'failed' for j in hpc_jobs) else 'pending',jobs=hpc_jobs)
-        controls = dict(jobs=[j for j in functional_queue['jobs'] if j['kind'] == 'gemm'])
+        controls = dict(jobs=[j for j in hpc_queue['jobs'] if j['kind'] == 'gemm'])
     models = []
     for entry in graph:
         name = entry['model']
@@ -103,9 +105,12 @@ def summarize(root):
                   prepared_query_projection=read(audit / 'prepared-query-full-projection-overlay-v1/result.json'),
                   functional_projection=read(audit / 'prepared-query-functional-projection-v2/result.json'),
                   checked_simulator_regression=functional_queue,
+                  owned_writeback_regression=read(hpc_queue_path),
+                  owned_writeback_performance=read(audit / 'owned-writeback-performance-v1/result.json'),
                   smolvla_current_candidate=read(audit / 'smolvla-current-candidate.json'),
                   simulator_performance=read(audit / 'csr-performance.json'),
                   hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(
+                           hpc_queue_path if hpc_queue_path.exists() else
                            audit / 'functional-isa-and-checked-hpc-v1/runs/results.json' if functional_queue else
                            csr_path if csr else audit / 'hpc-current-runs/results.json'),
                            scope='complete output hashes for STREAM, five Spatter transfer families, original-size xRAGE gather/scatter; 1SM with 1/2 logical partitions'),
