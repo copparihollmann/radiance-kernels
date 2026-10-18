@@ -1,6 +1,6 @@
 # Radiance workloads
 
-This package contains the binaries, input images and output checks for 32
+This package contains the binaries, input images and output checks for 43
 workload configurations tested in Cyclotron. Use `manifest.json` to locate the
 files and addresses for each case. Files under `blobs/` are named by SHA-256 and
 shared between cases that use the same data.
@@ -10,16 +10,21 @@ shared between cases that use the same data.
 | Workload | Cases | SM count | Execution |
 |---|---:|---|---|
 | SmolVLA, TinyLlama, DeepSeek 1.5B, Gemma 2 2B | 8 | 1, 2 | One model replica per SM |
-| STREAM: copy, scale, add, triad | 8 | 1 | One or two logical partitions |
-| Spatter: gather, scatter, gather/scatter, multiscatter, multigather | 10 | 1 | One or two logical partitions |
-| xRAGE gather and scatter | 4 | 1 | Original-size inputs; one or two logical partitions |
+| STREAM: copy, scale, add, triad | 12 | 1, 2 | One-SM partition controls and concurrent two-SM runs |
+| Spatter: gather, scatter, gather/scatter, multiscatter, multigather | 15 | 1, 2 | One-SM partition controls and concurrent two-SM runs |
+| xRAGE gather and scatter | 6 | 1, 2 | Original-size inputs; partition controls and concurrent two-SM runs |
 | FP8 GEMM, 512 × 512 × 512 | 2 | 1, 2 | Separate one- and two-SM cases |
 
 The model cases include every layer and the frozen test inputs. The decoders
 use their recorded short prefill/decode sequences; SmolVLA includes the camera
 inputs and full denoising loop. The two-SM model cases run two independent
-replicas. Four-SM workloads, model sharding and concurrent multi-SM
-STREAM/Spatter/xRAGE cases are not included.
+replicas. Four-SM workloads and model sharding are not included.
+
+For STREAM, Spatter and xRAGE, names ending in `--1` or `--2` are the original
+one-SM controls with one or two logical partitions. Names ending in `--2sm`
+run concurrently on two real SMs, with one partition per SM. Ordered scatter
+keeps every write to a destination on its owning SM and preserves last-writer
+order within that destination.
 
 ## FireSim targets
 
@@ -57,9 +62,9 @@ configuration and board driver.
 Use Python 3.11 or newer. Output checking also needs NumPy.
 
 ```sh
-sha256sum -c radiance-workloads-v2.tar.zst.sha256
-tar --zstd -xf radiance-workloads-v2.tar.zst
-cd fpga-handoff-v2
+sha256sum -c radiance-workloads-v3.tar.zst.sha256
+tar --zstd -xf radiance-workloads-v3.tar.zst
+cd fpga-handoff-v3
 python3 workload_bundle.py verify
 python3 workload_bundle.py list
 ```
@@ -110,7 +115,7 @@ The RV64 host carriers release the GPU and handle the mailbox GO protocol.
 They need a completion/readback adapter in the board runner. These kernels
 park secondary cores after the final barrier; core 0 executes the test
 `tohost` instruction. Waiting only for `ALL_FINISHED` can therefore hang.
-Observe core-0 completion or the appropriate progress signal for the image.
+Observe core-0 completion in every configured cluster before reading the output.
 
 For nightly GEMM, the carrier waits for both per-core END stamps in every
 cluster before writing GO to slot 24. The checker requires the full 64-byte
@@ -145,7 +150,11 @@ Cyclotron. The simulator accelerated selected fallback math through checked
 helpers; the binaries retain the device implementations for hardware execution.
 Scheduling, barriers and MX/VPU commands ran through the ISA path.
 
-The latest 26 HBM/HPC checks passed without helper acceleration. A separate
+The original 26 HBM/HPC checks and 11 additional concurrent two-SM HPC cases
+passed without helper acceleration. The new cases require completion from both
+clusters, HBM traffic from all four cores, and an exact complete-output match
+against the unchanged upstream reference. One-SM negative controls, which leave
+the second partition unwritten, are rejected by the same output checks. A separate
 4,096-launch stress test finished but failed its stage-count check: the journal
 recorded one entry per cluster instead of 4,096. The failed receipts are included
 and the discrepancy remains open.
