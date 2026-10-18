@@ -7,14 +7,18 @@ add optional external-memory completion; MX/VPU arithmetic is unchanged. Its VPU
 scheduler falls back to one unit when the preset's unit count is zero. Optional two-unit timing profiles in the hardware
 checkpoint are separate experiments and are not the selected target.
 
-The current full-device results are recorded separately from the historical
-controls below: complete SmolVLA passes assisted functional ISA on one/two SMs;
-complete TinyLlama passes one/two SMs, with every stage buffer bit-identical
-across all three replicas and zero error against its frozen format reference.
-DeepSeek also passes one/two SMs: all 1,691 stage tensors per SM have zero format
-error and preserve original tokens 22573/4396. Gemma also passes one SM: all 1,496 stage buffers have zero format error and
-original tokens 109/235287 match. Its two-SM GPU run is active. See `functional_assist.md` and the managed
-task's `artifacts/e2e-hbm-audit/summary.json` for live scope and receipts.
+All four complete models now pass one-/two-SM functional ISA with qualified
+pure-helper assistance: SmolVLA 3,673 stages, TinyLlama 1,133, DeepSeek 1,691 and
+Gemma 1,496 per SM. Every decoder stage buffer matches its frozen reference
+exactly and all replicas are bit-identical. Original greedy tokens and SmolVLA's
+unchanged original-action tolerance pass. These are full graph runs, distinct
+from the historical controls below and from whole-program HBM timing.
+
+The consolidated receipt is the task's
+`artifacts/e2e-hbm-audit/all-full-model-functional-qualification.json`; per-model
+manifests retain every stage/backend/fallback. Latest HBM/HPC regression and long
+runtime timing checks continue serially. See `functional_assist.md` and
+`artifacts/e2e-hbm-audit/summary.json` for current scopes and live results.
 
 `compile_decoder.py --execution-backend rakanic_mx_vpu` connects E4M3 matrix
 operations and BF16 residual/bias additions to TinyLlama, DeepSeek and Gemma's
