@@ -22,14 +22,21 @@ inline void layernorm(const RK_GLOBAL float* input,
                       uint32_t rows, uint32_t width, float epsilon,
                       uint32_t tid, uint32_t threads) {
   for (uint32_t row = tid; row < rows; row += threads) {
-    float mean = 0.0f;
-    for (uint32_t col = 0; col < width; ++col)
-      mean += input[row * width + col];
+    float mean = 0.0f, mean_error = 0.0f;
+    for (uint32_t col = 0; col < width; ++col) {
+      const float adjusted = input[row * width + col] - mean_error;
+      const float next = mean + adjusted;
+      mean_error = (next - mean) - adjusted;
+      mean = next;
+    }
     mean /= (float)width;
-    float variance = 0.0f;
+    float variance = 0.0f, variance_error = 0.0f;
     for (uint32_t col = 0; col < width; ++col) {
       const float delta = input[row * width + col] - mean;
-      variance += delta * delta;
+      const float adjusted = delta * delta - variance_error;
+      const float next = variance + adjusted;
+      variance_error = (next - variance) - adjusted;
+      variance = next;
     }
     const float inv = 1.0f / __builtin_sqrtf(variance / (float)width + epsilon);
     for (uint32_t col = 0; col < width; ++col)
@@ -52,7 +59,7 @@ inline void patch_embed(const RK_GLOBAL float* image,
     const uint32_t token = work / width, output_channel = work % width;
     const uint32_t patch_row = token / patches_per_axis;
     const uint32_t patch_col = token % patches_per_axis;
-    float sum = bias[output_channel] + position[work];
+    float sum = 0.0f;
     for (uint32_t channel = 0; channel < channels; ++channel)
       for (uint32_t y = 0; y < patch; ++y)
         for (uint32_t x = 0; x < patch; ++x) {
@@ -62,7 +69,8 @@ inline void patch_embed(const RK_GLOBAL float* image,
               ((output_channel * channels + channel) * patch + y) * patch + x;
           sum += image[image_index] * weight[weight_index];
         }
-    output[work] = sum;
+    // Preserve Conv2D -> bias -> positional embedding FP32 operation order.
+    output[work] = (sum + bias[output_channel]) + position[work];
   }
 }
 

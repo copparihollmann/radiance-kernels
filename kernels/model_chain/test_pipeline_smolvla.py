@@ -28,6 +28,10 @@ extern "C" void run_patch(const float* image, const float* weight,
 extern "C" void run_shuffle(const float* input, float* out) {
   model_chain::pixel_shuffle(input, out, 4, 2, 2, 0, 1);
 }
+extern "C" void run_norm(const float* input, const float* gamma,
+                         const float* bias, float* out) {
+  model_chain::layernorm(input, gamma, bias, out, 1, 4, 1e-6f, 0, 1);
+}
 extern "C" void run_attention(const float* q, const float* k, const float* v,
                               const uint32_t* mask, float* out, float* scratch) {
   model_chain::masked_gqa(q, k, v, mask, out, scratch, 2, 3, 2, 1, 2, 0, 1);
@@ -39,6 +43,7 @@ extern "C" void run_attention(const float* q, const float* k, const float* v,
         f32 = ctypes.POINTER(ctypes.c_float)
         cls.library.run_patch.argtypes = [f32] * 5
         cls.library.run_shuffle.argtypes = [f32, f32]
+        cls.library.run_norm.argtypes = [f32, f32, f32, f32]
         cls.library.run_attention.argtypes = [f32, f32, f32,
                                               ctypes.POINTER(ctypes.c_uint32), f32, f32]
 
@@ -64,8 +69,34 @@ extern "C" void run_attention(const float* q, const float* k, const float* v,
             for col in range(2):
                 patch = image[:, row * 2:row * 2 + 2, col * 2:col * 2 + 2]
                 expected[row * 2 + col] = np.einsum("chw,ochw->o", patch, weight)
-        expected += bias + position
+        expected += bias
+        expected += position
         np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+    def test_patch_bias_and_position_follow_the_convolution_reduction(self):
+        image = np.zeros((3, 4, 4), np.float32)
+        image[0, :2, :2] = [[1e8, 1], [-1e8, 1]]
+        weight = np.zeros((2, 3, 2, 2), np.float32)
+        weight[0, 0] = 1
+        bias = np.array([1, 0], np.float32)
+        position = np.zeros((4, 2), np.float32)
+        position[0, 0] = 0.5
+        actual = np.empty_like(position)
+        self.library.run_patch(*(self.ptr(v) for v in (image, weight, bias, position, actual)))
+        # Sequential FP32 products sum to 1, then Conv2D adds bias and the
+        # embedding adds position. Starting the reduction with these loses both.
+        self.assertEqual(actual[0, 0], np.float32(2.5))
+
+    def test_layernorm_preserves_small_terms_in_the_mean(self):
+        source = np.array([2**24, 1, 1, -2**24], np.float32)
+        gamma = np.full(4, 1e7, np.float32)
+        bias = np.zeros(4, np.float32)
+        actual = np.empty(4, np.float32)
+        self.library.run_norm(*(self.ptr(v) for v in (source, gamma, bias, actual)))
+        precise = source.astype(np.float64)
+        expected = ((precise-precise.mean()) /
+                    np.sqrt(precise.var()+1e-6) * gamma).astype(np.float32)
+        np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
 
     def test_pixel_shuffle_matches_upstream_reshape_order(self):
         source = np.arange(4 * 4 * 2, dtype=np.float32).reshape(1, 16, 2)
