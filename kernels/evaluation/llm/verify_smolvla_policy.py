@@ -21,7 +21,7 @@ from verify_smolvla_checkpoint import sha256
 
 def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=None,
         projection_module: str = "action_in_proj", module_tensor_sink=None,
-        module_input_sink=None) -> dict:
+        module_input_sink=None, fp32_vision_reference: bool = False) -> dict:
     spec = model_specs()["smolvla_base"]
     if sha256(checkpoint_dir / "config.json") != spec["source_sha256"]:
         raise ValueError("SmolVLA config hash differs from pinned source")
@@ -117,8 +117,17 @@ def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=N
         counts.clear()
         events.clear()
         projection_calls = []
+        expected_projections = 0
+        if fp32_vision_reference:
+            from mx_vpu.smolvla_reference import install_vision_arithmetic
+            install_vision_arithmetic(vlm.vision_model)
         if action_projection is not None:
-            module = getattr(model, projection_module)
+            expected_projections = sum(stage['op'] == 'linear' and
+                stage['attrs'].get('parameter') == f'model.{projection_module}.weight'
+                for stage in graph.stages)
+            if not expected_projections:
+                raise ValueError('projection module is not a linear in the pinned graph')
+            module = model.get_submodule(projection_module)
             def projected(value, _module=module):
                 projection_calls.append(tuple(value.shape))
                 return action_projection(value, _module.weight, _module.bias)
@@ -136,9 +145,8 @@ def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=N
                     handles.append(module.register_forward_hook(tensor_hook(name)))
         output = model.sample_actions(images, img_masks, lang_tokens,
                                       lang_masks, state, noise=noise)
-        expected_projections = spec["num_denoise_steps"] if projection_module == "action_in_proj" else 1
         if action_projection is not None and len(projection_calls) != expected_projections:
-            raise ValueError("format reference action projection loop count differs from graph")
+            raise ValueError("format reference projection loop count differs from graph")
     for handle in handles:
         handle.remove()
     expected_counts = {"vision_model": spec["image_cameras"],

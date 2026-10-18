@@ -6,17 +6,15 @@ All camera, VLM, expert and denoising dependencies remain in the upstream policy
 An original FP32 golden is mandatory so action drift is reported separately.
 """
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import sys
 
-import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parents[1] / "evaluation/llm"))
-from mx_vpu import reference
+from mx_vpu.smolvla_reference import projection_function, qualify_result
 from verify_smolvla_policy import run
 
 
@@ -24,35 +22,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint-dir", type=Path, required=True)
     parser.add_argument("--original-golden", type=Path, required=True)
-    parser.add_argument("--projection-module", choices=("action_in_proj", "state_proj"), default="action_in_proj")
+    parser.add_argument("--projection-module", default="action_in_proj",
+                        help="linear module path relative to policy.model; checked against the pinned graph")
+    parser.add_argument("--column-start", type=int, default=0)
+    parser.add_argument("--column-count", type=int, help="MX/VPU output-column partition; other columns retain FP32")
+    parser.add_argument("--fp32-vision-reference", action="store_true",
+                        help="use the independently defined deployment FP32 vision arithmetic")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    import torch
+    if args.column_start < 0 or (args.column_count is not None and args.column_count <= 0):
+        parser.error('column partition must have a nonnegative start and positive count')
+    projection = projection_function(args.column_start, args.column_count, args.fp32_vision_reference)
 
-    def projection(value, weight, bias):
-        if value.device.type != "cpu" or value.dtype != torch.float32:
-            raise ValueError("format golden requires the pinned FP32 CPU policy")
-        result = reference.linear(value.detach().numpy(), weight.detach().numpy().T)
-        if bias is not None:
-            result = reference.add(result, bias.detach().numpy())
-        return torch.from_numpy(result)
-
-    original = json.loads(args.original_golden.read_text())
     result = run(args.checkpoint_dir, True, action_projection=projection,
-                 projection_module=args.projection_module)
-    if original["checkpoint_weight_sha256"] != result["checkpoint_weight_sha256"] or original["input_sha256"] != result["input_sha256"]:
-        raise ValueError("original golden uses different checkpoint or inputs")
-    actual = np.asarray(result["output_values"], np.float32)
-    baseline = np.asarray(original["output_values"], np.float32)
-    delta = np.abs(actual-baseline)
-    failures = int(np.count_nonzero(delta > 1e-3 + 1e-3*np.abs(baseline)))
-    result.update(execution_backend="rakanic_mx_vpu",
-                  projection_module=args.projection_module,
-                  format_reference_sha256=hashlib.sha256((HERE/"reference.py").read_bytes()).hexdigest(),
-                  format_reference_produced=True,
-                  original_action_comparison=dict(passed=failures == 0, failed_elements=failures,
-                      rtol=1e-3, atol=1e-3, max_abs_error=float(delta.max()),
-                      original_golden_sha256=hashlib.sha256(args.original_golden.read_bytes()).hexdigest()))
+                 projection_module=args.projection_module,
+                 fp32_vision_reference=args.fp32_vision_reference)
+    qualify_result(result,args.original_golden,args.projection_module,args.column_start,
+                   args.column_count,args.fp32_vision_reference)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2)+"\n")
     print(json.dumps(result["original_action_comparison"]))

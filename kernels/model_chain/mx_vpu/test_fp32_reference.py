@@ -18,7 +18,7 @@ class FallbackReferenceChecks(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory()
         directory = Path(cls.temp.name)
         source = directory/"fallback.cpp"
-        source.write_text('''#include "pipeline_math.hpp"
+        source.write_text('''#include "pipeline_smolvla.hpp"
 extern "C" {
 void linear_(float*x,float*w,float*y,unsigned m,unsigned k,unsigned n) {
  model_chain::linear(x,w,nullptr,y,m,k,n,0,1); }
@@ -28,6 +28,14 @@ void gate_(float*x,float*u,float*y,unsigned n,unsigned gelu) {
  model_chain::gated_activation(x,u,y,n,gelu,0,1); }
 void cap_(float*x,float*y,unsigned n,float cap) {
  model_chain::softcap(x,y,n,cap,0,1); }
+void layer_(float*x,float*g,float*b,float*y,unsigned m,unsigned k,float e) {
+ model_chain::layernorm(x,g,b,y,m,k,e,0,1); }
+void patch_(float*x,float*w,float*b,float*p,float*y) {
+ model_chain::patch_embed(x,w,b,p,y,8,2,3,7,0,1); }
+void vision_(float*q,float*k,float*v,float*y,float*s) {
+ model_chain::bidirectional_mha(q,k,v,y,s,5,2,8,0,1); }
+void gelu_(float*x,float*y,unsigned n) {
+ model_chain::gelu_tanh_values(x,y,n,0,1); }
 void attention_(float*q,float*k,float*v,float*y,unsigned b,unsigned qt,unsigned kt,
  unsigned qh,unsigned kh,unsigned d,unsigned start,unsigned window,float cap) {
  model_chain::causal_gqa(q,k,v,y,b,qt,kt,qh,kh,d,start,window,cap,0,1); }
@@ -77,6 +85,29 @@ void attention_(float*q,float*k,float*v,float*y,unsigned b,unsigned qt,unsigned 
             self.lib.attention_(self.p(q),self.p(k),self.p(v),self.p(out),2,3,5,4,2,8,2,window,C.c_float(cap))
             attrs=dict(query_start=2,window=window or None,softcap=cap or None)
             np.testing.assert_array_equal(out.reshape(2,3,32),ref.attention(q,k,v,attrs))
+
+    def test_vision_arithmetic_matches_declared_fp32_order(self):
+        rng = np.random.default_rng(290)
+        x = rng.normal(size=(3,17)).astype(np.float32)
+        gamma, bias = rng.normal(size=(2,17)).astype(np.float32)
+        y = np.empty_like(x)
+        self.lib.layer_(self.p(x),self.p(gamma),self.p(bias),self.p(y),3,17,C.c_float(1e-6))
+        np.testing.assert_array_equal(y,ref.layernorm(x,gamma,bias,1e-6))
+        self.lib.gelu_(self.p(x),self.p(y),x.size)
+        np.testing.assert_array_equal(y,ref.gelu_tanh(x))
+        image = rng.normal(size=(1,3,8,8)).astype(np.float32)
+        weight = rng.normal(size=(7,3,2,2)).astype(np.float32)
+        bias = rng.normal(size=7).astype(np.float32)
+        position = rng.normal(size=(16,7)).astype(np.float32)
+        y = np.empty_like(position)
+        self.lib.patch_(*(self.p(a) for a in (image,weight,bias,position,y)))
+        expected = ref.patch_convolution(image,weight,bias).reshape(1,7,16).transpose(0,2,1)
+        np.testing.assert_array_equal(y,expected[0]+position)
+        q,k,v = rng.normal(size=(3,1,5,2,8)).astype(np.float32)
+        y = np.empty((1,5,16),np.float32)
+        scratch = np.empty(5,np.float32)
+        self.lib.vision_(*(self.p(a) for a in (q,k,v,y,scratch)))
+        np.testing.assert_array_equal(y,ref.bidirectional_mha(q,k,v))
 
 
 if __name__ == "__main__":

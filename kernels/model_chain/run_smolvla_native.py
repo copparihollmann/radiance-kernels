@@ -37,9 +37,14 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def generate(target: Path, extra_trace_stages: tuple[str, ...] = ()) -> Path:
+def generate(target: Path, extra_trace_stages: tuple[str, ...] = (),
+             stage_references: Path | None = None,
+             original_golden: Path | None = None) -> Path:
     manifest = json.loads((target / "manifest.json").read_text())
     verify_backend_sources(manifest)
+    for name,digest in manifest.get('fallback_source_sha256',{}).items():
+        if name not in ('pipeline_smolvla.hpp','pipeline_math.hpp') or sha256(HERE/name) != digest:
+            raise ValueError('FP32 fallback source differs from the generated numerical policy')
     graph = build("smolvla_base")
     storage = plan(graph)
     expected_validation = ("all_elements_vs_mx_vpu_format_reference"
@@ -62,6 +67,78 @@ def generate(target: Path, extra_trace_stages: tuple[str, ...] = ()) -> Path:
     stub = "#pragma once\n#define __global\n#define MU_NUM_THREADS 32\n#define MU_NUM_CORES 1\n"
     write_if_changed(native / "mu_intrinsics.h", stub)
     write_if_changed(native / "mu_schedule.h", "#pragma once\n")
+    reference_header = ''
+    if stage_references is not None:
+        reference_manifest = json.loads((stage_references/'manifest.json').read_text())
+        if reference_manifest['missing_modules'] or reference_manifest['stages'] != len(graph.stages):
+            raise ValueError('stage references do not cover the complete pinned module schedule')
+        final = reference_manifest['final']
+        if (final['checkpoint_weight_sha256'] != manifest['checkpoint_sha256'] or
+                final['output_sha256'] != manifest['golden_output_sha256'] or
+                reference_manifest['projection_module'] != manifest.get('projection_module')):
+            raise ValueError('stage references differ from the executable precision policy')
+        entries = {entry['index']:entry for entry in reference_manifest['tensors']}
+        if len(entries) != reference_manifest['checked_stages']:
+            raise ValueError('duplicate or missing stage reference records')
+        followed_by_bias = {s['reads'][0] for s in graph.stages if s['op'] == 'bias_add'}
+        expected_boundaries = set()
+        for index,stage in enumerate(graph.stages):
+            attrs = stage['attrs']
+            parameter = None
+            if stage['op'] == 'bias_add' or (stage['op'] == 'linear' and stage['id'] not in followed_by_bias):
+                parameter = attrs.get('parameter')
+            elif stage['op'] in ('rmsnorm','layernorm'):
+                parameter = attrs.get('parameter') or next((p for p in attrs.get('parameters',{}) if p.endswith('.weight')),None)
+            if parameter and parameter.endswith(('.weight','.bias')):
+                expected_boundaries.add(index)
+        if set(entries) != expected_boundaries:
+            raise ValueError('stage references do not cover all pinned module boundaries')
+        for index, entry in entries.items():
+            stage = graph.stages[index]
+            if (entry['id'] != stage['id'] or entry['bytes'] != 4*math.prod(stage['shape']) or
+                    sha256(stage_references/entry['path']) != entry['sha256'] or
+                    entry['path'] != f'{index:04d}.bin'):
+                raise ValueError(f'stage reference differs at {index}')
+        flags = ','.join('true' if i in entries else 'false' for i in range(len(graph.stages)))
+        reference_header += '''
+static unsigned boundary_bad=0,boundary_checked=0;
+static const bool boundary_flags[] = {FLAGS};
+static void check_boundary(unsigned index,const unsigned char* data,unsigned bytes) {
+  if (!boundary_flags[index]) return;
+  char name[4096]; snprintf(name,sizeof name,"%s/%04u.bin",DIRECTORY,index);
+  FILE* f=fopen(name,"rb"); if(!f){perror(name);exit(4);}
+  unsigned bad=0; float maximum=0; float golden[4096];
+  const float* actual=(const float*)data;
+  for(unsigned offset=0;offset<bytes/4;) {
+    unsigned n=bytes/4-offset; if(n>4096)n=4096;
+    if(fread(golden,4,n,f)!=n){fprintf(stderr,"short stage reference %u\\n",index);exit(4);}
+    for(unsigned j=0;j<n;++j) {
+      const float v=actual[offset+j],g=golden[j],e=fabsf(v-g);
+      if(!std::isfinite(v)||e>0.001f+0.001f*fabsf(g))++bad;
+      if(e>maximum)maximum=e;
+    }
+    offset+=n;
+  }
+  if(fgetc(f)!=EOF){fprintf(stderr,"long stage reference %u\\n",index);exit(4);} fclose(f);
+  ++boundary_checked; if(bad)++boundary_bad;
+  printf("BOUNDARY stage=%u elements=%u bad=%u max_abs=%.9g\\n",index,bytes/4,bad,maximum);
+  fflush(stdout);
+}
+'''.replace('FLAGS',flags).replace('DIRECTORY',json.dumps(str(stage_references.resolve())))
+    if original_golden is not None:
+        import numpy as np
+        original = json.loads(original_golden.read_text())
+        if manifest.get('original_golden_sha256') and sha256(original_golden) != manifest['original_golden_sha256']:
+            raise ValueError('original golden differs from the device output check')
+        if (original['checkpoint_weight_sha256'] != manifest['checkpoint_sha256'] or
+                original['input_sha256'] != images[1][0]['source_input_sha256']):
+            raise ValueError('original checkpoint reference uses different weights or inputs')
+        values = np.asarray(original['output_values'],np.float32)
+        if (values.shape != tuple(graph.tensors[graph.outputs[-1]]['shape']) or
+                hashlib.sha256(values.tobytes()).hexdigest() != original['output_sha256']):
+            raise ValueError('original checkpoint reference has invalid output shape or hash')
+        reference_header += ('static const float original_actions[] = {'+
+                             ','.join(f'{float(value):.9e}f' for value in values.ravel())+'};\n')
     preload = []
     for image, paths in images:
         for segment, path in zip(image_segments(image), paths):
@@ -171,13 +248,42 @@ int main(int argc, char** argv) {
   return failures ? 1 : 0;
 }
 """
+    if reference_header:
+        write_if_changed(native/'reference_checks.hpp',reference_header)
+        source = source.replace('int main(int argc, char** argv)',
+                                '#include "reference_checks.hpp"\nint main(int argc, char** argv)')
+    extra_failures = []
+    if stage_references is not None:
+        source = source.replace('    if (trace_dir && stages[i].trace)',
+                                '    check_boundary(i,v_arena+stages[i].offset,stages[i].bytes);\n'
+                                '    if (trace_dir && stages[i].trace)')
+        source = source.replace('  return failures ? 1 : 0;',
+                                '  printf("BOUNDARY_TOTAL checked=%u failed_stages=%u\\n",boundary_checked,boundary_bad);\n'
+                                '  return failures ? 1 : 0;')
+        extra_failures.append('boundary_bad')
+    if original_golden is not None:
+        source = source.replace('  return failures ? 1 : 0;', '''
+  unsigned original_bad=0; float original_max=0;
+  for(unsigned i=0;i<final.bytes/4;++i) {
+    const float e=fabsf(output[i]-original_actions[i]);
+    if(!std::isfinite(output[i])||e>0.001f+0.001f*fabsf(original_actions[i]))++original_bad;
+    if(e>original_max)original_max=e;
+  }
+  printf("ORIGINAL actions=%u failures=%u max_abs_error=%.9g\\n",final.bytes/4,original_bad,original_max);
+  return failures ? 1 : 0;''')
+        extra_failures.append('original_bad')
+    if extra_failures:
+        source = source.replace('  return failures ? 1 : 0;',
+                                '  return failures || '+' || '.join(extra_failures)+' ? 1 : 0;')
     write_if_changed(native / "main.cpp", source)
     return native
 
 
 def compile_native(target: Path, jobs: int = 2,
-                   extra_trace_stages: tuple[str, ...] = ()) -> Path:
-    native = generate(target, extra_trace_stages)
+                   extra_trace_stages: tuple[str, ...] = (),
+                   stage_references: Path | None = None,
+                   original_golden: Path | None = None) -> Path:
+    native = generate(target, extra_trace_stages, stage_references, original_golden)
     compiler = ["g++", "-std=c++17", "-O2", "-fopenmp", "-I", str(native),
                 "-I", str(HERE)]
     sources = [target / "model_data.cpp", *sorted(target.glob("stage_chunk_*.cpp")),
@@ -194,6 +300,8 @@ def compile_native(target: Path, jobs: int = 2,
                         HERE / "pipeline_math.hpp"]
         if use_mx:
             dependencies.append(HERE/"mx_vpu/backend.hpp")
+        if source.name == 'main.cpp' and (stage_references is not None or original_golden is not None):
+            dependencies.append(native/'reference_checks.hpp')
         if (not obj.exists() or obj.stat().st_mtime <
                 max(path.stat().st_mtime for path in dependencies)):
             result = subprocess.run(compiler + ["-c", str(source), "-o", str(obj)],
@@ -219,6 +327,8 @@ def main() -> None:
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--stage-references",type=Path)
+    parser.add_argument("--original-golden",type=Path)
     parser.add_argument("--trace-dir", type=Path)
     parser.add_argument("--trace-stage", action="append", default=[],
                         help="also dump this stage output when --trace-dir is set")
@@ -230,7 +340,7 @@ def main() -> None:
     target = (args.generated_root / "smolvla_base").resolve()
     if args.trace_stage and not args.trace_dir:
         parser.error("--trace-stage requires --trace-dir")
-    binary = compile_native(target, args.jobs, tuple(args.trace_stage))
+    binary = compile_native(target, args.jobs, tuple(args.trace_stage),args.stage_references,args.original_golden)
     command = [str(binary)]
     if args.stage_limit is not None:
         command.append(str(args.stage_limit))
@@ -253,6 +363,10 @@ def main() -> None:
     build_manifest = json.loads((target / "manifest.json").read_text())
     log_text = log_path.read_text()
     model_counts = re.search(r"MX_VPU_MODEL commands=(\d+) mx=(\d+) vpu=(\d+) cycles=(\d+)", log_text)
+    boundaries = re.search(r'BOUNDARY_TOTAL checked=(\d+) failed_stages=(\d+)',log_text)
+    original = re.search(r'ORIGINAL actions=(\d+) failures=(\d+) max_abs_error=([^\s]+)',log_text)
+    if args.stage_limit is None and ((args.stage_references and not boundaries) or (args.original_golden and not original)):
+        raise ValueError('full native run did not report the required independent comparisons')
     match = re.search(
         r"actions=(\d+) failures=(\d+) first_failure=(\d+) max_abs_error=([\deE+.-]+)",
         log_text)
@@ -291,6 +405,17 @@ def main() -> None:
               "log_tail": log_text[-1200:],
               "rtl_execution": False, "device_execution": False,
               "performance_measurement": False}
+    record['fallback_source_sha256'] = build_manifest.get('fallback_source_sha256')
+    record['native_driver_sha256'] = sha256(target/'native/main.cpp')
+    if build_manifest.get('execution_backend') == 'rakanic_mx_vpu':
+        record['libgemmini_archive_sha256'] = sha256(Path(os.environ['RADIANCE_LIBGEMMINI_ARCHIVE']))
+    if args.stage_references:
+        record['module_boundaries'] = dict(checked=int(boundaries[1]),failed_stages=int(boundaries[2])) if boundaries else None
+        record['stage_reference_manifest_sha256'] = sha256(args.stage_references/'manifest.json')
+    if args.original_golden:
+        record['actual_original_action_comparison'] = (dict(elements=int(original[1]),failed_elements=int(original[2]),
+            passed=int(original[2]) == 0,max_abs_error=float(original[3]),rtol=1e-3,atol=1e-3) if original else None)
+        record['original_golden_sha256'] = sha256(args.original_golden)
     if args.dump and args.dump.is_file():
         record["dump_sha256"] = sha256(args.dump)
     destination = args.out or target / "native-result.json"

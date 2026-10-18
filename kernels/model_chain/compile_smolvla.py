@@ -35,7 +35,8 @@ def product(values) -> int:
 
 def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
                all_cores: bool = False, execution_backend: str = "muon",
-               projection_module: str = "action_in_proj") -> str:
+               projection_module: str = "action_in_proj",
+               column_start: int = 0, column_count: int | None = None) -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
     reads = stage["reads"]
 
@@ -215,11 +216,27 @@ def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
         # Validate a named projection subset; preserve all remaining arithmetic.
         if op == "linear" and attrs.get("parameter") == f"model.{projection_module}.weight":
             k, n = attrs["weight_shape"]
-            body = (f"mx_vpu_linear({f(0)}, {param(attrs['parameter'])}, nullptr, {out}, "
-                    f"model_chain::mx_model::F32, {count // n}, {k}, {n}, tid, tpb)")
+            width = n-column_start if column_count is None else column_count
+            if column_start < 0 or width <= 0 or column_start+width > n:
+                raise ValueError('MX output-column partition is outside the matrix')
+            if column_start == 0 and width == n:
+                body = (f"mx_vpu_linear({f(0)}, {param(attrs['parameter'])}, nullptr, {out}, "
+                        f"model_chain::mx_model::F32, {count // n}, {k}, {n}, tid, tpb)")
+            else:
+                body = (f"mx_vpu_linear_partitioned({f(0)}, {param(attrs['parameter'])}, nullptr, {out}, "
+                        f"model_chain::mx_model::F32, {count // n}, {k}, {n}, "
+                        f"{column_start}, {width}, tid, tpb)")
         elif op == "bias_add" and attrs.get("parameter") == f"model.{projection_module}.bias":
-            body = (f"mx_vpu_add({f(0)}, {param(attrs['parameter'])}, {out}, "
-                    f"{count}, {shape[-1]}, tid, tpb)")
+            n = shape[-1]
+            width = n-column_start if column_count is None else column_count
+            if column_start < 0 or width <= 0 or column_start+width > n:
+                raise ValueError('VPU output-column partition is outside the bias')
+            if column_start == 0 and width == n:
+                body = (f"mx_vpu_add({f(0)}, {param(attrs['parameter'])}, {out}, "
+                        f"{count}, {n}, tid, tpb)")
+            else:
+                body = (f"mx_vpu_add_partitioned({f(0)}, {param(attrs['parameter'])}, {out}, "
+                        f"{count // n}, {n}, {column_start}, {width}, {n}, tid, tpb)")
     if not body.endswith(";") and not body.endswith("}"):
         body += ";"
     control_flow = {
@@ -254,12 +271,12 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              warps: int = 1,
              all_cores: bool = False,
              progress_every: int = 0,
-             execution_backend: str = "muon", projection_module: str = "action_in_proj") -> Path:
+             execution_backend: str = "muon", projection_module: str = "action_in_proj",
+             column_start: int = 0, column_count: int | None = None,
+             original_golden: Path | None = None) -> Path:
     if execution_backend not in ("muon", "rakanic_mx_vpu"):
         raise ValueError("unknown execution backend")
     use_mx_vpu = execution_backend == "rakanic_mx_vpu"
-    if projection_module not in ("action_in_proj", "state_proj"):
-        raise ValueError("unknown MX+VPU projection module")
     if stages_per_object <= 0:
         raise ValueError("stages per object must be positive")
     # Eight warps exhaust the current 256-entry global rename pool before
@@ -273,6 +290,17 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     if (stage_golden_image is None) != (stage_golden_sha256 is None):
         raise ValueError("stage golden image and SHA-256 must be provided together")
     graph = build("smolvla_base")
+    selected = [s for s in graph.stages if s['op'] == 'linear' and
+                s['attrs'].get('parameter') == f'model.{projection_module}.weight']
+    if not selected:
+        raise ValueError('projection module is not a linear in the pinned graph')
+    widths = {s['attrs']['weight_shape'][1] for s in selected}
+    if len(widths) != 1:
+        raise ValueError('shared projection has inconsistent output widths')
+    full_width = next(iter(widths))
+    selected_width = full_width-column_start if column_count is None else column_count
+    if column_start < 0 or selected_width <= 0 or column_start+selected_width > full_width:
+        raise ValueError('projection columns are outside the pinned matrix')
     storage = plan_buffers(graph)
     image, _ = verify_image(weight_image)
     spec = model_specs()["smolvla_base"]
@@ -308,6 +336,21 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
             raise ValueError("MX+VPU requires a separately generated format reference")
         if use_mx_vpu and golden.get("projection_module") != projection_module:
             raise ValueError("format reference uses a different accelerated projection")
+        if use_mx_vpu:
+            partition = golden.get('projection_columns', dict(start=0, count=None))
+            golden_start = partition['start']
+            golden_width = full_width-golden_start if partition['count'] is None else partition['count']
+            if (golden_start, golden_width) != (column_start, selected_width):
+                raise ValueError('format reference uses different projection columns')
+            if '.vision_model.' in projection_module:
+                from mx_vpu.smolvla_reference import VISION_POLICY
+                if golden.get('vision_arithmetic_policy') != VISION_POLICY:
+                    raise ValueError('vision MX requires the independent deployment FP32 arithmetic reference')
+                for name,digest in golden.get('arithmetic_reference_sha256',{}).items():
+                    if name not in ('smolvla_reference.py','fp32_reference.py') or hashlib.sha256((HERE/'mx_vpu'/name).read_bytes()).hexdigest() != digest:
+                        raise ValueError('vision arithmetic reference source differs')
+                if len(golden.get('arithmetic_reference_sha256',{})) != 2:
+                    raise ValueError('vision arithmetic reference source hashes are missing')
         if not use_mx_vpu and golden.get("execution_backend", "muon") != "muon":
             raise ValueError("FP32 graph cannot use an MX+VPU format golden")
         golden_values = np.asarray(golden["output_values"], dtype=np.float32)
@@ -323,6 +366,20 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 tuple(golden_values.shape) != tuple(graph.tensors[graph.outputs[-1]]["shape"])):
             raise ValueError("upstream golden output differs from input or graph")
     stages = graph.stages if stage_limit is None else graph.stages[:stage_limit]
+    original_values = None
+    if original_golden is not None:
+        if stage_limit is not None or input_manifest is None:
+            raise ValueError('original action checks require the complete graph and exact input image')
+        original = json.loads(original_golden.read_text())
+        original_values = np.asarray(original['output_values'],np.float32)
+        if (original['checkpoint_weight_sha256'] != image['checkpoint_weight_sha256'] or
+                original['input_sha256'] != input_manifest['source_input_sha256'] or
+                tuple(original_values.shape) != tuple(graph.tensors[graph.outputs[-1]]['shape']) or
+                not np.isfinite(original_values).all() or
+                hashlib.sha256(original_values.tobytes()).hexdigest() != original['output_sha256']):
+            raise ValueError('original action reference differs from checkpoint, inputs or output hash')
+        if use_mx_vpu and golden is not None and golden.get('original_action_comparison',{}).get('original_golden_sha256') != hashlib.sha256(original_golden.read_bytes()).hexdigest():
+            raise ValueError('format and original references use different checkpoint baselines')
     if not stages:
         raise ValueError("at least one graph stage is required")
     if progress_every and len(stages) > 0xFFFF:
@@ -385,7 +442,9 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
             + declaration("v_rope_sin", np.sin(angles).ravel())
             + declaration("v_time_embedding", table)
             + (declaration("v_golden_output", golden_values.ravel())
-               if golden_values is not None else ""))
+               if golden_values is not None else "")
+            + (declaration("v_original_output", original_values.ravel())
+               if original_values is not None else ""))
     write_if_changed(target / "model_data.cpp", data)
     chunks = []
     for first in range(0, len(stages), stages_per_object):
@@ -401,7 +460,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                   "extern __global float v_rope_sin[];\n"
                   "extern __global float v_time_embedding[];\n"
                   + "\n".join(emit_stage(stage, graph, allocation, addresses,
-                                          all_cores, execution_backend, projection_module)
+                                          all_cores, execution_backend, projection_module,
+                                          column_start, column_count)
                               for stage in stages[first:first + stages_per_object]))
         write_if_changed(target / filename, source)
     inputs = []
@@ -472,6 +532,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
               "extern __global unsigned char v_arena[];\n"
               + ("extern __global float v_golden_output[];\n"
                  if golden_values is not None else "")
+              + ("extern __global float v_original_output[];\n"
+                 if original_values is not None else "")
               + prototypes + "\n" + init +
               ("void smolvla_putchar(uint32_t value) {\n"
                "  *(volatile __global uint8_t*)IO_COUT_ADDR = (uint8_t)value;\n"
@@ -500,6 +562,9 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
               + ("    if (!mu_close(output[j], golden[j], 1e-3f, 1e-3f)) "
                  "{ mu_tohost((j << 1) | 1u); return 0; }\n"
                  if golden_values is not None or stage_golden_manifest is not None else "")
+              + ("    if (!mu_close(output[j], v_original_output[j], 1e-3f, 1e-3f)) "
+                 "{ mu_tohost((j << 1) | 1u); return 0; }\n"
+                 if original_values is not None else "")
               + "  }\n"
               "  mu_tohost(0u); return 0;\n}\n")
     write_if_changed(target / "kernel.cpp", kernel)
@@ -552,6 +617,10 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                                         if stage_golden_image else None),
         "original_checkpoint_output_sha256": (
             input_manifest["source_golden_output_sha256"] if input_manifest else None),
+        "device_original_action_check": original_values is not None,
+        "original_golden_sha256": hashlib.sha256(original_golden.read_bytes()).hexdigest() if original_golden else None,
+        "fallback_source_sha256": {name:hashlib.sha256((HERE/name).read_bytes()).hexdigest()
+                                   for name in ('pipeline_smolvla.hpp','pipeline_math.hpp')},
         "input_image_manifest": str(input_image.resolve()) if input_image else None,
         "input_image_sha256": input_manifest["image_sha256"] if input_manifest else None,
         "upstream_execution_equivalent": False,
@@ -582,8 +651,11 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         result.update(execution_backend=execution_backend,
                       precision="block_scaled_e4m3_projection_bf16_bias_fp32_fallbacks",
                       projection_module=projection_module,
+                      projection_columns=dict(start=column_start, count=selected_width),
+                      vision_arithmetic_policy=golden.get('vision_arithmetic_policy') if golden else None,
+                      arithmetic_reference_sha256=golden.get('arithmetic_reference_sha256') if golden else None,
                       golden_policy_precision=f"fp32_policy_with_e4m3_{projection_module}_and_bf16_bias",
-                      mx_linear_macs=sum(product(s["shape"])*s["attrs"]["weight_shape"][0]
+                      mx_linear_macs=sum((product(s["shape"]) // full_width)*selected_width*s["attrs"]["weight_shape"][0]
                                          for s in stages if s["op"] == "linear" and
                                          s["attrs"].get("parameter") == f"model.{projection_module}.weight"),
                       total_linear_macs=sum(product(s["shape"])*s["attrs"]["weight_shape"][0]
@@ -593,9 +665,9 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                       backend_source_sha256={name: hashlib.sha256((HERE / "mx_vpu" / name).read_bytes()).hexdigest()
                                              for name in ("backend.hpp", "runtime.cpp", "reference.py")},
                       stage_backends=[dict(stage=s["id"],
-                          backend="fp8_mx" if s["op"] == "linear" and s["attrs"].get("parameter") == f"model.{projection_module}.weight" else
-                                  "bf16_vpu" if s["op"] == "bias_add" and s["attrs"].get("parameter") == f"model.{projection_module}.bias" else "muon",
-                          reason="Action projection subset; preserve other stage arithmetic") for s in stages])
+                          backend=("fp8_mx+muon" if selected_width != full_width else "fp8_mx") if s["op"] == "linear" and s["attrs"].get("parameter") == f"model.{projection_module}.weight" else
+                                  ("bf16_vpu+muon" if selected_width != full_width else "bf16_vpu") if s["op"] == "bias_add" and s["attrs"].get("parameter") == f"model.{projection_module}.bias" else "muon",
+                          reason=f"Projection {projection_module} columns [{column_start},{column_start+selected_width}); remaining arithmetic uses FP32 Muon") for s in stages])
     (target / "manifest.json").write_text(json.dumps(result, indent=2) + "\n")
     return target
 
@@ -615,14 +687,18 @@ def main() -> None:
     parser.add_argument("--all-cores", action="store_true")
     parser.add_argument("--progress-every", type=int, default=0)
     parser.add_argument("--execution-backend", choices=("muon", "rakanic_mx_vpu"), default="muon")
-    parser.add_argument("--projection-module", choices=("action_in_proj", "state_proj"), default="action_in_proj")
+    parser.add_argument("--projection-module", default="action_in_proj")
+    parser.add_argument("--column-start", type=int, default=0)
+    parser.add_argument("--column-count", type=int)
+    parser.add_argument("--original-golden",type=Path)
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
     target = generate(args.weight_image, args.out_root, args.stage_limit,
                       args.stages_per_object, args.input_image,
                       args.golden_output, args.stage_golden_image,
                       args.stage_golden_sha256, args.warps, args.all_cores,
-                      args.progress_every, args.execution_backend, args.projection_module)
+                      args.progress_every, args.execution_backend, args.projection_module,
+                      args.column_start, args.column_count,args.original_golden)
     if args.build:
         build_device(target)
     print(target)

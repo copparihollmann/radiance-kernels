@@ -16,7 +16,10 @@ covered. Compact INT4/5/6/8 and FP16 storage, including tied embeddings, is read
 and converted a tile at a time, without creating a full FP8 checkpoint image.
 
 `compile_smolvla.py` exposes the same backend for a selected `--projection-module`
-(`action_in_proj` or `state_proj`) and its VPU bias addition. The action projection
+and its VPU bias addition. The module must be a linear in the pinned graph;
+`--column-start` and `--column-count` select an explicit output-column partition.
+Unselected columns retain sequential FP32 matrix and bias arithmetic, and the
+manifest counts only selected MX MACs. The action projection
 remains inside all ten denoising iterations; the state projection remains in the
 prefix. All other graph stages and dependencies are retained. This is a limited
 projection subset, not acceleration of the entire SmolVLA matrix workload.
@@ -58,6 +61,14 @@ and `packing-full-v5/gemma_2_2b_it/placement-check.json`. Rejected overlapping
 ELFs and the failed attempt to outline the larger-argument tiler remain in
 separate artifacts; they are not qualification results.
 
+The next optimization retains each packed activation K block across output-column
+tiles, preserving the sequential K accumulation order for every output. Independent
+format controls for all nine layouts and partial partitions pass. The complete
+reduced graph passes on one/two SMs: projection 115,846 → 69,986 cycles (1.66x),
+whole graph 830,699 → 593,061 cycles (1.40x), with the same 172 commands per cluster.
+See `activation-reuse-performance.json` and `activation-reuse-v1/` in the task audit
+artifacts. These source-cycle measurements do not qualify the full models.
+
 Increasing decoder occupancy also required a runtime fix: `mu_schedule` now
 joins its worker warps and fences memory before returning. The delayed-worker
 device regression (`test_schedule_join.cpp`) originally observed 224 missing
@@ -83,6 +94,38 @@ Both full SmolVLA reference trials exceed the original action tolerance: the
 action-input projection fails 1089/1600 values (max error 0.0444224), and the
 state projection fails 247/1600 (max error 0.0232617), at unchanged
 `rtol=atol=0.001`. Those comparisons remain failed.
+
+SmolVLA's patch embedding now follows Conv2D reduction → bias → position, and its
+FP32 layernorm uses compensated mean/variance sums. Cancellation regressions and
+one/two-SM ISA controls cover both changes. With the old action-input partition,
+the complete host run passes all 1,930 module boundaries and final format actions;
+its original-action failure remains. A revised candidate uses columns [0,16) of
+the final vision layer's query projection in all three cameras, with BF16 VPU bias
+on the same columns. Its complete stitched host run passes all 3,673 stages and
+1,930 independent module boundaries. All 1,600 actions pass the format reference
+(max error 5.60e-6) and the original checkpoint (max error 0.00044632), at unchanged
+atol=rtol=0.001. It executes 4,608 MX loops and 3,072 VPU commands. Selected MX
+work is 37,748,736 of 354,131,264,512 linear MACs (0.01066%); remaining matrix work
+is explicitly FP32. The complete ELF has both output checks and passes placement,
+but full one/two-SM device execution is still required. Receipts are under
+`smolvla-vision-q16-v1/`, `smolvla-vision-q16-sequential-reference-v2/`, and
+`smolvla-current-candidate.json` in the task audit artifacts.
+
+Vision MX references use `--fp32-vision-reference`: independent NumPy sequential
+FP32 dots, compensated layernorm, patch convolution, and polynomial vision
+attention/activation math. This declares operation order before FP8 rounding;
+small BLAS reduction differences can otherwise change FP8 codes. Primitive
+differential tests compare exact bits against the C++ implementation. The compiler
+requires the matching arithmetic-policy identifier and source hashes for vision
+MX. The original-checkpoint golden remains a separate, unchanged Torch result.
+
+`collect_smolvla_stage_reference.py --original-golden ORIGINAL ...` writes all
+1,930 module tensors, a format reference, and the separate original-action
+comparison in one complete upstream run. It accepts the same projection/column
+options. `run_smolvla_native.py --stage-references DIR --original-golden ORIGINAL`
+checks those module outputs and the actual final actions against both references.
+`compile_smolvla.py --original-golden ORIGINAL` embeds both final-output checks in
+the device ELF. A failed module, format, or original-action check fails the variant.
 
 Native tests link the real C API model. The small operand controls match the
 independent format reference exactly for partial tiles and all nine supported

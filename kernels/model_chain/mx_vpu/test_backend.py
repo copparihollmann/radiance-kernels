@@ -11,7 +11,7 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from mx_vpu import reference
+from mx_vpu import reference, fp32_reference
 
 
 class BackendChecks(unittest.TestCase):
@@ -34,7 +34,7 @@ class BackendChecks(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
-    def check(self, m, k, n, storage):
+    def check(self, m, k, n, storage, columns=None):
         rng = np.random.default_rng(123+storage)
         x = rng.normal(0, 0.4, (m, k)).astype(np.float32)
         x[0] = 0  # exercise a zero microscaling group and padded tiles
@@ -71,15 +71,28 @@ class BackendChecks(unittest.TestCase):
                         packed[bit//8] |= ((int(code) >> b) & 1) << (bit % 8)
                 payload = packed.tobytes()
         expected = reference.linear(x, decoded.T if tied else decoded)
+        if columns:
+            first, count = columns
+            ordinary = fp32_reference.linear(x, decoded.T if tied else decoded)
+            ordinary[:, first:first+count] = expected[:, first:first+count]
+            expected = ordinary
         source = self.directory / "input.bin"
         output = self.directory / "output.bin"
         source.write_bytes(struct.pack("<6I", m,k,n,storage,len(payload),scales.size)
                            + x.tobytes()+payload+scales.tobytes()+skip.tobytes())
-        run = subprocess.run([str(self.binary), str(source), str(output)],
+        command = [str(self.binary), str(source), str(output)]
+        if columns:
+            command += [str(v) for v in columns]
+        run = subprocess.run(command,
                              capture_output=True, text=True, check=True)
         y, z = np.fromfile(output, np.float32).reshape(2,m,n)
         np.testing.assert_array_equal(y, expected)
-        np.testing.assert_array_equal(z, reference.add(expected, skip))
+        added = reference.add(expected, skip)
+        if columns:
+            ordinary = expected + skip
+            ordinary[:, first:first+count] = added[:, first:first+count]
+            added = ordinary
+        np.testing.assert_array_equal(z, added)
         self.assertRegex(run.stderr, r"MX_VPU_MODEL commands=\d+ mx=[1-9]\d* vpu=[1-9]\d*")
 
     def test_odd_shape_and_partial_k(self):
@@ -89,6 +102,12 @@ class BackendChecks(unittest.TestCase):
         for storage in range(1,9):
             with self.subTest(storage=storage):
                 self.check(2, 64, 17, storage)
+
+    def test_partition_keeps_other_columns_fp32(self):
+        self.check(17, 47, 35, 0, (3, 17))
+        for storage in range(1, 9):
+            with self.subTest(storage=storage):
+                self.check(3, 64, 35, storage, (16, 8))
 
 
 if __name__ == "__main__":

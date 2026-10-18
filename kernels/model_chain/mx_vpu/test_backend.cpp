@@ -1,9 +1,10 @@
 #include "mx_vpu/backend.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 int main(int argc, char** argv) {
-  if (argc != 3) return 2;
+  if (argc != 3 && argc != 5) return 2;
   FILE* in = std::fopen(argv[1], "rb");
   if (!in) return 2;
   uint32_t h[6]; // M,K,N,storage,weight bytes,scale count
@@ -15,9 +16,17 @@ int main(int argc, char** argv) {
       std::fread(scales.data(), 4, scales.size(), in) != scales.size() ||
       std::fread(skip.data(), 4, skip.size(), in) != skip.size()) return 2;
   std::fclose(in);
-  model_chain::mx_vpu_linear(x.data(), w.data(), scales.data(), y.data(),
+  if (argc == 5) {
+    uint32_t first = std::strtoul(argv[3], nullptr, 10), count = std::strtoul(argv[4], nullptr, 10);
+    model_chain::mx_vpu_linear_partitioned(x.data(), w.data(), scales.data(), y.data(),
+        model_chain::mx_model::Storage(h[3]), h[0], h[1], h[2], first, count, 0, 1);
+    model_chain::mx_vpu_add_partitioned(y.data(), skip.data(), z.data(), h[0], h[2],
+                                      first, count, skip.size(), 0, 1);
+  } else {
+    model_chain::mx_vpu_linear(x.data(), w.data(), scales.data(), y.data(),
       model_chain::mx_model::Storage(h[3]), h[0], h[1], h[2], 0, 1);
-  model_chain::mx_vpu_add(y.data(), skip.data(), z.data(), z.size(), z.size(), 0, 1);
+    model_chain::mx_vpu_add(y.data(), skip.data(), z.data(), z.size(), z.size(), 0, 1);
+  }
   FILE* out = std::fopen(argv[2], "wb");
   if (!out) return 2;
   bool ok = std::fwrite(y.data(), 4, y.size(), out) == y.size() &&

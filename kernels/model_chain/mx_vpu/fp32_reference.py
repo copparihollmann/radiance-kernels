@@ -17,6 +17,63 @@ def linear(x, weight):
     return result
 
 
+def compensated_sum(x):
+    total = np.zeros(x.shape[:-1], np.float32)
+    error = np.zeros_like(total)
+    for value in np.moveaxis(x, -1, 0):
+        adjusted = value-error
+        following = total+adjusted
+        error = (following-total)-adjusted
+        total = following
+    return total
+
+
+def layernorm(x, gamma, bias, epsilon):
+    mean = compensated_sum(x)/F(x.shape[-1])
+    delta = x-mean[..., None]
+    variance = compensated_sum(delta*delta)/F(x.shape[-1])
+    inverse = F(1)/np.sqrt(variance+F(epsilon))
+    return (delta*inverse[..., None])*gamma+bias
+
+
+def patch_convolution(image, weight, bias):
+    """NCHW nonoverlapping Conv2D; position is added by the upstream embedding."""
+    batch, channels, height, width = image.shape
+    outputs, wc, ph, pw = weight.shape
+    if channels != wc or height % ph or width % pw:
+        raise ValueError('patch convolution shape mismatch')
+    rows, columns = height//ph, width//pw
+    patches = image.reshape(batch, channels, rows, ph, columns, pw)
+    patches = patches.transpose(0, 2, 4, 1, 3, 5).reshape(batch, rows*columns, -1)
+    result = linear(patches, weight.reshape(outputs, -1).T)+bias
+    return result.transpose(0, 2, 1).reshape(batch, outputs, rows, columns)
+
+
+def gelu_tanh(x):
+    argument = F(0.7978845608028654)*(x+((F(0.044715)*x)*x)*x)
+    return (F(0.5)*x)*(F(1)+tanh(argument))
+
+
+def bidirectional_mha(q, k, v):
+    """Vision attention: reduce unnormalized exp*V, then divide once."""
+    batch, queries, heads, width = q.shape
+    keys = k.shape[1]
+    output = np.empty_like(q)
+    for head in range(heads):
+        score = np.zeros((batch, queries, keys), np.float32)
+        for part in range(width):
+            score += q[:, :, head, part, None]*k[:, None, :, head, part]
+        score /= np.sqrt(F(width))
+        exp = exponential(score-np.maximum(F(-1e30), score.max(axis=-1))[..., None])
+        denominator = np.zeros((batch, queries), np.float32)
+        result = np.zeros((batch, queries, width), np.float32)
+        for key in range(keys):
+            denominator += exp[:, :, key]
+            result += exp[:, :, key, None]*v[:, key, head, None, :]
+        output[:, :, head] = result/denominator[..., None]
+    return output.reshape(batch, queries, heads*width)
+
+
 def rmsnorm(x, gamma, epsilon):
     total = np.zeros(x.shape[:-1], np.float32)
     for k in range(x.shape[-1]):

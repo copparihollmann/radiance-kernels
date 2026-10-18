@@ -125,11 +125,14 @@ inline void initialize() {
 // Block-scaled E4M3: 16x16 output tiles, K blocks of 32. Normalized operands
 // have magnitude < 2. Unit E8M0 scales feed MX; Muon restores block powers of
 // two and accumulates K-block results in FP32. No full FP8 checkpoint is stored.
-inline void mx_vpu_linear(const RK_GLOBAL float* input,
+// Keep these large-argument helpers inline: the current Muon compiler's
+// lane-interleaved stack convention does not support stack-passed arguments.
+__attribute__((always_inline)) inline void mx_vpu_linear_columns(const RK_GLOBAL float* input,
                           const RK_GLOBAL void* weights,
                           const RK_GLOBAL float* scales,
                           RK_GLOBAL float* output, mx_model::Storage storage,
                           uint32_t m, uint32_t k, uint32_t n,
+                          uint32_t first, uint32_t columns,
                           uint32_t tid, uint32_t threads) {
 #ifdef RADIANCE_DEVICE
   // Keep all participants in one warp: SIMT reconvergence orders the owner
@@ -139,12 +142,14 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
   const uint32_t lanes = 1; // host stage runner calls lanes sequentially
 #endif
   if (tid >= lanes) return;
+  if (first > n || columns > n-first) return;
+  const uint32_t end = first + columns;
   using namespace mx_model;
   if (tid == 0) initialize();
-  for (uint32_t i = tid; i < m * n; i += lanes) output[i] = 0;
+  for (uint32_t r = 0; r < m; ++r)
+    for (uint32_t c = first+tid; c < end; c += lanes) output[r*n+c] = 0;
   for (uint32_t row = 0; row < m; row += 16)
-    for (uint32_t col = 0; col < n; col += 16)
-      for (uint32_t block = 0; block < k; block += 32) {
+    for (uint32_t block = 0; block < k; block += 32) {
         for (uint32_t r = tid; r < 16; r += lanes) {
           float maximum = 0;
           for (uint32_t t = 0; t < 32 && row+r < m && block+t < k; ++t) {
@@ -152,14 +157,6 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
             if (v > maximum) maximum = v;
           }
           shared_store(A_EXP+4*r, uint32_t(maximum ? block_exponent(maximum) : 0));
-        }
-        for (uint32_t c = tid; c < 16; c += lanes) {
-          float maximum = 0;
-          for (uint32_t t = 0; t < 32 && col+c < n && block+t < k; ++t) {
-            float v = __builtin_fabsf(weight_at(weights, scales, storage, k, n, block+t, col+c));
-            if (v > maximum) maximum = v;
-          }
-          shared_store(B_EXP+4*c, uint32_t(maximum ? block_exponent(maximum) : 0));
         }
         for (uint32_t t = 0; t < 32; t += 4)
           for (uint32_t r = tid; r < 16; r += lanes) {
@@ -171,11 +168,22 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
             }
             shared_store(16*((t/16)*16+r) + t%16, word);
           }
+      // A and its block exponents remain resident across output-column tiles.
+      // Each output still accumulates K blocks in the original FP32 order.
+      for (uint32_t col = first; col < end; col += 16) {
+        for (uint32_t c = tid; c < 16; c += lanes) {
+          float maximum = 0;
+          for (uint32_t t = 0; t < 32 && col+c < end && block+t < k; ++t) {
+            float v = __builtin_fabsf(weight_at(weights, scales, storage, k, n, block+t, col+c));
+            if (v > maximum) maximum = v;
+          }
+          shared_store(B_EXP+4*c, uint32_t(maximum ? block_exponent(maximum) : 0));
+        }
         for (uint32_t packed_word = tid; packed_word < 128; packed_word += lanes) {
             const uint32_t t = packed_word / 4, c = 4 * (packed_word % 4);
             uint32_t word = 0;
             for (uint32_t b = 0; b < 4; ++b) {
-              float v = block+t < k && col+c+b < n ?
+              float v = block+t < k && col+c+b < end ?
                 weight_at(weights, scales, storage, k, n, block+t, col+c+b) : 0;
               word |= uint32_t(fp8(v * power2(-int32_t(shared_load(B_EXP+4*(c+b)))))) << (8*b);
             }
@@ -195,7 +203,7 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
           fence();
         }
         for (uint32_t r = 0; r < 16 && row+r < m; ++r)
-          for (uint32_t c = tid; c < 16 && col+c < n; c += lanes) {
+          for (uint32_t c = tid; c < 16 && col+c < end; c += lanes) {
             uint32_t word = shared_load(16*C_ROW + r*32 + (c/2)*4);
             float partial = from_bf16(uint16_t(word >> (16*(c%2))));
             // Sequential multiplies avoid constructing an out-of-range FP32 power.
@@ -204,6 +212,38 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
                 power2(int32_t(shared_load(B_EXP+4*c)));
           }
       }
+    }
+}
+
+__attribute__((always_inline)) inline void mx_vpu_linear(const RK_GLOBAL float* input,
+                          const RK_GLOBAL void* weights,
+                          const RK_GLOBAL float* scales,
+                          RK_GLOBAL float* output, mx_model::Storage storage,
+                          uint32_t m, uint32_t k, uint32_t n,
+                          uint32_t tid, uint32_t threads) {
+  mx_vpu_linear_columns(input, weights, scales, output, storage, m, k, n, 0, n, tid, threads);
+}
+
+// Explicit mixed precision partition: every output is computed once. Columns
+// outside the MX tile range retain the sequential FP32 fallback arithmetic.
+__attribute__((always_inline)) inline void mx_vpu_linear_partitioned(const RK_GLOBAL float* input,
+                                      const RK_GLOBAL void* weights,
+                                      const RK_GLOBAL float* scales,
+                                      RK_GLOBAL float* output, mx_model::Storage storage,
+                                      uint32_t m, uint32_t k, uint32_t n,
+                                      uint32_t first, uint32_t columns,
+                                      uint32_t tid, uint32_t threads) {
+  if (first > n || columns > n-first) return;
+  for (uint32_t index = tid; index < m*n; index += threads) {
+    const uint32_t row = index/n, col = index%n;
+    if (col >= first && col < first+columns) continue;
+    float sum = 0;
+    for (uint32_t inner = 0; inner < k; ++inner)
+      sum += input[row*k+inner] * mx_model::weight_at(weights, scales, storage, k, n, inner, col);
+    output[index] = sum;
+  }
+  mx_vpu_linear_columns(input, weights, scales, output, storage, m, k, n,
+                        first, columns, tid, threads);
 }
 
 #ifdef RADIANCE_DEVICE
@@ -234,6 +274,21 @@ inline void mx_vpu_add(const RK_GLOBAL float* left, const RK_GLOBAL float* right
       output[start+p] = from_bf16(uint16_t(word >> (16*(p%2))));
     }
   }
+}
+
+__attribute__((always_inline)) inline void mx_vpu_add_partitioned(const RK_GLOBAL float* left, const RK_GLOBAL float* right,
+                                  RK_GLOBAL float* output, uint32_t m, uint32_t n,
+                                  uint32_t first, uint32_t columns, uint32_t right_width,
+                                  uint32_t tid, uint32_t threads) {
+  if (first > n || columns > n-first) return;
+  for (uint32_t index = tid; index < m*n; index += threads) {
+    const uint32_t col = index%n;
+    if (col < first || col >= first+columns) output[index] = left[index] + right[index%right_width];
+  }
+  if (tid != 0) return;
+  for (uint32_t row = 0; row < m; ++row)
+    mx_vpu_add(left+row*n+first, right+(row*n+first)%right_width,
+               output+row*n+first, columns, columns, 0, threads);
 }
 
 } // namespace model_chain
