@@ -29,6 +29,31 @@ indexing problem in the available Muon LLVM toolchain. MX output tiles are
 scales; MX computes with unit E8M0 scales, then Muon restores the block scales
 and sums block results in FP32. VPU additions round inputs and outputs to BF16.
 
+Device MX packing now uses the first warp's lanes, with thread zero retaining
+MMIO ownership and the command/fence sequence. A shared-memory fence publishes
+the packed tile before its command. The host runner retains serial packing.
+E4M3 conversion rounds integer significands directly; normalization multiplies
+by the inverse power of two. This removes floating-point divisions without
+changing finite-input rounding. `test_quantization.py` checks an independent
+nearest-value oracle on every finite BF16 value, every E4M3 midpoint and its
+adjacent FP32 values, and one million random bit patterns. It also compares
+normalization results bit for bit.
+
+The retained reduced TinyLlama control (one layer, prefill one, no decode) passed
+all embedded output checks on one and two actual clusters with the cooperative
+packer. Its first MX projection fell from 1,417,606 to 112,485 source cycles
+(12.6x); the complete control fell from 9,266,403 to 800,939 cycles (11.6x).
+These are kernel improvements in the existing instruction/cycle model, not a
+change to its clock calibration. They do not establish full-model completion.
+Task artifacts `artifacts/e2e-hbm-audit/packing-v1/` and `packing-warp/` retain
+the separate conversion-only and cooperative-packing experiments, ELFs,
+commands, logs, progress journals, and drained HBM reports.
+
+`rebuild_e2e_backend.py` rebuilds affected full-model stage objects into a new
+directory using retained link receipts. It checks generated sources against
+their pinned archives and preserves original checkpoints, graphs and goldens.
+Rebuilt native executables and device ELFs still require separate execution.
+
 `reference.py` generates format references independently in NumPy, including
 the pinned model's product floor, truncation, accumulator precision ramp and
 BF16 additions. It calls no C++ arithmetic reference. The graph generators

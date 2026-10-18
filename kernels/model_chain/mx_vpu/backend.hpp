@@ -6,7 +6,7 @@
 #include "../pipeline_math.hpp"
 
 // Model target: Rakanic/cyclotron + its pinned, unmodified libgemmini.
-// One issuing lane owns the cluster's MMIO registers and scratchpad workspace.
+// One issuing lane owns MMIO; its warp cooperates on scratchpad tile packing.
 // This does not claim support in the currently incompatible Radiance VPU RTL.
 namespace model_chain {
 namespace mx_model {
@@ -61,21 +61,21 @@ inline int block_exponent(float maximum) {
   int e = int((v.u >> 23) & 255u) - 127;
   return e < -126 ? -126 : e > 126 ? 126 : e;
 }
-inline uint32_t round_even(float value) {
-  uint32_t lower = uint32_t(value);
-  float fraction = value - float(lower);
-  return lower + (fraction > 0.5f || (fraction == 0.5f && (lower & 1u)));
-}
 inline uint8_t fp8(float value) {
   union { float f; uint32_t u; } v{value};
-  uint32_t sign = (v.u >> 24) & 0x80u;
-  float magnitude = __builtin_fabsf(value);
-  if (magnitude >= 448.0f) return uint8_t(sign | 126u);
-  if (magnitude < 0.015625f) return uint8_t(sign | round_even(magnitude * 512.0f));
-  int exponent = int((v.u >> 23) & 255u) - 127;
-  uint32_t significand = round_even(magnitude / power2(exponent) * 8.0f);
-  if (significand == 16) { significand = 8; ++exponent; }
-  return uint8_t(sign | (uint32_t(exponent + 7) << 3) | (significand - 8));
+  const uint32_t sign = (v.u >> 24) & 0x80u, magnitude = v.u & 0x7fffffffu;
+  if (magnitude > 0x7f800000u) return uint8_t(sign | 127u);
+  if (magnitude >= 0x43e00000u) return uint8_t(sign | 126u); // saturate at 448
+  const uint32_t exponent = magnitude >> 23;
+  if (exponent < 117) return uint8_t(sign); // below half the smallest subnormal
+  const uint32_t significand = (magnitude & 0x7fffffu) | 0x800000u;
+  // Round the integer significand directly, preserving ties to even. E4M3
+  // subnormals use a fixed 2^-9 quantum; normal values retain three fraction
+  // bits. A rounded carry naturally advances the encoded exponent.
+  const uint32_t shift = exponent < 121 ? 141 - exponent : 20;
+  const uint32_t rounded = (significand + ((1u << (shift-1)) - 1)
+                           + ((significand >> shift) & 1u)) >> shift;
+  return uint8_t(sign | (exponent < 121 ? rounded : ((exponent-121) << 3) + rounded));
 }
 inline int32_t packed(const RK_GLOBAL uint8_t* weight, uint32_t index, uint32_t bits) {
   uint32_t bit = index * bits, shift = bit & 7u;
@@ -122,15 +122,22 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
                           const RK_GLOBAL float* scales,
                           RK_GLOBAL float* output, mx_model::Storage storage,
                           uint32_t m, uint32_t k, uint32_t n,
-                          uint32_t tid, uint32_t) {
-  if (tid != 0) return;
+                          uint32_t tid, uint32_t threads) {
+#ifdef RADIANCE_DEVICE
+  // Keep all participants in one warp: SIMT reconvergence orders the owner
+  // command/fence and the other lanes' packing without a cross-warp barrier.
+  const uint32_t lanes = threads < MU_NUM_THREADS ? threads : MU_NUM_THREADS;
+#else
+  const uint32_t lanes = 1; // host stage runner calls lanes sequentially
+#endif
+  if (tid >= lanes) return;
   using namespace mx_model;
-  initialize();
-  for (uint32_t i = 0; i < m * n; ++i) output[i] = 0;
+  if (tid == 0) initialize();
+  for (uint32_t i = tid; i < m * n; i += lanes) output[i] = 0;
   for (uint32_t row = 0; row < m; row += 16)
     for (uint32_t col = 0; col < n; col += 16)
       for (uint32_t block = 0; block < k; block += 32) {
-        for (uint32_t r = 0; r < 16; ++r) {
+        for (uint32_t r = tid; r < 16; r += lanes) {
           float maximum = 0;
           for (uint32_t t = 0; t < 32 && row+r < m && block+t < k; ++t) {
             float v = __builtin_fabsf(input[(row+r)*k+block+t]);
@@ -138,7 +145,7 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
           }
           shared_store(A_EXP+4*r, uint32_t(maximum ? block_exponent(maximum) : 0));
         }
-        for (uint32_t c = 0; c < 16; ++c) {
+        for (uint32_t c = tid; c < 16; c += lanes) {
           float maximum = 0;
           for (uint32_t t = 0; t < 32 && col+c < n && block+t < k; ++t) {
             float v = __builtin_fabsf(weight_at(weights, scales, storage, k, n, block+t, col+c));
@@ -146,37 +153,41 @@ inline void mx_vpu_linear(const RK_GLOBAL float* input,
           }
           shared_store(B_EXP+4*c, uint32_t(maximum ? block_exponent(maximum) : 0));
         }
-        for (uint32_t t = 0; t < 32; ++t)
-          for (uint32_t r = 0; r < 16; ++r) {
+        for (uint32_t t = 0; t < 32; t += 4)
+          for (uint32_t r = tid; r < 16; r += lanes) {
             // A's two 16x16 tiles are consecutive scratchpad row groups.
-            if (t % 4) continue;
             uint32_t word = 0;
             for (uint32_t b = 0; b < 4; ++b) {
               float v = row+r < m && block+t+b < k ? input[(row+r)*k+block+t+b] : 0;
-              word |= uint32_t(fp8(v / power2(int32_t(shared_load(A_EXP+4*r))))) << (8*b);
+              word |= uint32_t(fp8(v * power2(-int32_t(shared_load(A_EXP+4*r))))) << (8*b);
             }
             shared_store(16*((t/16)*16+r) + t%16, word);
           }
-        for (uint32_t t = 0; t < 32; ++t)
-          for (uint32_t c = 0; c < 16; c += 4) {
+        for (uint32_t packed_word = tid; packed_word < 128; packed_word += lanes) {
+            const uint32_t t = packed_word / 4, c = 4 * (packed_word % 4);
             uint32_t word = 0;
             for (uint32_t b = 0; b < 4; ++b) {
               float v = block+t < k && col+c+b < n ?
                 weight_at(weights, scales, storage, k, n, block+t, col+c+b) : 0;
-              word |= uint32_t(fp8(v / power2(int32_t(shared_load(B_EXP+4*(c+b)))))) << (8*b);
+              word |= uint32_t(fp8(v * power2(-int32_t(shared_load(B_EXP+4*(c+b)))))) << (8*b);
             }
             shared_store(16*(B_ROW+t)+c, word);
-          }
+        }
+#ifdef RADIANCE_DEVICE
+        mu_fence_smem(); // all packed words must retire before MMIO consumes them
+#endif
         // Reset the scale address cursors for this independent K block.
-        command(26, (1ull << 62) | (2ull << 51) | (1ull << 42) | (1ull << 33),
-                (1ull << 16) | 1);
-        command(10, 0, 0);
-        command(9, 0, (2ull << 32) | (1ull << 16) | 1);
-        command(24, A_ROW, B_ROW+32);
-        command(8, 0, (uint64_t(C_ROW) << 32) | (1ull << 9) | (7ull << 3));
-        fence();
+        if (tid == 0) {
+          command(26, (1ull << 62) | (2ull << 51) | (1ull << 42) | (1ull << 33),
+                  (1ull << 16) | 1);
+          command(10, 0, 0);
+          command(9, 0, (2ull << 32) | (1ull << 16) | 1);
+          command(24, A_ROW, B_ROW+32);
+          command(8, 0, (uint64_t(C_ROW) << 32) | (1ull << 9) | (7ull << 3));
+          fence();
+        }
         for (uint32_t r = 0; r < 16 && row+r < m; ++r)
-          for (uint32_t c = 0; c < 16 && col+c < n; ++c) {
+          for (uint32_t c = tid; c < 16 && col+c < n; c += lanes) {
             uint32_t word = shared_load(16*C_ROW + r*32 + (c/2)*4);
             float partial = from_bf16(uint16_t(word >> (16*(c%2))));
             // Sequential multiplies avoid constructing an out-of-range FP32 power.
