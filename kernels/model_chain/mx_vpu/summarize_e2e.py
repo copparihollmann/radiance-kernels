@@ -41,6 +41,7 @@ def summarize(root):
                            accepted=bool(host.get('status') == 'passed' and isa.get('status') == 'passed' and original['passed'])))
     count = lambda jobs: {status: sum(j.get('status') == status for j in jobs) for status in ('passed', 'failed', 'running', 'pending', 'waiting_for_simulator_slot')}
     known_failure = any(m['native_all_checks'] == 'failed' or not m['original_checkpoint_comparison']['passed'] or m['isa_status'] == 'failed' for m in models)
+    known_failure = known_failure or hpc.get('status') == 'failed' or runtime.get('status') == 'failed' or any(j.get('status') == 'failed' for j in controls.get('jobs', []) if j['kind'] == 'gemm')
     complete = bool(device) and device_receipt.get('status') in ('passed', 'failed') and hpc.get('status') in ('passed', 'failed') and runtime.get('status') in ('passed', 'failed')
     result = dict(updated_utc=datetime.now(timezone.utc).isoformat(),
                   status=('failed' if complete else 'failed_with_checks_outstanding') if known_failure else ('passed' if complete else 'checks_outstanding'),
