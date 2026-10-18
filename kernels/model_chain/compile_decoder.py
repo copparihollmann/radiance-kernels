@@ -1101,8 +1101,12 @@ def build_device(target: Path) -> None:
     images = [verify_image(Path(manifest[key]))[0]
               for key in ("weight_image_manifest", "input_image_manifest", "stage_golden_image_manifest")
               if manifest.get(key)]
+    if manifest.get('replica_buffers'):
+        from replica_buffers import reserved_image
+        images.append(reserved_image(manifest['replica_buffers']))
     if images:
-        verify_image_placement(target / "kernel.radiance.elf", images)
+        verify_image_placement(target / "kernel.radiance.elf", images,
+                               manifest.get('num_clusters', manifest.get('batch_clusters', 1)))
         if manifest.get("execution_backend") == "rakanic_mx_vpu":
             if any(s["gpu_base_address"] + s["image_size_bytes"] > 1 << 31
                    for image in images for s in image_segments(image)):

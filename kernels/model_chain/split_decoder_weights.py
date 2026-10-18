@@ -16,7 +16,7 @@ import struct
 
 
 ALIGNMENT = 64
-STACK_BOTTOM = 0x7EE00000  # lib/src/mu_start.S, two cores × eight warps
+STACK_BOTTOM = 0x7EE00000  # one cluster: two cores × eight warps ×16 lanes ×8 KiB
 STACK_TOP = 0x7F000000
 CONSOLE_MMIO = 0xFF080000  # Cyclotron config.toml
 
@@ -30,8 +30,10 @@ def image_segments(manifest: dict) -> list[dict]:
              "image_sha256": manifest["image_sha256"]}]
 
 
-def verify_image_placement(elf: Path, images: list[dict]) -> None:
+def verify_image_placement(elf: Path, images: list[dict], num_clusters: int = 1) -> None:
     """Reject preloads that overwrite ELF segments, stacks, or one another."""
+    if num_clusters not in (1, 2):
+        raise ValueError('placement check supports one or two Radiance clusters')
     with elf.open("rb") as stream:
         header = stream.read(52)
         if (len(header) != 52 or header[:7] != b"\x7fELF\x01\x01\x01"):
@@ -40,7 +42,8 @@ def verify_image_placement(elf: Path, images: list[dict]) -> None:
         phentsize, phnum = struct.unpack_from("<HH", header, 42)
         if phentsize < 32 or phnum == 0:
             raise ValueError("device ELF has no valid program headers")
-        occupied = [(STACK_BOTTOM, STACK_TOP, "warp stacks"),
+        stack_bottom = STACK_TOP - num_clusters * (STACK_TOP - STACK_BOTTOM)
+        occupied = [(stack_bottom, STACK_TOP, "warp stacks"),
                     (CONSOLE_MMIO, 1 << 32, "console MMIO")]
         for index in range(phnum):
             stream.seek(phoff + index * phentsize)

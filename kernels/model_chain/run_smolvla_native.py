@@ -275,6 +275,10 @@ int main(int argc, char** argv) {
     if extra_failures:
         source = source.replace('  return failures ? 1 : 0;',
                                 '  return failures || '+' || '.join(extra_failures)+' ? 1 : 0;')
+    if manifest.get('replica_buffers'):
+        from native_replicas import wrap_driver
+        source = wrap_driver(source, preload, manifest['replica_buffers'],
+                             boundaries=stage_references is not None)
     write_if_changed(native / "main.cpp", source)
     return native
 
@@ -418,12 +422,41 @@ def main() -> None:
         record['original_golden_sha256'] = sha256(args.original_golden)
     if args.dump and args.dump.is_file():
         record["dump_sha256"] = sha256(args.dump)
+    replica_failure = False
+    if build_manifest.get('replica_buffers'):
+        from native_replicas import validate_log
+        count = build_manifest['num_clusters']
+        qualified = validate_log(log_text, count, args.stage_limit or 3673,
+                                 args.stage_references is not None,
+                                 args.original_golden is not None,
+                                 full=args.stage_limit is None)
+        record['num_replicas'] = count
+        record['total_stage_invocations'] = (args.stage_limit or 3673) * count
+        record['replica_validation'] = qualified
+        replica_failure = not qualified['passed']
+        if replica_failure:
+            record['status'] = 'failed'
+        if args.stage_limit is None:
+            outputs = [x['format_actions'][0] for x in qualified['replicas'] if len(x['format_actions']) == 1]
+            record['output_elements'] = sum(int(x[0]) for x in outputs)
+            record['failed_output_elements'] = sum(int(x[1]) for x in outputs)
+            record['max_abs_error'] = max((float(x[2]) for x in outputs), default=None)
+            if args.stage_references:
+                records = [x['boundaries'][0] for x in qualified['replicas'] if len(x['boundaries']) == 1]
+                record['module_boundaries'] = dict(checked=sum(int(x[0]) for x in records),
+                                                 failed_stages=sum(int(x[1]) for x in records))
+            if args.original_golden:
+                records = [x['original_actions'][0] for x in qualified['replicas'] if len(x['original_actions']) == 1]
+                record['actual_original_action_comparison'] = dict(
+                    elements=sum(int(x[0]) for x in records),failed_elements=sum(int(x[1]) for x in records),
+                    passed=bool(qualified['passed']),max_abs_error=max((float(x[2]) for x in records), default=None),
+                    rtol=1e-3,atol=1e-3)
     destination = args.out or target / "native-result.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(record, indent=2) + "\n")
     print(f"SmolVLA native: {record['status']} ({record['stage_count']} stages)")
-    if result.returncode:
-        raise SystemExit(result.returncode)
+    if result.returncode or replica_failure:
+        raise SystemExit(result.returncode or 1)
 
 
 if __name__ == "__main__":

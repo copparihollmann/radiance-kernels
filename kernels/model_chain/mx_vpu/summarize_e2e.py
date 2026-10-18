@@ -108,6 +108,7 @@ def summarize(root):
                   owned_writeback_regression=read(hpc_queue_path),
                   owned_writeback_performance=read(audit / 'owned-writeback-performance-v1/result.json'),
                   smolvla_current_candidate=read(audit / 'smolvla-current-candidate.json'),
+                  smolvla_two_sm_candidate=read(audit / 'smolvla-replicas-current.json'),
                   simulator_performance=read(audit / 'csr-performance.json'),
                   hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(
                            hpc_queue_path if hpc_queue_path.exists() else

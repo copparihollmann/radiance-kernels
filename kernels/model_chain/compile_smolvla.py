@@ -21,6 +21,7 @@ import numpy as np
 from compile_decoder import build_device, literal, symbol, write_if_changed
 from plan_buffers import plan as plan_buffers
 from split_decoder_weights import image_segments, verify_image
+from replica_buffers import plan_replicas, check_images, stage_buffers
 
 
 HERE = Path(__file__).resolve().parent
@@ -36,7 +37,8 @@ def product(values) -> int:
 def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
                all_cores: bool = False, execution_backend: str = "muon",
                projection_module: str = "action_in_proj",
-               column_start: int = 0, column_count: int | None = None) -> str:
+               column_start: int = 0, column_count: int | None = None,
+               replicas: dict | None = None) -> str:
     op, attrs, shape = stage["op"], stage["attrs"], stage["shape"]
     reads = stage["reads"]
 
@@ -255,8 +257,8 @@ def emit_stage(stage: dict, graph, allocation: dict, addresses: dict,
     drain = ("  RAD_L0D_DRAIN(tid, tpb / MU_NUM_THREADS, 1, 2);\n"
              if all_cores else "")
     return (
-        f"void stage_{symbol(stage['id'])}(void*, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
-        + core_map +
+        f"void stage_{symbol(stage['id'])}({'void* context' if replicas else 'void*'}, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
+        + (stage_buffers(replicas) if replicas else "") + core_map +
         f"  {code}\n"
         + drain +
         "}\n")
@@ -273,7 +275,9 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              progress_every: int = 0,
              execution_backend: str = "muon", projection_module: str = "action_in_proj",
              column_start: int = 0, column_count: int | None = None,
-             original_golden: Path | None = None) -> Path:
+             original_golden: Path | None = None, clusters: int = 1) -> Path:
+    if clusters not in (1, 2):
+        raise ValueError("clusters must be one or two")
     if execution_backend not in ("muon", "rakanic_mx_vpu"):
         raise ValueError("unknown execution backend")
     use_mx_vpu = execution_backend == "rakanic_mx_vpu"
@@ -435,9 +439,15 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
     scratch_count = ("MU_NUM_THREADS * 1024" if warps == 1 and not all_cores else
                      f"MU_NUM_THREADS * {warps} * "
                      f"{'MU_NUM_CORES * ' if all_cores else ''}1024")
+    replicas = None
+    if clusters == 2:
+        threads = 16 * warps * (2 if all_cores else 1)
+        replicas = plan_replicas(storage['arena_bytes'], threads * 1024 * 4)
+        check_images(replicas, [image, input_manifest, stage_golden_manifest])
     data = ("#include <mu_intrinsics.h>\n#include <stdint.h>\n"
-            f"alignas(64) __global unsigned char v_arena[{storage['arena_bytes']}] = {{0}};\n"
-            f"alignas(64) __global float v_attention_scratch[{scratch_count}] = {{0}};\n"
+            + (f"alignas(64) __global unsigned char v_arena[{storage['arena_bytes']}] = {{0}};\n"
+               f"alignas(64) __global float v_attention_scratch[{scratch_count}] = {{0}};\n"
+               if not replicas else "")
             + declaration("v_rope_cos", np.cos(angles).ravel())
             + declaration("v_rope_sin", np.sin(angles).ravel())
             + declaration("v_time_embedding", table)
@@ -461,8 +471,11 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                   "extern __global float v_time_embedding[];\n"
                   + "\n".join(emit_stage(stage, graph, allocation, addresses,
                                           all_cores, execution_backend, projection_module,
-                                          column_start, column_count)
+                                          column_start, column_count, replicas)
                               for stage in stages[first:first + stages_per_object]))
+        if replicas:
+            source = source.replace("extern __global unsigned char v_arena[];\n", "")
+            source = source.replace("extern __global float v_attention_scratch[];\n", "")
         write_if_changed(target / filename, source)
     inputs = []
     if input_manifest is not None:
@@ -507,8 +520,15 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                      "      + tid % MU_NUM_THREADS; tpb /= MU_NUM_CORES;\n")
     init_drain = ("\n  RAD_L0D_DRAIN(tid, tpb / MU_NUM_THREADS, 1, 2);"
                   if all_cores else "")
-    init = ("void init_inputs(void*, uint32_t tid, uint32_t tpb, uint32_t) {\n"
-            + init_core_map + "\n".join(inputs) + init_drain + "\n}\n")
+    guard_init = ""
+    if replicas:
+        guard_init = (
+            f"  for (uint32_t j = tid; j < {replicas['guard_bytes']}u; j += tpb) {{\n"
+            f"    v_arena[-{replicas['guard_bytes']} + (int32_t)j] = 0xa5u;\n"
+            f"    v_arena[{replicas['body_bytes']}u + j] = 0xa5u;\n  }}\n")
+    init = (f"void init_inputs({'void* context' if replicas else 'void*'}, uint32_t tid, uint32_t tpb, uint32_t) {{\n"
+            + (stage_buffers(replicas) if replicas else "")
+            + init_core_map + guard_init + "\n".join(inputs) + init_drain + "\n}\n")
     final = stages[-1]["writes"]
     final_count = product(graph.tensors[final]["shape"])
     final_offset = allocation[final]["offset_bytes"]
@@ -567,6 +587,26 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                  if original_values is not None else "")
               + "  }\n"
               "  mu_tohost(0u); return 0;\n}\n")
+    if replicas:
+        kernel = kernel.replace('extern __global unsigned char v_arena[];\n', '')
+        kernel = kernel.replace('#include "kernel_verify.h"\n',
+                                '#include "kernel_verify.h"\n#include "model_cluster_id.h"\n')
+        start = ("\nint main() {\n"
+                 "  uint32_t replica = model_chain_cluster_id();\n"
+                 f"  if (replica >= {clusters}u) {{ mu_tohost(1u); return 0; }}\n"
+                 "  __global unsigned char* v_arena = (__global unsigned char*)"
+                 f"(uintptr_t)({replicas['base']}u + replica * {replicas['stride']}u + {replicas['guard_bytes']}u);\n")
+        kernel = kernel.replace('\nint main() {\n', start)
+        kernel = kernel.replace(', nullptr, ', ', (void*)v_arena, ')
+        # mhartid includes cluster bits. Both cluster-local launch harts must
+        # verify their own outputs and report completion.
+        kernel = kernel.replace('if (mu_hart_id() != 0) { for (;;) {} }',
+                                'if (vx_core_id() != 0) { for (;;) {} }')
+        guard_check = (
+            f"  for (uint32_t j = 0; j < {replicas['guard_bytes']}u; ++j) {{\n"
+            f"    if (v_arena[-{replicas['guard_bytes']} + (int32_t)j] != 0xa5u || "
+            f"v_arena[{replicas['body_bytes']}u+j] != 0xa5u) {{ mu_tohost(1u); return 0; }}\n  }}\n")
+        kernel = kernel.replace('  mu_tohost(0u); return 0;', guard_check + '  mu_tohost(0u); return 0;')
     write_if_changed(target / "kernel.cpp", kernel)
     shutil.copyfile(HERE / "host.cpp", target / "host.cpp")
     dependencies = ["model_data.cpp", *chunks]
@@ -641,6 +681,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
         "weight_image_sha256": image["image_sha256"],
         "weight_image_manifest": str(weight_image.resolve()),
         "activation_arena_bytes": storage["arena_bytes"],
+        "num_clusters": clusters,
+        "replica_buffers": replicas,
         "source_spec_sha256": hashlib.sha256(
             (ROOT / "kernels/evaluation/llm/pr1-models.json").read_bytes()).hexdigest(),
         "device_source_files": ["kernel.cpp", *dependencies],
@@ -684,6 +726,7 @@ def main() -> None:
     parser.add_argument("--stage-golden-image", type=Path)
     parser.add_argument("--stage-golden-sha256")
     parser.add_argument("--warps", type=int, default=1)
+    parser.add_argument("--clusters", type=int, choices=(1, 2), default=1)
     parser.add_argument("--all-cores", action="store_true")
     parser.add_argument("--progress-every", type=int, default=0)
     parser.add_argument("--execution-backend", choices=("muon", "rakanic_mx_vpu"), default="muon")
@@ -698,7 +741,7 @@ def main() -> None:
                       args.golden_output, args.stage_golden_image,
                       args.stage_golden_sha256, args.warps, args.all_cores,
                       args.progress_every, args.execution_backend, args.projection_module,
-                      args.column_start, args.column_count,args.original_golden)
+                      args.column_start, args.column_count,args.original_golden,args.clusters)
     if args.build:
         build_device(target)
     print(target)

@@ -142,6 +142,22 @@ but full one/two-SM device execution is still required. Receipts are under
 `smolvla-vision-q16-v1/`, `smolvla-vision-q16-sequential-reference-v2/`, and
 `smolvla-current-candidate.json` in the task audit artifacts.
 
+`compile_smolvla.py --clusters 2` gives each cluster an independent activation
+arena and attention scratch space below the program region. Every scheduled stage
+receives its cluster's context pointer; both cluster-local launch harts check
+their own final outputs and surrounding guard pages. The placement checker
+reserves all four MiB of stacks for two SMs and checks the entire replica pool
+against loaded images and ELF segments. The default one-SM C++ sources remain
+byte-identical to the qualified vision-q16 variant.
+
+The complete two-replica host run passes 7,346 stage invocations, 3,860 independent
+module boundaries, and all 3,200 format/original actions, with guards intact.
+Actual one-/two-SM controls use the same emitter with distinct replica inputs and
+check complete attention, partial MX, VPU bias, scratch, padding and guards.
+Deliberate arena aliasing and corruption of the last guard byte are rejected.
+See `smolvla-replicas-v1/`, `smolvla-replica-controls-v1/`, and
+`smolvla-replicas-current.json`. The full two-SM device run remains pending.
+
 Vision MX references use `--fp32-vision-reference`: independent NumPy sequential
 FP32 dots, compensated layernorm, patch convolution, and polynomial vision
 attention/activation math. This declares operation order before FP8 rounding;
