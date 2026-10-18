@@ -14,6 +14,7 @@ import re
 import signal
 import subprocess
 import time
+import tomllib
 
 
 def digest(path):
@@ -56,13 +57,19 @@ def validate(job, log, returncode):
         from check_fp8_gemm import check
         result.update(check(Path(job['output']), Path(job['golden']), log, job['clusters']))
     elif job['kind'] == 'isa':
-        result['tohost_pass'] = 'isa-test passed with tohost=0' in log
+        clusters = job.get('num_clusters')
+        if clusters is None:
+            config = tomllib.loads(Path(job['command'][1]).read_text())
+            clusters = config.get('sim', {}).get('num_clusters', 1)
+        finished = [int(x) for x in re.findall(r'cluster (\d+) isa-test passed with tohost=0', log)]
+        result['tohost_pass'] = len(finished) == clusters and set(finished) == set(range(clusters))
         journal = Path(job['progress'])
         records = [json.loads(line) for line in journal.read_text().splitlines()] if journal.exists() else []
         entries = [x for x in records if x['event'] == 'stage_entry']
         result['stage_entries'] = len(entries)
         result['journal_finished_pass'] = bool(records and records[-1]['event'] == 'finish' and records[-1]['passed'])
         result['journal_has_stages'] = bool(entries)
+        result['every_cluster_reached_stages_pass'] = {x['cluster'] for x in entries} == set(range(clusters))
         # Entries prove execution reached an address, not that a stage completed.
         result['journal_scope'] = 'core 0 warp 0 retired function entries; acceptance uses final ELF verification'
     else:

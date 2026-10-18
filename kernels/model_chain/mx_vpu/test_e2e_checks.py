@@ -36,6 +36,19 @@ class CompleteOutputChecks(unittest.TestCase):
             self.assertFalse(result['gpu_verification_pass'])
             self.assertFalse(result['gpu_reports_agree_pass'])
 
+    def test_isa_needs_success_and_progress_from_every_cluster(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+            journal = Path(temporary) / 'progress.jsonl'
+            records = [dict(event='stage_entry', cluster=i) for i in range(2)] + [dict(event='finish', passed=True)]
+            journal.write_text(''.join(json.dumps(r) + '\n' for r in records))
+            job = dict(kind='isa', num_clusters=2, progress=str(journal))
+            one = 'cluster 0 isa-test passed with tohost=0\n'
+            both = one + 'cluster 1 isa-test passed with tohost=0\n'
+            self.assertFalse(validate(job, one, 0)['passed'])
+            self.assertTrue(validate(job, both, 0)['passed'])
+            journal.write_text(''.join(json.dumps(r) + '\n' for r in records[1:]))
+            self.assertFalse(validate(job, both, 0)['passed'])
+
     def test_hpc_zero_exit_needs_complete_oracle_and_drained_hbm(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
             directory = Path(temporary)
