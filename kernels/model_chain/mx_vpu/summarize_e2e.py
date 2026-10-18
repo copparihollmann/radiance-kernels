@@ -34,14 +34,41 @@ def summarize(root):
     if csr:
         hpc = dict(status=csr['status'], jobs=[j for j in csr['jobs'] if j['kind'] == 'hpc'])
         controls = dict(jobs=[j for j in csr['jobs'] if j['kind'] == 'gemm'])
+    prepared = read(audit / 'prepared-overlay-full-native-v1/runs/results.json', {})
+    if prepared:
+        replaced = {j['model'] for j in prepared['jobs']}
+        native = prepared['jobs']+[j for j in native if j['model'] not in replaced]
+    smolvla = read(audit / 'smolvla-current-candidate.json', {})
+    functional_queue = read(audit / 'functional-isa-and-checked-hpc-v1/runs/results.json', {})
+    if functional_queue:
+        hpc_jobs = [j for j in functional_queue['jobs'] if j['kind'] == 'hpc']
+        hpc = dict(status='passed' if all(j['status'] == 'passed' for j in hpc_jobs) else
+                   'failed' if any(j['status'] == 'failed' for j in hpc_jobs) else 'pending',jobs=hpc_jobs)
+        controls = dict(jobs=[j for j in functional_queue['jobs'] if j['kind'] == 'gemm'])
     models = []
     for entry in graph:
         name = entry['model']
         manifest = read(root / 'artifacts/models' / name / 'manifest.json')
         host = next((j for j in native if j['model'] == name), {})
         isa = next((j for j in device if j['model'] == name), {})
+        earlier_isa = isa
+        current_elf = None
+        if any(j['model'] == name for j in prepared.get('jobs',[])):
+            variant = audit / 'prepared-queries-overlay-v1' / name
+            current_elf = str(variant/'kernel.radiance.elf')
+        if name == 'smolvla_base' and smolvla.get('full_host_passed'):
+            manifest = read(Path(smolvla['manifest']))
+            qualified = read(Path(smolvla['native_result']))
+            host = dict(status=qualified['status'],validation=dict(format_final_pass=qualified['failed_output_elements'] == 0))
+            current_elf = str(Path(smolvla['manifest']).parent/'kernel.radiance.elf')
+        if current_elf and isa.get('command',[None]*4)[3] != current_elf:
+            isa = {}
+        functional = next((j for j in functional_queue.get('jobs',[]) if j.get('model') == name
+                           and j.get('execution_mode') == 'functional_core'),{})
         validation = host.get('validation', {})
         original = manifest.get('original_action_comparison')
+        if name == 'smolvla_base' and smolvla.get('full_host_passed'):
+            original = smolvla['actual_original_action_comparison']
         if original is None:
             original = dict(passed=manifest['format_comparison']['original_checkpoint_greedy_exact'],
                             metric='exact greedy token IDs', tokens=host.get('reference_generated_token_ids'))
@@ -51,9 +78,14 @@ def summarize(root):
                            original_checkpoint_comparison=original,
                            isa_status=isa.get('status', 'pending'), isa_pid=isa.get('pid'),
                            isa_result_dir=isa.get('result_dir'), progress=isa.get('progress'),
+                           current_variant_elf=current_elf,
+                           earlier_variant_isa={k:earlier_isa.get(k) for k in ('status','pid','result_dir','progress')},
+                           functional_isa_status=functional.get('status','pending'),
+                           functional_isa_progress=functional.get('progress'),
                            accepted=bool(host.get('status') == 'passed' and isa.get('status') == 'passed' and original['passed'])))
     count = lambda jobs: {status: sum(j.get('status') == status for j in jobs) for status in ('passed', 'failed', 'running', 'pending', 'waiting_for_simulator_slot')}
-    known_failure = any(m['native_all_checks'] == 'failed' or not m['original_checkpoint_comparison']['passed'] or m['isa_status'] == 'failed' for m in models)
+    known_failure = any(m['native_all_checks'] == 'failed' or not m['original_checkpoint_comparison']['passed']
+                        or m['isa_status'] == 'failed' or m['functional_isa_status'] == 'failed' for m in models)
     known_failure = known_failure or hpc.get('status') == 'failed' or runtime.get('status') == 'failed' or any(j.get('status') == 'failed' for j in controls.get('jobs', []) if j['kind'] == 'gemm')
     complete = (len(models) == 4 and all(m['native_all_checks'] in ('passed', 'failed')
                 and m['isa_status'] in ('passed', 'failed') for m in models)
@@ -67,13 +99,20 @@ def summarize(root):
                   modeling_performance=read(audit / 'packing-compact-performance.json'),
                   activation_reuse_performance=read(audit / 'activation-reuse-performance.json'),
                   activation_reuse_full_native=read(audit / 'activation-reuse-full-native-v1/runs/results.json'),
+                  prepared_query_full_native=prepared,
+                  prepared_query_projection=read(audit / 'prepared-query-full-projection-overlay-v1/result.json'),
+                  functional_projection=read(audit / 'prepared-query-functional-projection-v2/result.json'),
+                  checked_simulator_regression=functional_queue,
                   smolvla_current_candidate=read(audit / 'smolvla-current-candidate.json'),
                   simulator_performance=read(audit / 'csr-performance.json'),
-                  hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(csr_path if csr else audit / 'hpc-current-runs/results.json'),
+                  hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(
+                           audit / 'functional-isa-and-checked-hpc-v1/runs/results.json' if functional_queue else
+                           csr_path if csr else audit / 'hpc-current-runs/results.json'),
                            scope='complete output hashes for STREAM, five Spatter transfer families, original-size xRAGE gather/scatter; 1SM with 1/2 logical partitions'),
                   fp8_gemm=[{k: j.get(k) for k in ('name', 'status', 'validation', 'simulated_cycles', 'result_dir')} for j in controls.get('jobs', []) if j['kind'] == 'gemm'],
                   runtime_regressions=[{k: j.get(k) for k in ('name', 'status', 'validation', 'simulated_cycles', 'result_dir')} for j in runtime.get('jobs', [])],
                   smolvla_boundaries=read(audit / 'smolvla-boundary-failures.json'),
+                  smolvla_boundaries_scope='historical action-input variant before patch-order and compensated-norm fixes; current candidate is separate',
                   limits=['Native execution is generated stage C++ on the host, not device ISA execution.',
                           'Full two-SM model runs, complete Radiance RTL/FireSim and FPGA runs are not covered by this queue.',
                           'HBM clocks use a 1:1 control ratio, not calibrated Radiance wall time.'],
