@@ -117,6 +117,8 @@ def main():
         raise SystemExit('Refusing to overwrite a previous queue; use a new output directory.')
     jobs = json.loads(args.jobs.read_text())
     for job in jobs:
+        if job.get('kind') not in ('native', 'isa', 'gemm', 'hpc'):
+            raise ValueError('Missing or unsupported job kind: ' + str(job.get('name', job.get('model'))))
         job['status'] = 'pending'
     state = {'pid': os.getpid(), 'started': time.time(), 'status': 'running',
              'jobs_sha256': digest(args.jobs), 'jobs': jobs}
