@@ -11,6 +11,22 @@ from run_e2e_queue import validate
 
 
 class CompleteOutputChecks(unittest.TestCase):
+    def test_two_sm_hpc_requires_both_completions_and_core_traffic(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
+            d=Path(folder);out=d/'out';out.write_bytes(b'correct')
+            report=d/'hbm.json'
+            hbm=dict(unconsumed_requests=0,pending_dram=0,sources={str(c):1 for c in range(4)})
+            report.write_text(json.dumps(hbm))
+            job=dict(kind='hpc',num_clusters=2,output=str(out),expected_bytes=7,
+                     expected_output_sha256=hashlib.sha256(b'correct').hexdigest(),
+                     hbm_report=str(report),expected_hbm_core_sources=[0,1,2,3])
+            log='cluster 0 isa-test passed with tohost=0\ncluster 1 isa-test passed with tohost=0\n'
+            self.assertTrue(validate(job,log,0)['passed'])
+            self.assertFalse(validate(job,log.splitlines()[0],0)['passed'])
+            self.assertFalse(validate(job,log.replace('cluster 1','cluster 0'),0)['passed'])
+            hbm['sources']['2']=0;report.write_text(json.dumps(hbm))
+            self.assertFalse(validate(job,log,0)['passed'])
+
     def test_coupled_hbm_needs_timing_report_binding_and_matching_clocks(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
             d=Path(folder);config=d/'cyclotron.toml';report=d/'hbm.json';journal=d/'progress.jsonl'

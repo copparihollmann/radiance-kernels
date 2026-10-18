@@ -55,6 +55,11 @@ def validate(job, log, returncode):
     elif job['kind'] == 'hpc':
         output = Path(job['output'])
         result['tohost_pass'] = 'isa-test passed with tohost=0' in log
+        if job.get('num_clusters') is not None:
+            clusters = job['num_clusters']
+            completed = [int(c) for c in re.findall(r'cluster (\d+) isa-test passed with tohost=0', log)]
+            result['tohost_pass'] = len(completed) == clusters and set(completed) == set(range(clusters))
+            result['completed_clusters'] = completed
         result['full_output_pass'] = (output.exists() and output.stat().st_size == job['expected_bytes'] and digest(output) == job['expected_output_sha256'])
         if output.exists():
             result['output_sha256'] = digest(output)
@@ -167,6 +172,10 @@ def validate(job, log, returncode):
         hbm = json.loads(report.read_text()) if report.exists() else None
         result['hbm'] = hbm
         result['hbm_drained_pass'] = bool(hbm and hbm['unconsumed_requests'] == 0 and hbm['pending_dram'] == 0)
+        if job.get('expected_hbm_core_sources'):
+            sources = hbm.get('sources', {}) if hbm else {}
+            result['all_hbm_core_sources_pass'] = all(
+                sources.get(str(core), 0) > 0 for core in job['expected_hbm_core_sources'])
         if job.get('execution_mode') == 'coupled_timing_hbm':
             configured = config.get('timing',{}).get('gmem',{}).get('hbm',{})
             source_ticks = configured.get('source_ticks',1)
