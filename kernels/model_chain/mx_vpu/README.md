@@ -12,8 +12,8 @@ controls below: complete SmolVLA passes assisted functional ISA on one/two SMs;
 complete TinyLlama passes one/two SMs, with every stage buffer bit-identical
 across all three replicas and zero error against its frozen format reference.
 DeepSeek also passes one/two SMs: all 1,691 stage tensors per SM have zero format
-error and preserve original tokens 22573/4396. Gemma's complete two-replica native
-checks pass, and its one-SM GPU run is active; its finished GPU pair is required. See `functional_assist.md` and the managed
+error and preserve original tokens 22573/4396. Gemma also passes one SM: all 1,496 stage buffers have zero format error and
+original tokens 109/235287 match. Its two-SM GPU run is active. See `functional_assist.md` and the managed
 task's `artifacts/e2e-hbm-audit/summary.json` for live scope and receipts.
 
 `compile_decoder.py --execution-backend rakanic_mx_vpu` connects E4M3 matrix
