@@ -71,6 +71,22 @@ class CompleteOutputChecks(unittest.TestCase):
             report.write_text(json.dumps(dict(unconsumed_requests=1, pending_dram=0)))
             self.assertFalse(validate(job, log, 0)['passed'])
 
+    def test_functional_isa_scope_requires_explicit_matching_configuration(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
+            directory=Path(temporary);config=directory/'cyclotron.toml';journal=directory/'progress.jsonl'
+            journal.write_text(json.dumps(dict(event='stage_entry',cluster=0))+'\n'+
+                               json.dumps(dict(event='finish',passed=True))+'\n')
+            text='[sim]\ntiming=false\n[gemmini]\nmode="both"\npreset="radiance"\n'
+            config.write_text(text)
+            job=dict(kind='isa',execution_mode='functional_core',num_clusters=1,expected_stages=1,
+                     progress=str(journal),command=['simulator',str(config)])
+            log='cluster 0 isa-test passed with tohost=0'
+            self.assertTrue(validate(job,log,0)['passed'])
+            for bad in (text.replace('false','true'),text.replace('"both"','"perf"'),
+                        text+'[timing.gmem.hbm]\nconfig="hbm.yaml"\n'):
+                config.write_text(bad)
+                self.assertFalse(validate(job,log,0)['passed'])
+
 
 if __name__ == '__main__':
     unittest.main()

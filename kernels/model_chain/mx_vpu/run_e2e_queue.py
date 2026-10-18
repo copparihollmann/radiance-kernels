@@ -57,6 +57,16 @@ def validate(job, log, returncode):
         from check_fp8_gemm import check
         result.update(check(Path(job['output']), Path(job['golden']), log, job['clusters']))
     elif job['kind'] == 'isa':
+        if job.get('execution_mode') == 'functional_core':
+            config = tomllib.loads(Path(job['command'][1]).read_text())
+            result['functional_mode_config_pass'] = (
+                config.get('sim',{}).get('timing') is False and
+                config.get('gemmini',{}).get('mode') == 'both' and
+                config.get('gemmini',{}).get('preset') == 'radiance' and
+                not config.get('gemmini',{}).get('overrides','') and
+                not config.get('timing',{}).get('gmem',{}).get('hbm') and
+                not job.get('hbm_report'))
+            result['execution_scope'] = 'functional core ISA plus libgemmini both; no HBM timing or program-latency claim'
         clusters = job.get('num_clusters')
         if clusters is None:
             config = tomllib.loads(Path(job['command'][1]).read_text())

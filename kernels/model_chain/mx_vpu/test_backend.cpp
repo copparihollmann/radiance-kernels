@@ -16,7 +16,14 @@ int main(int argc, char** argv) {
       std::fread(scales.data(), 4, scales.size(), in) != scales.size() ||
       std::fread(skip.data(), 4, skip.size(), in) != skip.size()) return 2;
   std::fclose(in);
-  if (argc == 5) {
+  if (h[3] >= 9) {
+    if (argc != 3 || h[3] > 11) return 2;
+    model_chain::mx_vpu_linear_prepacked(x.data(),w.data(),scales.data(),y.data(),
+        h[3] == 9 ? model_chain::mx_model::DirectE4M3 :
+        h[3] == 10 ? model_chain::mx_model::Int4Lookup : model_chain::mx_model::Int8Lookup,
+        h[0],h[1],h[2],0,1);
+    model_chain::mx_vpu_add(y.data(),skip.data(),z.data(),z.size(),z.size(),0,1);
+  } else if (argc == 5) {
     uint32_t first = std::strtoul(argv[3], nullptr, 10), count = std::strtoul(argv[4], nullptr, 10);
     model_chain::mx_vpu_linear_partitioned(x.data(), w.data(), scales.data(), y.data(),
         model_chain::mx_model::Storage(h[3]), h[0], h[1], h[2], first, count, 0, 1);

@@ -11,7 +11,7 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from mx_vpu import reference, fp32_reference
+from mx_vpu import reference, fp32_reference, prepare_weights
 
 
 class BackendChecks(unittest.TestCase):
@@ -34,7 +34,7 @@ class BackendChecks(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
-    def check(self, m, k, n, storage, columns=None):
+    def check(self, m, k, n, storage, columns=None, prepared=None):
         rng = np.random.default_rng(123+storage)
         x = rng.normal(0, 0.4, (m, k)).astype(np.float32)
         x[0] = 0  # exercise a zero microscaling group and padded tiles
@@ -53,12 +53,21 @@ class BackendChecks(unittest.TestCase):
         else:
             bits = {2:8, 3:4, 4:6, 7:8, 8:5}[storage]
             codes = rng.integers(-(1 << (bits-1)), 1 << (bits-1), shape, dtype=np.int8)
+            if prepared in (2,3):
+                for block in range((k+31)//32):
+                    bands = (0,1,2,4,8) if prepared == 2 else (0,1,2,4,8,16,32,64,128)
+                    limit = bands[block % len(bands)]
+                    codes[block*32:(block+1)*32] = (0 if not limit else
+                        rng.integers(-limit,limit,(min(32,k-block*32),n),dtype=np.int8))
             if storage == 8:
                 self.assertEqual(k % 64, 0)
                 scales = rng.uniform(0.001, 0.01, (n, k//64)).astype(np.float32)
                 decoded = codes.astype(np.float32) * np.repeat(scales, 64, axis=1)
             else:
                 scales = rng.uniform(0.001, 0.01, n).astype(np.float32)
+                if prepared in (2,3):
+                    scales[::3] *= -1
+                    scales[0] = 0
                 decoded = codes.astype(np.float32) * (scales[:, None] if tied else scales)
             if bits == 8:
                 payload = codes.tobytes()
@@ -71,6 +80,17 @@ class BackendChecks(unittest.TestCase):
                         packed[bit//8] |= ((int(code) >> b) & 1) << (bit % 8)
                 payload = packed.tobytes()
         expected = reference.linear(x, decoded.T if tied else decoded)
+        if prepared:
+            if prepared == 1:
+                payload,aux = prepare_weights.direct(decoded.T if tied else decoded)
+            elif prepared == 2:
+                self.assertEqual(storage,3)
+                aux = prepare_weights.int4_lookup(codes,scales)
+            else:
+                self.assertEqual(storage,2)
+                aux = prepare_weights.int8_lookup(codes,scales)
+            scales = np.frombuffer(aux+b'\0'*((-len(aux))%4),np.float32)
+            storage = 8+prepared
         if columns:
             first, count = columns
             ordinary = fp32_reference.linear(x, decoded.T if tied else decoded)
@@ -108,6 +128,12 @@ class BackendChecks(unittest.TestCase):
         for storage in range(1, 9):
             with self.subTest(storage=storage):
                 self.check(3, 64, 35, storage, (16, 8))
+
+    def test_prepared_weights_match_original_format(self):
+        self.check(17,47,19,0,prepared=1)
+        self.check(2,64,17,2,prepared=1)
+        self.check(2,163,19,3,prepared=2)
+        self.check(2,289,19,2,prepared=3)
 
 
 if __name__ == "__main__":

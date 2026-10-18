@@ -12,6 +12,7 @@ namespace model_chain {
 namespace mx_model {
 
 enum Storage { F32, F16, I8, I4, I6, F32_TIED, F16_TIED, I8_TIED, I5_TIED };
+enum WeightPacking { OnTheFly, DirectE4M3, Int4Lookup, Int8Lookup };
 constexpr uint32_t A_ROW = 0, B_ROW = 2048, C_ROW = 4096;
 // Keep scale exponents in the otherwise-unused fourth scratchpad bank. This
 // also avoids lane-interleaved private-array indexing in the Muon toolchain.
@@ -102,6 +103,36 @@ inline float weight_at(const RK_GLOBAL void* data, const RK_GLOBAL float* scales
   uint32_t scale = storage == I5_TIED ? column * (k / 64) + inner / 64 : column;
   return float(packed((const RK_GLOBAL uint8_t*)data, index, bits)) * scales[scale];
 }
+inline int prepared_exponent(const RK_GLOBAL float* metadata, WeightPacking packing,
+                             uint32_t block, uint32_t n, uint32_t column) {
+  const RK_GLOBAL uint8_t* bytes = (const RK_GLOBAL uint8_t*)metadata;
+  if (packing == Int4Lookup || packing == Int8Lookup)
+    bytes += ((const RK_GLOBAL uint32_t*)metadata)[1];
+  return ((const RK_GLOBAL int8_t*)bytes)[(block/32)*n+column];
+}
+inline uint8_t prepared_code(const RK_GLOBAL void* weights,
+                             const RK_GLOBAL float* metadata, WeightPacking packing,
+                             uint32_t n, uint32_t inner, uint32_t column, int exponent) {
+  const RK_GLOBAL uint8_t* bytes = (const RK_GLOBAL uint8_t*)weights;
+  if (packing == DirectE4M3) return bytes[inner*n+column];
+  const RK_GLOBAL uint8_t* table = (const RK_GLOBAL uint8_t*)metadata
+      + ((const RK_GLOBAL uint32_t*)metadata)[0] + (packing == Int8Lookup ? 260 : 68)*column;
+  if (packing == Int8Lookup) {
+    const int code = ((const RK_GLOBAL int8_t*)bytes)[inner*n+column];
+    if (code == 0) return table[1];
+    const int band = int(((const RK_GLOBAL int8_t*)table)[0])-exponent;
+    if (band && (code == 1 || code == -1)) {
+      const uint8_t base = table[code == 1 ? 2 : 3];
+      return uint8_t((base & 128u) | ((base & 127u)+8*(band-1)));
+    }
+    const uint8_t base = table[4+(uint32_t(code)&255u)];
+    return uint8_t((base & 128u) | ((base & 127u)+8*band));
+  }
+  const int code = packed(bytes, inner*n+column, 4);
+  if (code == 0) return table[1];
+  const int band = int(((const RK_GLOBAL int8_t*)table)[0])-exponent;
+  return table[4+16*band+(uint32_t(code)&15u)];
+}
 #ifdef RADIANCE_DEVICE
 // One initializer body keeps full-model text clear of compact weight images.
 __attribute__((noinline))
@@ -133,7 +164,8 @@ __attribute__((always_inline)) inline void mx_vpu_linear_columns(const RK_GLOBAL
                           RK_GLOBAL float* output, mx_model::Storage storage,
                           uint32_t m, uint32_t k, uint32_t n,
                           uint32_t first, uint32_t columns,
-                          uint32_t tid, uint32_t threads) {
+                          uint32_t tid, uint32_t threads,
+                          mx_model::WeightPacking packing = mx_model::OnTheFly) {
 #ifdef RADIANCE_DEVICE
   // Keep all participants in one warp: SIMT reconvergence orders the owner
   // command/fence and the other lanes' packing without a cross-warp barrier.
@@ -172,6 +204,11 @@ __attribute__((always_inline)) inline void mx_vpu_linear_columns(const RK_GLOBAL
       // Each output still accumulates K blocks in the original FP32 order.
       for (uint32_t col = first; col < end; col += 16) {
         for (uint32_t c = tid; c < 16; c += lanes) {
+          if (packing != OnTheFly) {
+            shared_store(B_EXP+4*c, uint32_t(col+c < end ?
+                prepared_exponent(scales,packing,block,n,col+c) : 0));
+            continue;
+          }
           float maximum = 0;
           for (uint32_t t = 0; t < 32 && col+c < end && block+t < k; ++t) {
             float v = __builtin_fabsf(weight_at(weights, scales, storage, k, n, block+t, col+c));
@@ -183,6 +220,14 @@ __attribute__((always_inline)) inline void mx_vpu_linear_columns(const RK_GLOBAL
             const uint32_t t = packed_word / 4, c = 4 * (packed_word % 4);
             uint32_t word = 0;
             for (uint32_t b = 0; b < 4; ++b) {
+              if (packing != OnTheFly) {
+                uint8_t code = block+t < k && col+c+b < end ?
+                    prepared_code(weights,scales,packing,n,block+t,col+c+b,
+                                  packing == DirectE4M3 ? 0 :
+                                  int32_t(shared_load(B_EXP+4*(c+b)))) : 0;
+                word |= uint32_t(code) << (8*b);
+                continue;
+              }
               float v = block+t < k && col+c+b < end ?
                 weight_at(weights, scales, storage, k, n, block+t, col+c+b) : 0;
               word |= uint32_t(fp8(v * power2(-int32_t(shared_load(B_EXP+4*(c+b)))))) << (8*b);
@@ -213,6 +258,17 @@ __attribute__((always_inline)) inline void mx_vpu_linear_columns(const RK_GLOBAL
           }
       }
     }
+}
+
+// Prepared data is for a complete selected matrix, never FP32 fallback columns.
+// Large-argument helpers remain inline for the lane-interleaved Muon ABI.
+__attribute__((always_inline)) inline void mx_vpu_linear_prepacked(
+    const RK_GLOBAL float* input, const RK_GLOBAL void* weights,
+    const RK_GLOBAL float* metadata, RK_GLOBAL float* output,
+    mx_model::WeightPacking packing, uint32_t m, uint32_t k, uint32_t n,
+    uint32_t tid, uint32_t threads) {
+  mx_vpu_linear_columns(input,weights,metadata,output,mx_model::F32,
+                        m,k,n,0,n,tid,threads,packing);
 }
 
 __attribute__((always_inline)) inline void mx_vpu_linear(const RK_GLOBAL float* input,

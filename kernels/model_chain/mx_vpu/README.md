@@ -84,6 +84,37 @@ The helper accepts `--warps 2|4|8` with an explicit qualified `--runtime`
 archive; it changes the launch occupancy while retaining graph bodies and
 references, and records the resulting schedule and runtime hash.
 
+`rebuild_prepared_queries.py` derives complete decoder candidates from those
+qualified source/object receipts. It prepares immutable query matrices once,
+retains the compact checkpoint files, and records every new image and source hash.
+The default `--packing overlay` uses Cyclotron's checked `gmem_patches` to replace
+query bytes in simulator memory with their exact FP8 codes before execution.
+Only K32/column exponents need additional GPU storage: TinyLlama 2,883,584 bytes,
+DeepSeek 2,064,384, Gemma 3,833,856. The host checker patches private mappings and
+restores their read-only protection; checkpoint files remain unchanged.
+
+Preparation and loading are outside GPU-active time. Actual input activations,
+K-block loops, MMIO commands and output accumulation still execute on the device.
+The real TinyLlama first projection (M2/K2048/N2048) passes all4,096 outputs bit
+for bit with coupled HBM: 260,347,801 → 21,139,456 source cycles (12.32x relative
+to the previous compact eight-warp build). This is a full-size projection result,
+not a whole-model speedup. All three complete derived host graphs pass their
+format checks and original greedy tokens. Full device qualification remains open.
+
+The optional `lookup` preparation retains INT8 bytes and adds per-column FP8
+tables. Every prepared code/exponent for all281,018,368 selected query weights
+matches the original converter, and its full-size ISA probe is bit exact. It is
+slower and uses more GPU space than the direct initialization path; retained
+experimental sources and receipts document that measurement.
+
+Functional-core ISA checks use `sim.timing=false`, libgemmini `mode="both"`, and
+no HBM configuration. They execute the complete ELF and its checks, while keeping
+their results distinct from coupled-HBM timing. Queue jobs explicitly tagged
+`execution_mode="functional_core"` validate those settings. Their cycle counts
+do not establish program latency. The full-size projection takes about10.5s in
+this mode versus about101s in the coupled control, with all4,096 bits exact in
+both. Complete functional-core model runs still require finished receipts.
+
 `reference.py` generates format references independently in NumPy, including
 the pinned model's product floor, truncation, accumulator precision ramp and
 BF16 additions. It calls no C++ arithmetic reference. The graph generators
