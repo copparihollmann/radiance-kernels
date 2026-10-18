@@ -86,10 +86,11 @@ MU_LDFLAGS += -nodefaultlibs -nostartfiles -Wl,-Bstatic,-T,$(MU_LINKER_SCRIPT),-
 # established.  Default stays off until that is understood.
 RAD_TAPEOUT ?= 0
 ifeq ($(RAD_TAPEOUT),1)
-MU_LDFLAGS += $(RADIANCE_LIB_PATH)/libmuonrt-tapeout.a $(RADIANCE_LIB_PATH)/tohost.S
+MUONRT_ARCHIVE ?= $(RADIANCE_LIB_PATH)/libmuonrt-tapeout.a
 else
-MU_LDFLAGS += $(RADIANCE_LIB_PATH)/libmuonrt.a $(RADIANCE_LIB_PATH)/tohost.S
+MUONRT_ARCHIVE ?= $(RADIANCE_LIB_PATH)/libmuonrt.a
 endif
+MU_LDFLAGS += $(MUONRT_ARCHIVE) $(RADIANCE_LIB_PATH)/tohost.S
 
 ifdef MU_USE_LIBC
 # Link in libc + compiler builtins; not sure why it doesn't know about them already

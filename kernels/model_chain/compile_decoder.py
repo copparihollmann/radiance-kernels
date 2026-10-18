@@ -1113,6 +1113,11 @@ def build_device(target: Path) -> None:
     extra = "-nostdinc++ -isystem " + str(llvm_muon / "include/c++/v1")
     env["EXTRA_MU_CFLAGS"] = (env.get("EXTRA_MU_CFLAGS", "") + " " + extra).strip()
     env.setdefault("MU_USE_LIBC", "1")
+    if env.get("RADIANCE_MUONRT_ARCHIVE"):
+        archive = Path(env["RADIANCE_MUONRT_ARCHIVE"]).resolve()
+        if not archive.is_file():
+            raise FileNotFoundError("configured Muon runtime archive is missing")
+        env["MUONRT_ARCHIVE"] = str(archive)
     command = ["make", f"-j{jobs}", "kernel.soc.elf"]
     with subprocess.Popen(command, cwd=target, env=env, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT) as process:
@@ -1150,6 +1155,9 @@ def build_device(target: Path) -> None:
                 raise ValueError("MX+VPU target images exceed the 2 GiB GPU region")
         manifest["image_placement_verified"] = True
     manifest["device_elf_built"] = True
+    runtime = Path(env.get("MUONRT_ARCHIVE", str(ROOT/"lib"/(
+        "libmuonrt-tapeout.a" if env.get("RAD_TAPEOUT") == "1" else "libmuonrt.a"))))
+    manifest.update(runtime_archive=str(runtime.resolve()), runtime_sha256=sha256_file(runtime))
     manifest["radiance_elf_sha256"] = hashlib.sha256(
         (target / "kernel.radiance.elf").read_bytes()).hexdigest()
     manifest["soc_elf_sha256"] = hashlib.sha256(

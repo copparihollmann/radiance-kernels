@@ -27,3 +27,8 @@ Qualification uses a new managed artifact archive rather than overwriting
 `lib/libmuonrt.a` or old archives. Runtime-only relink receipts bind the new archive
 and retain identical kernel/stage objects and frozen references. Preserve failed
 runs and old ELF hashes; do not resume them as corrected executions.
+
+`build_device` accepts `RADIANCE_MUONRT_ARCHIVE=/path/to/qualified.a` and
+records that archive's SHA256 in the build manifest. Direct make builds can use
+`MUONRT_ARCHIVE=/path/to/qualified.a`. The default normal/tapeout archive selection
+is unchanged; use an explicit qualified archive for these model evaluations.
