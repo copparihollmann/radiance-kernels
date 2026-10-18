@@ -166,7 +166,7 @@ endif
 %.ll: %.cpp
 	$(MU_CXX) $(MU_CFLAGS) -S -emit-llvm $< -o $@
 
-%.radiance.elf: %.mu.o $(MU_LIB_OBJS) $(MU_BIN_OBJS) $(BINFILES)
+%.radiance.elf: %.mu.o $(MU_LIB_OBJS) $(MU_BIN_OBJS) $(BINFILES) $(MUONRT_ARCHIVE)
 	$(MU_CXX) $(MU_CFLAGS) $< $(MU_LIB_OBJS) $(MU_BIN_OBJS) $(MU_LDFLAGS) -o $@
 	@for bin in $(BINFILES); do \
 		sec=$$(echo $$bin | sed 's/\.bin$$//'); \

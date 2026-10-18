@@ -1113,12 +1113,15 @@ def build_device(target: Path) -> None:
     extra = "-nostdinc++ -isystem " + str(llvm_muon / "include/c++/v1")
     env["EXTRA_MU_CFLAGS"] = (env.get("EXTRA_MU_CFLAGS", "") + " " + extra).strip()
     env.setdefault("MU_USE_LIBC", "1")
-    if env.get("RADIANCE_MUONRT_ARCHIVE"):
-        archive = Path(env["RADIANCE_MUONRT_ARCHIVE"]).resolve()
+    runtime_override = env.get("RADIANCE_MUONRT_ARCHIVE") or env.get("MUONRT_ARCHIVE")
+    if runtime_override:
+        archive = Path(runtime_override).resolve()
         if not archive.is_file():
             raise FileNotFoundError("configured Muon runtime archive is missing")
         env["MUONRT_ARCHIVE"] = str(archive)
-    command = ["make", f"-j{jobs}", "kernel.soc.elf"]
+    # An archive selected from immutable artifacts may have an older mtime than
+    # an existing ELF. Force its dependents to relink before recording its hash.
+    command = ["make", f"-j{jobs}", *(["-W", str(archive)] if runtime_override else []), "kernel.soc.elf"]
     with subprocess.Popen(command, cwd=target, env=env, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT) as process:
         tail = bytearray()
