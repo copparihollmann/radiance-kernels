@@ -42,6 +42,7 @@ class Store:
     def __init__(self, root):
         self.root = root
         self.cached = {}
+        self.patched = {}
 
     def put(self, source):
         source = Path(source).resolve()
@@ -61,6 +62,18 @@ class Store:
         self.cached[key] = record
         return record
 
+    def adopt_temporary(self, source):
+        """Keep a completed private temporary image without copying it again."""
+        sha = digest(source)
+        target = self.root / 'blobs' / sha
+        target.parent.mkdir(exist_ok=True)
+        if not target.exists():
+            # Only called for our private, completed patch temporary. Closing
+            # NamedTemporaryFile removes its name; the blob owns the inode.
+            os.link(source, target)
+        return dict(path=str(target.relative_to(self.root)), sha256=sha,
+                    bytes=target.stat().st_size)
+
 
 def patched_load(store, load, patches):
     """Materialize checked initialization overlays before exporting an image."""
@@ -68,6 +81,11 @@ def patched_load(store, load, patches):
                 p['address'] + p['bytes'] <= load['address'] + load['bytes']]
     if not relevant:
         return store.put(load['path'])
+    key = (load['path'], load['address'], load['bytes'],
+           tuple((p['address'], p['bytes'], p['expected_old_sha256'],
+                  p['expected_new_sha256']) for p in relevant))
+    if key in store.patched:
+        return store.patched[key]
     with tempfile.NamedTemporaryFile(dir=os.environ['TMPDIR']) as tmp:
         shutil.copyfile(load['path'], tmp.name)
         metadata = []
@@ -85,8 +103,10 @@ def patched_load(store, load, patches):
                 metadata.append(dict(address=patch['address'], bytes=patch['bytes'],
                                      old_sha256=patch['expected_old_sha256'],
                                      new_sha256=patch['expected_new_sha256']))
-        blob = store.put(tmp.name)
-    return dict(blob, original_image_sha256=digest(load['path']), applied_initialization_patches=metadata)
+        blob = store.adopt_temporary(tmp.name)
+    result = dict(blob, original_image_sha256=digest(load['path']), applied_initialization_patches=metadata)
+    store.patched[key] = result
+    return result
 
 
 def build(recipe_path, output):
@@ -156,6 +176,7 @@ def workload(root, name):
 
 def verify(root):
     count = size = 0
+    verified = {}
     for line in (root / 'SHA256SUMS').read_text().splitlines():
         expected, name = line.split('  ', 1)
         p = local(root, name)
@@ -163,6 +184,7 @@ def verify(root):
             raise ValueError('missing or changed bundle file: ' + name)
         count += 1
         size += p.stat().st_size
+        verified[name] = expected
     manifest = load_manifest(root)
     names = [x['name'] for x in manifest['workloads']]
     if len(names) != len(set(names)):
@@ -171,7 +193,8 @@ def verify(root):
         if isinstance(value, dict):
             if {'path', 'sha256', 'bytes'} <= value.keys():
                 p = local(root, value['path'])
-                if p.stat().st_size != value['bytes'] or p.name != value['sha256']:
+                if (p.stat().st_size != value['bytes'] or p.name != value['sha256'] or
+                        verified.get(value['path']) != value['sha256']):
                     raise ValueError('invalid blob metadata: ' + str(value))
             for child in value.values():
                 refs(child)
