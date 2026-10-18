@@ -57,5 +57,5 @@ The repeated-launch worker stack bug is fixed separately; see `worker_stack.md`.
 The corrected complete one-SM SmolVLA assisted graph now passes all3673stages,
 all1600format andoriginalactions, guards and actual4608MXloops/3072VPUcommands.
 All354093515776fallbacklinearMACs are counted, alongside37748736actualMXMACs.
-Fulltwo-SM execution is in progress; othermodels remain incomplete. Native
+Complete one- and two-SM assisted SmolVLA execution now passes; all three final action buffers are bit-identical. Other full models remain incomplete. Native
 two-replica SmolVLA has7346stages/3860independentboundaries passing.

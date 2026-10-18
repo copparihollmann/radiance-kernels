@@ -106,6 +106,14 @@ def validate(job, log, returncode):
             clusters = config.get('sim', {}).get('num_clusters', 1)
         finished = [int(x) for x in re.findall(r'cluster (\d+) isa-test passed with tohost=0', log)]
         result['tohost_pass'] = len(finished) == clusters and set(finished) == set(range(clusters))
+        if job.get('expected_gemmini'):
+            expected = job['expected_gemmini']
+            loops = re.findall(r'LOOP_WS pending (\d+), retired (\d+)', log)
+            tiles = re.findall(r'mesh: (\d+) tiles,.*VPU: (\d+) commands', log)
+            result['accelerator_counts_pass'] = (len(loops) == clusters and len(tiles) == clusters and
+                all(int(pending) == 0 and int(retired) == expected['mx_loops'] for pending, retired in loops) and
+                all(int(mesh) == expected['mesh_tiles'] and int(vpu) == expected['vpu_commands'] for mesh,vpu in tiles))
+            result['accelerator_counts'] = dict(loop_ws=loops, mesh_tiles_and_vpu=tiles)
         journal = Path(job['progress'])
         records = [json.loads(line) for line in journal.read_text().splitlines()] if journal.exists() else []
         entries = [x for x in records if x['event'] == 'stage_entry']

@@ -110,6 +110,8 @@ def summarize(root):
                   smolvla_current_candidate=read(audit / 'smolvla-current-candidate.json'),
                   smolvla_two_sm_candidate=read(audit / 'smolvla-replicas-current.json'),
                   pure_helper_assistance=read(audit / 'functional-assist-current.json'),
+                  smolvla_full_assisted=read(audit / 'smolvla-stack-fixed-qualification-v1/qualified-result-v2.json'),
+                  worker_stack_runtime=read(audit / 'worker-stack-fix-v1/diagnosis.json'),
                   tinyllama_stall_diagnosis=read(audit / 'tinyllama-stall-diagnosis-v1/result.json'),
                   simulator_performance=read(audit / 'csr-performance.json'),
                   hpc=dict(status=hpc.get('status'), counts=count(hpc.get('jobs', [])), result=str(

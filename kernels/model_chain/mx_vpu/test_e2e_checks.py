@@ -61,11 +61,28 @@ class CompleteOutputChecks(unittest.TestCase):
             self.assertTrue(validate(job, both, 0)['passed'])
             job['expected_stages'] = 2
             self.assertFalse(validate(job, both, 0)['passed'])
+
             complete = records[:-1] * 2 + records[-1:]
             journal.write_text(''.join(json.dumps(r) + '\n' for r in complete))
             self.assertTrue(validate(job, both, 0)['passed'])
             journal.write_text(''.join(json.dumps(r) + '\n' for r in records[1:]))
             self.assertFalse(validate(job, both, 0)['passed'])
+
+    def test_mx_loops_and_physical_tiles_are_checked_in_their_own_units(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
+            journal=Path(folder)/'progress.jsonl'
+            journal.write_text(json.dumps(dict(event='stage_entry',cluster=0))+'\n'+json.dumps(dict(event='finish',passed=True))+'\n')
+            job=dict(kind='isa',num_clusters=1,progress=str(journal),expected_stages=1,
+                     expected_gemmini=dict(mx_loops=4608,mesh_tiles=9216,vpu_commands=3072))
+            log=('cluster 0 isa-test passed with tohost=0\n'
+                 'LOOP_WS pending 0, retired 4608\n'
+                 'mesh: 9216 tiles, 147456 busy cycles; VPU: 3072 commands\n')
+            self.assertTrue(validate(job,log,0)['passed'])
+            for broken in (log.replace('retired 4608','retired 9216'),
+                           log.replace('9216 tiles','4608 tiles'),
+                           log.replace('3072 commands','3071 commands'),
+                           log.replace('pending 0','pending 1')):
+                self.assertFalse(validate(job,broken,0)['passed'])
 
     def test_hpc_zero_exit_needs_complete_oracle_and_drained_hbm(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
