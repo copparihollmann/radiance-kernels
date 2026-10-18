@@ -3,14 +3,15 @@
 The selected software target is **Rakanic/cyclotron base `26ab403` with
 libgemmini base `d5e5e8e` plus local shared-HBM hooks at `54492d5`**,
 `mode="both"`, `preset="radiance"`, and no Gemmini timing overrides. The hooks
-add optional external-memory completion; MX/VPU arithmetic is unchanged. Its VPU scheduler falls back to one unit when the
-preset's unit count is zero. Optional two-unit timing profiles in the hardware
+add optional external-memory completion; MX/VPU arithmetic is unchanged. Its VPU
+scheduler falls back to one unit when the preset's unit count is zero. Optional two-unit timing profiles in the hardware
 checkpoint are separate experiments and are not the selected target.
 
 The current full-device results are recorded separately from the historical
 controls below: complete SmolVLA passes assisted functional ISA on one/two SMs;
-complete TinyLlama passes one SM, with its two-SM run in progress. Full DeepSeek
-and Gemma builds retain all frozen reference tensors and fit two replicas; their
+complete TinyLlama passes one/two SMs, with every stage buffer bit-identical
+across all three replicas and zero error against its frozen format reference.
+Full DeepSeek and Gemma builds retain all frozen reference tensors and fit two replicas; their
 finished GPU runs are still required. See `functional_assist.md` and the managed
 task's `artifacts/e2e-hbm-audit/summary.json` for live scope and receipts.
 
