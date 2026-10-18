@@ -645,6 +645,10 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                 + (f" {ROOT / 'lib/include/rad_tapeout.h'}" if all_cores else "")
                 + (f" {HERE / 'mx_vpu/backend.hpp'}" if use_mx_vpu else "")
                 + "\n")
+    if fallback_call_abi:
+        makefile += (" ".join(["kernel.mu.o", "fallback_runtime.mu.o", *[name.replace(".cpp", ".mu.o") for name in chunks]])
+                     + ": " + " ".join(str(HERE/name) for name in
+                         ("fallback_abi.hpp", "pipeline_smolvla.hpp", "pipeline_math.hpp", "pipeline_int8.hpp", "pipeline_int4.hpp")) + "\n")
     write_if_changed(target / "Makefile", makefile)
     result = {
         "model": "smolvla_base",

@@ -39,7 +39,7 @@ runs cannot pass as unassisted functional execution or timing/HBM execution.
 
 Qualification receipts live in the managed task's `artifacts/e2e-hbm-audit`:
 
-- `fallback-operations-v4`: all 17 operations, tails, sparse masks, in-place work,
+- `fallback-operations-v4`: all original 17 operations, tails, sparse masks, in-place work,
   distinct replicas, SP/s2 canaries and actual MX-to-helper-to-VPU dependencies;
   complete RAM dumps match unassisted execution on one and two SMs.
 - `fallback-full-projection-v2`: full-size INT8/FP32 projection, independent
@@ -51,6 +51,11 @@ Qualification receipts live in the managed task's `artifacts/e2e-hbm-audit`:
   retain identical complete HBM reports while exercising sparse PC snapshots.
 
 Full-model assisted ISA qualification remains outstanding. The current ABI covers
-17 pure operations; SmolVLA's partitioned MX projection still executes its FP32
-remainder as ISA. Decoder helper emission and additional packed formats also need
-qualification. No full-model completion follows from these controls.
+18 pure operations; SmolVLA's partitioned projection now assists only its FP32 remainder while keeping the selected columns on actual MX. The direct one-/two-SM partition controls include empty/full ranges and K/N tails. Decoder helper emission and per-replica all-stage verifiers are implemented; their full-checkpoint and additional packed-format qualification remains pending. No full-model completion follows from these controls.
+
+The repeated-launch worker stack bug is fixed separately; see `worker_stack.md`.
+The corrected complete one-SM SmolVLA assisted graph now passes all3673stages,
+all1600format andoriginalactions, guards and actual4608MXloops/3072VPUcommands.
+All354093515776fallbacklinearMACs are counted, alongside37748736actualMXMACs.
+Fulltwo-SM execution is in progress; othermodels remain incomplete. Native
+two-replica SmolVLA has7346stages/3860independentboundaries passing.

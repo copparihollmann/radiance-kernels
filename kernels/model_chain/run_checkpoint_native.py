@@ -236,7 +236,7 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
                                  stderr=subprocess.STDOUT, env=env)
     log_text = log.read_text()
     model_counts = re.search(r"MX_VPU_MODEL commands=(\d+) mx=(\d+) vpu=(\d+) cycles=(\d+)", log_text)
-    success = re.search(r"stages=(\d+) check_chunks=(\d+) tohost=0", log_text)
+    summaries = re.findall(r"stages=(\d+) check_chunks=(\d+) tohost=0", log_text)
     failure = re.search(r"stage_check_failed chunk=(\d+) tohost=(\d+)", log_text)
     token_matches = re.findall(r"generated_token_(\d+)=(\d+)", log_text)
     generated_tokens = [int(value) for _, value in token_matches]
@@ -247,9 +247,10 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
                     [int(index) for index, _ in token_matches] ==
                     list(range(len(expected_tokens)))*replicas and
                     generated_tokens == expected_tokens*replicas)
-    passed = (process.returncode == 0 and success is not None and
-              int(success.group(1)) == manifest["stages"] and
-              int(success.group(2)) == len(list(target.glob("verify_chunk_*.cpp")))
+    passed = (process.returncode == 0 and len(summaries) == replicas and
+              all(int(stages) == manifest["stages"] and
+                  int(chunks) == len(list(target.glob("verify_chunk_*.cpp")))
+                  for stages, chunks in summaries)
               and tokens_match)
     if replicas == 2:
         passed = passed and re.findall(r'REPLICA_BEGIN (\d+)', log_text) == ['0','1'] and re.findall(r'REPLICA_DONE (\d+) status=0', log_text) == ['0','1'] and len(re.findall(r'stages=\d+ check_chunks=\d+ tohost=0', log_text)) == 2
@@ -269,6 +270,8 @@ def run(model: str, generated_root: Path, threads: int, jobs: int,
         "input_token_ids": manifest.get("input_token_ids"),
         "generation": manifest.get("generation"),
         "generated_token_ids": generated_tokens if expected_tokens is not None else None,
+        "generated_token_ids_per_replica": ([generated_tokens[i*len(expected_tokens):(i+1)*len(expected_tokens)]
+             for i in range(replicas)] if expected_tokens else None),
         "reference_generated_token_ids": expected_tokens,
         "checkpoint_weight_format": manifest["checkpoint_weight_format"],
         "checkpoint_sha256": manifest["checkpoint_sha256"],

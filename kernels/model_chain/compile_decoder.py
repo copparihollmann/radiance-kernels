@@ -969,7 +969,11 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + (f" {HERE / 'pipeline_tied.hpp'}" if uses_tied else "")
            + (f" {HERE / 'pipeline_fp32_tied.hpp'}" if uses_fp32_tied else "")
            + (f" {HERE / 'mx_vpu/backend.hpp'}" if use_mx_vpu else "")
-           + "\n" if stage_files else ""))
+           + "\n" if stage_files else "")
+        + ((" ".join(["kernel.mu.o", "fallback_runtime.mu.o", *[name.replace(".cpp", ".mu.o") for name in stage_files]])
+            + ": " + " ".join(str(HERE/name) for name in
+                ("fallback_abi.hpp", "pipeline_smolvla.hpp", "pipeline_math.hpp", "pipeline_int8.hpp", "pipeline_int4.hpp")) + "\n")
+           if fallback_call_abi else ""))
     manifest = {
         "model": model,
         "source_config_sha256": specs[model]["source_sha256"],
