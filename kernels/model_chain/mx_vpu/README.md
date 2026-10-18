@@ -143,3 +143,45 @@ Offline replay
 does not feed memory timing back into the running program and must not be
 reported as whole-program latency. SIMT physical writeback addresses, combined
 Muon/MX cache traffic and multi-SM capture remain unimplemented/unverified.
+
+## Full graph verification queue
+
+`audit_stitched_models.py --models <saved-models> --out <new-report.json>` checks
+complete graph lineage, scheduled stage order, generated sources, ELF binding,
+and every loaded compact weight/input image hash. It covers decoder hidden-state
+and KV-cache handoffs and SmolVLA's three camera prefixes and ten denoising steps.
+This structural check does not establish device execution.
+
+`collect_smolvla_stage_reference.py` captures the pinned upstream policy's leaf
+linear and norm outputs with an independent MX/BF16 action projection. The saved
+full fixture maps 1,930 module boundaries; this is not every graph operation.
+`prepare_e2e_native.py` relinks the retained native stage objects against the
+specified current C API archive and checks those boundaries at unchanged
+atol=rtol=0.001. Native runs execute full generated C++ on the host. They do not
+measure device ISA/HBM timing, and a final-format pass does not erase original
+checkpoint drift or intermediate failures.
+
+`run_e2e_queue.py --jobs <jobs.json> --out <new-results-dir> --tmpdir "$TMPDIR"`
+executes retained commands serially, records hashes/PIDs/status/logs, and checks
+complete outputs rather than accepting a zero exit alone. Jobs are explicit
+native, ISA, HPC or nightly GEMM cases. Full ISA jobs have no wall-time cutoff;
+cycle bounds stay in their Cyclotron configs. HPC checks compare entire output
+hashes with saved independent oracle hashes. GEMM checks every BF16 output and
+the GPU's mailbox verification reports using the original nightly criterion.
+A dependency receipt reserves the simulator slot; build receipts gate relinked
+ELFs. Progress journals record retired function entries, not stage completion.
+
+`summarize_e2e.py --task "$TASK_DIR" [--watch]` writes the current verification
+snapshot. Per-job receipts remain authoritative. A failed original-checkpoint
+comparison remains failed even if the format reference passes. Full two-SM
+model execution is separate from one-SM logical partition checks and from the
+reduced synthetic two-SM controls.
+
+The full-output checks exposed two multi-cluster issues: Cyclotron omitted the
+cluster field of `mhartid`, and `mu_schedule` shared one global launch context.
+The CSR now matches the Radiance RTL layout. The runtime now reserves one aligned
+context per global core, so asynchronous clusters can pass different callbacks
+and replica arguments. `relink_e2e_runtime.py` preserves the original ELFs and
+relinks unchanged generated stage objects/reference data with the corrected
+runtime, recording both ELF hashes and checking image placement again. It
+recompiles only auto-removed intermediate objects from their retained sources.

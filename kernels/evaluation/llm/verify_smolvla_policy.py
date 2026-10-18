@@ -20,7 +20,7 @@ from verify_smolvla_checkpoint import sha256
 
 
 def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=None,
-        projection_module: str = "action_in_proj") -> dict:
+        projection_module: str = "action_in_proj", module_tensor_sink=None) -> dict:
     spec = model_specs()["smolvla_base"]
     if sha256(checkpoint_dir / "config.json") != spec["source_sha256"]:
         raise ValueError("SmolVLA config hash differs from pinned source")
@@ -118,10 +118,19 @@ def run(checkpoint_dir: Path, promote_fp32: bool = False, *, action_projection=N
         projection_calls = []
         if action_projection is not None:
             module = getattr(model, projection_module)
-            def projected(value):
+            def projected(value, _module=module):
                 projection_calls.append(tuple(value.shape))
-                return action_projection(value, module.weight, module.bias)
+                return action_projection(value, _module.weight, _module.bias)
             module.forward = projected
+        if module_tensor_sink is not None:
+            def tensor_hook(name):
+                def hook(_module, _inputs, output):
+                    if torch.is_tensor(output):
+                        module_tensor_sink(name, output)
+                return hook
+            for name, module in policy.named_modules():
+                if name and not list(module.children()):
+                    handles.append(module.register_forward_hook(tensor_hook(name)))
         output = model.sample_actions(images, img_masks, lang_tokens,
                                       lang_masks, state, noise=noise)
         expected_projections = spec["num_denoise_steps"] if projection_module == "action_in_proj" else 1

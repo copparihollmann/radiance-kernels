@@ -26,7 +26,7 @@ struct __attribute__((aligned(CACHE_LINE_BYTES))) Context {
 /* Since vx_wspawn can only enter a function with no arguments, we need a
  * persistent state to restore contexts such as kernel arguments.
  * Must occupy its own cache line (64B) to avoid flush races with adjacent data. */
-static volatile Context schedule_context;
+static volatile Context schedule_contexts[NUM_CORES_MAX];
 
 static void __attribute__ ((noinline)) mu_schedule_standalone() {
     uint32_t cluster_id = 0;
@@ -36,7 +36,7 @@ static void __attribute__ ((noinline)) mu_schedule_standalone() {
     const auto cores_per_cluster = MU_NUM_CORES;
     const auto global_core_id = cluster_id * cores_per_cluster + core_id_in_cluster;
 
-    const auto &context = schedule_context;
+    const auto &context = schedule_contexts[global_core_id];
     const auto occupancy = context.occupancy;
 
     // thread_id mapping is core-round-robin, i.e. warp 4k+0 maps to core 0,
@@ -97,22 +97,17 @@ static void mu_schedule_manager() {
 void mu_schedule(mu_schedule_callback callback, void *arg, const uint32_t occupancy) {
     const auto core_id = vx_core_id();
     const auto thread_id = vx_thread_id();
-    // update kernel launch context
-    // Elect one thread PER CORE, not one per cluster.  L0d is per-core and is not coherent
-    // across cores, and mu_fence() only retires the issuing warp's store queue -- it does not
-    // push the line to a shared level.  Writing from core 0 alone therefore left every other
-    // core reading whatever memory happened to hold at `schedule_context`, which is a NOBITS
-    // .bss symbol that nothing initialises: zeros under metasim (core 1 jalr'd to 0x0) and
-    // stale DRAM on the FPGA.  Whether the old code worked was a race between core 0's L0d
-    // eviction and core 1's read.
-    // Every core writes identical values -- callback, arg and occupancy are the same arguments
-    // on every core -- so there is no cross-core race, and each core ends up with a correct
-    // copy in its own L0d without any coherency requirement.
-    (void)core_id;
+    uint32_t cluster_id;
+    asm volatile("csrr %0, %1" : "=r"(cluster_id) : "i"(MU_CSR_CLUSTER_ID));
+    auto &context = schedule_contexts[cluster_id * MU_NUM_CORES + core_id];
+    // Each core owns a cache-line-aligned context. Its worker warps share L0d,
+    // while another core/cluster may launch a different callback or argument.
+    // A single global context let asynchronous clusters overwrite each other's
+    // callback and replica pointer, even after their stacks were separated.
     if (thread_id == 0) {
-        schedule_context.callback = callback;
-        schedule_context.arg = arg;
-        schedule_context.occupancy = occupancy;
+        context.callback = callback;
+        context.arg = arg;
+        context.occupancy = occupancy;
     }
 
     // fence & barrier to ensure ordering on context
