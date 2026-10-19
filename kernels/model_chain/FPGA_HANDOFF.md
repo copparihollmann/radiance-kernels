@@ -143,6 +143,33 @@ Keep the driver/console log, termination result, readbacks, `check-result.json`,
 boot ELF hash, bitstream/HWDB revision and clock settings with each run.
 Measure GPU-active time separately from loading and host readback.
 
+## Debug symbols and software cycle counts
+
+The separate `radiance-workloads-debug-v3.tar.zst` companion covers all 43
+configurations. Unpack it next to the base bundle. From the directory containing
+the archives:
+
+```sh
+sha256sum -c radiance-workloads-debug-v3.tar.zst.sha256
+tar --zstd -xf radiance-workloads-debug-v3.tar.zst
+cd fpga-debug-v3
+sha256sum -c SHA256SUMS
+python3 debug_symbols.py bundle --base-bundle ../fpga-handoff-v3 --debug-bundle .
+```
+
+Every debug ELF preserves the qualified entry point and loaded bytes, addresses,
+segment flags and BSS extents. Use it as the GPU symbol file while loading the
+base package's boot ELF and inputs. Source-line tables and function/data symbols
+are included; local-variable debug information is not. Runtime-library code may
+have symbols without source lines. The companion includes generated sources,
+model stage-address maps and build receipts.
+
+`software-cycle-baseline/cycles.csv` contains the 35 completed HPC timing cases.
+These are full simulator-run totals at the documented 1:1 software clock ratio,
+including runtime overhead. The eight AI timing cells remain empty until their
+unassisted full-model timing runs complete. Helper-assisted ticks do not enter
+the table. These results do not establish FPGA latency.
+
 ## Test results
 
 All four complete model graphs passed on one and two SMs in functional
@@ -154,10 +181,12 @@ The original 26 HBM/HPC checks and 11 additional concurrent two-SM HPC cases
 passed without helper acceleration. The new cases require completion from both
 clusters, HBM traffic from all four cores, and an exact complete-output match
 against the unchanged upstream reference. One-SM negative controls, which leave
-the second partition unwritten, are rejected by the same output checks. A separate
-4,096-launch stress test finished but failed its stage-count check: the journal
-recorded one entry per cluster instead of 4,096. The failed receipts are included
-and the discrepancy remains open.
+the second partition unwritten, are rejected by the same output checks. The v3
+base archive retains failed receipts from a separate 4,096-launch stress test:
+its journal recorded one entry per cluster. A subsequent logger fix restores
+all 4,096 entries per cluster on one/two SMs; every output byte, modeled cycle
+count and complete HBM report matches the earlier runs. The original failed
+receipts remain unchanged.
 
 The package has not been run on FPGA or in a complete FireSim SoC. Its results
 do not establish hardware latency. Per-model MX coverage, FP32 fallbacks,

@@ -49,6 +49,10 @@ global completion tail. Two-SM timelines overlap: do not add them together or
 interpret them as isolated kernel-body measurements. Loading precedes cycle zero;
 host process wall time includes loading, simulation and checking.
 
+Performance-summary latency sums and queue counters overlap; they are not
+exclusive stage costs. The Radiance preset models ALU/FPU result latency in
+its hazard model. Zero execute-queue busy time does not mean zero computation.
+
 `timing-summary.json` and `cycles.csv` contain completed results and explicit
 pending cases. Pending cycles are empty. Existing helper-assisted functional
 passes, prefixes, projected runtimes and queued jobs do not complete this suite.
