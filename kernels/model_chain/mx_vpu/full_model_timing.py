@@ -49,6 +49,19 @@ def check_runtime_library(plan):
     return pin
 
 
+def case_simulator_pin(plan, case):
+    """A retained case can keep its original engine within a newer batch."""
+    pin = case.get('simulator_pin')
+    if pin is None:
+        pin = dict(path=plan['simulator'], sha256=plan['simulator_sha256'])
+        commit = plan.get('source_commits', {}).get('selected_simulator')
+        if commit:
+            pin['source_commit'] = commit
+    if not Path(pin['path']).is_file() or digest(Path(pin['path'])) != pin['sha256']:
+        raise ValueError('case simulator changed after preparation')
+    return pin
+
+
 def model_workloads(manifest):
     rows = [row for row in manifest['workloads'] if row['family'] == 'model']
     clusters = {row['num_clusters'] for row in rows}
@@ -145,6 +158,7 @@ def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, mem
 
 def make_job(root, plan, case, attempt):
     runtime = check_runtime_library(plan)
+    simulator = case_simulator_pin(plan, case)
     source = root / case['name']
     row = json.loads((source / 'workload.json').read_text())
     bundle = Path(plan['bundle'])
@@ -164,12 +178,12 @@ def make_job(root, plan, case, attempt):
         num_clusters=case['num_clusters'], expected_stages=case['expected_stages'],
         expected_stage_order=case['expected_stage_order'], cwd=str(attempt),
         expected_gemmini=case['expected_gemmini'],
-        command=[plan['simulator'], str(path), '--binary-path',
+        command=[simulator['path'], str(path), '--binary-path',
             str(local(bundle, row['device_elf']['path'])), '--gen-trace', 'false'],
         progress=str(attempt / 'progress.jsonl'), hbm_report=str(attempt / 'hbm.json'),
         portable_bundle=str(bundle), portable_workload=case['name'], portable_results=str(attempt),
         prepared_timing_configuration_sha256=case['prepared_timing_configuration_sha256'],
-        hash_inputs=[plan['simulator'], str(path), str(root / 'plan.json'),
+        hash_inputs=[simulator['path'], str(path), str(root / 'plan.json'),
             str(bundle / 'manifest.json'), str(source / 'workload.json'),
             str(source / 'model.json'), *dict.fromkeys(str(local(bundle, ref['path'])) for ref in inputs)],
         env={'CYCLOTRON_PERF_LOG_DIR': str(attempt / 'performance_logs'),
@@ -221,6 +235,8 @@ def summarize(journal, case):
 
 def validated_job(queue_path):
     queue = json.loads(queue_path.read_text())
+    if len(queue['jobs']) != 1:
+        raise ValueError('expected exactly one complete model in a timing queue')
     prior = queue['jobs'][0]
     inputs_ok = all(Path(path).is_file() and digest(Path(path)) == sha
         for path, sha in prior['input_sha256'].items())
@@ -230,13 +246,54 @@ def validated_job(queue_path):
     return prior
 
 
+def check_case_job(root, plan, case, job):
+    """Bind an already validated result to this case, engine and clock ratio."""
+    simulator = case_simulator_pin(plan, case)
+    keys = ['name', 'num_clusters', 'expected_stages', 'expected_stage_order',
+            'expected_gemmini', 'prepared_timing_configuration_sha256']
+    if any(job.get(key) != case.get(key) for key in keys):
+        raise ValueError('completed job belongs to a different timing case')
+    if job.get('kind') != 'isa' or job.get('execution_mode') != 'coupled_timing_hbm':
+        raise ValueError('completed job is not unassisted coupled model timing')
+    command = job['command']
+    if (len(command) != 6 or command[2] != '--binary-path' or command[4:] != ['--gen-trace', 'false']
+            or Path(command[0]).resolve() != Path(simulator['path']).resolve()
+            or job['input_sha256'].get(command[0]) != simulator['sha256']):
+        raise ValueError('completed job used a different simulator')
+    bundle = Path(plan['bundle']).resolve()
+    if (Path(job['portable_bundle']).resolve() != bundle
+            or job['portable_workload'] != case['name']):
+        raise ValueError('completed job used a different workload bundle')
+    row = json.loads((root / case['name'] / 'workload.json').read_text())
+    manifest = json.loads((bundle / 'manifest.json').read_text())
+    declared = [item for item in manifest['workloads'] if item['name'] == case['name']]
+    if declared != [row]:
+        raise ValueError('timing workload differs from its bundle')
+    elf = local(bundle, row['device_elf']['path'])
+    if (Path(command[3]).resolve() != elf.resolve()
+            or job['input_sha256'].get(command[3]) != row['device_elf']['sha256']):
+        raise ValueError('completed job used a different device ELF')
+    hbm = json.loads(Path(job['hbm_report']).read_text())
+    if (hbm.get('source_ticks_per_period') != plan['source_ticks']
+            or hbm.get('memory_ticks_per_period') != plan['memory_ticks']):
+        raise ValueError('completed job used a different clock ratio')
+    runtime = check_runtime_library(plan)
+    if runtime and job['input_sha256'].get(runtime['path']) != runtime['sha256']:
+        raise ValueError('completed job used a different runtime library')
+    return simulator
+
+
 def save_timing(root, plan, case, queue_path):
     job = validated_job(queue_path)
+    simulator = check_case_job(root, plan, case, job)
     journal = queue_path.parent.parent / 'progress.jsonl'
     timing = summarize(journal, case)
     timing.update(name=case['name'], queue_result=str(queue_path),
         source_ticks=plan['source_ticks'], memory_ticks=plan['memory_ticks'],
-        simulator_sha256=plan['simulator_sha256'], journal_sha256=digest(journal))
+        simulator=job['command'][0], simulator_sha256=simulator['sha256'],
+        journal_sha256=digest(journal))
+    if simulator.get('source_commit'):
+        timing['simulator_source_commit'] = simulator['source_commit']
     timing['simulated_cycles'] = job['simulated_cycles']
     if timing['simulated_cycles'] != timing['global_finish_cycle'] + 1:
         raise ValueError('console cycle count and completed journal disagree')
@@ -341,6 +398,7 @@ def report(root):
         path = root / case['name'] / 'result.json'
         row = dict(name=case['name'], num_clusters=case['num_clusters'], status='pending',
             simulated_cycles=None, global_finish_cycle=None, hbm_source_cycles_after_drain=None,
+            simulator=None, simulator_sha256=None,
             source_ticks=plan['source_ticks'],
             memory_ticks=plan['memory_ticks'], hardware_calibrated=False)
         if path.exists():
@@ -348,6 +406,7 @@ def report(root):
             row.update(status='passed', global_finish_cycle=result['global_finish_cycle'],
                        simulated_cycles=result['simulated_cycles'],
                        hbm_source_cycles_after_drain=result['hbm_source_cycles_after_drain'],
+                       simulator=result.get('simulator'), simulator_sha256=result.get('simulator_sha256'),
                        result_sha256=digest(path))
         rows.append(row)
     summary = dict(passed=len(rows) in (8, 12) and all(row['status'] == 'passed' for row in rows),
@@ -357,7 +416,7 @@ def report(root):
     atomic_json(root / 'timing-summary.json', summary)
     fields = ['name', 'num_clusters', 'status', 'simulated_cycles', 'global_finish_cycle',
               'hbm_source_cycles_after_drain',
-              'source_ticks', 'memory_ticks', 'hardware_calibrated']
+              'source_ticks', 'memory_ticks', 'hardware_calibrated', 'simulator_sha256']
     with (root / 'cycles.csv').open('w') as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()

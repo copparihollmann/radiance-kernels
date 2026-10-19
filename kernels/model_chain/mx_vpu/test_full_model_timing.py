@@ -9,8 +9,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from full_model_timing import report, model_workloads, make_job, observe, process_snapshot, runtime_library_pin, summarize
+from full_model_timing import report, model_workloads, make_job, observe, process_snapshot, runtime_library_pin, save_timing, summarize
 from run_e2e_queue import validate
 
 
@@ -162,6 +163,108 @@ class TimingObservation(unittest.TestCase):
         self.assertEqual(status['completed_cases'], 0)
 
 
+class CompletedTimingIdentity(unittest.TestCase):
+    """Output validation success must not allow a different case/engine label."""
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+        self.old = self.root / 'old-simulator'
+        self.new = self.root / 'new-simulator'
+        self.elf = self.root / 'device.elf'
+        for path in [self.old, self.new, self.elf]:
+            path.write_bytes(path.name.encode())
+        self.sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+        self.case = dict(name='tinyllama-1sm', num_clusters=1, expected_stages=1,
+                         expected_stage_order=[0], expected_gemmini={},
+                         prepared_timing_configuration_sha256={},
+                         stages=[dict(stage='prefill.embedding')])
+        self.source = self.root / self.case['name']
+        self.source.mkdir()
+        self.row = dict(name=self.case['name'], device_elf=dict(path='device.elf', sha256=self.sha(self.elf)),
+                        loads=[], checks=[])
+        (self.source / 'workload.json').write_text(json.dumps(self.row))
+        (self.root / 'manifest.json').write_text(json.dumps(dict(workloads=[self.row])))
+        self.attempt = self.source / 'attempt-001'
+        (self.attempt / 'queue').mkdir(parents=True)
+        self.queue = self.attempt / 'queue/results.json'
+        self.queue.write_text('{}')
+        self.config = self.attempt / 'cyclotron.toml'
+        self.config.write_text('[sim]\ntiming=true\n')
+        (self.attempt / 'progress.jsonl').write_text(
+            json.dumps(dict(event='stage_entry', cluster=0, cycle=10, symbols=['_Z7stage_0Pvjjj'])) + '\n' +
+            json.dumps(dict(event='finish', cycle=40, passed=True)) + '\n')
+        self.hbm = self.attempt / 'hbm.json'
+        self.hbm.write_text(json.dumps(dict(source_cycles=43, source_ticks_per_period=1, memory_ticks_per_period=1)))
+        self.plan = dict(bundle=str(self.root), simulator=str(self.old),
+                         simulator_sha256=self.sha(self.old), source_ticks=1, memory_ticks=1)
+        self.job = dict(name=self.case['name'], kind='isa', execution_mode='coupled_timing_hbm',
+                        num_clusters=1, expected_stages=1, expected_stage_order=[0], expected_gemmini={},
+                        prepared_timing_configuration_sha256={},
+                        command=[str(self.old), str(self.config), '--binary-path', str(self.elf), '--gen-trace', 'false'],
+                        portable_bundle=str(self.root), portable_workload=self.case['name'],
+                        input_sha256={str(p): self.sha(p) for p in [self.old, self.elf, self.config]},
+                        simulated_cycles=41, hbm_report=str(self.hbm))
+
+    def save(self, plan=None, case=None, job=None):
+        # The seam here is attribution after an independently validated job;
+        # numerical/output validation itself is covered by the queue tests.
+        with patch('full_model_timing.validated_job', return_value=job or self.job):
+            save_timing(self.root, plan or self.plan, case or self.case, self.queue)
+
+    def test_case_override_keeps_actual_engine_instead_of_batch_default(self):
+        plan = dict(self.plan, simulator=str(self.new), simulator_sha256=self.sha(self.new))
+        case = dict(self.case, simulator_pin=dict(path=str(self.old), sha256=self.sha(self.old)))
+        self.save(plan, case)
+        result = json.loads((self.source / 'result.json').read_text())
+        self.assertEqual(result['simulator_sha256'], self.sha(self.old))
+        self.assertEqual(result['simulator'], str(self.old))
+
+    def test_new_job_uses_and_hashes_its_case_engine_override(self):
+        (self.source / 'config-template.toml').write_text('[sim]\nreport="hbm.json"\n')
+        attempt = self.source / 'attempt-002'
+        attempt.mkdir()
+        plan = dict(self.plan, simulator=str(self.new), simulator_sha256=self.sha(self.new))
+        case = dict(self.case, simulator_pin=dict(path=str(self.old), sha256=self.sha(self.old)))
+        job = make_job(self.root, plan, case, attempt)
+        self.assertEqual(job['command'][0], str(self.old))
+        self.assertIn(str(self.old), job['hash_inputs'])
+        self.assertNotIn(str(self.new), job['hash_inputs'])
+
+    def test_a_passed_job_cannot_be_relabelled_with_another_default_engine(self):
+        plan = dict(self.plan, simulator=str(self.new), simulator_sha256=self.sha(self.new))
+        with self.assertRaises(ValueError):
+            self.save(plan)
+        self.assertFalse((self.source / 'result.json').exists())
+
+    def test_wrong_case_topology_elf_accelerator_counts_or_clocks_are_rejected(self):
+        variants = [dict(self.job, name='other-model-1sm'), dict(self.job, num_clusters=2),
+                    dict(self.job, expected_gemmini=dict(mx_loops=999)),
+                    dict(self.job, portable_workload='other-model-1sm'),
+                    dict(self.job, execution_mode='functional')]
+        wrong_elf = copy.deepcopy(self.job)
+        wrong_elf['command'][3] = str(self.new)
+        variants.append(wrong_elf)
+        wrong_configuration = copy.deepcopy(self.job)
+        wrong_configuration['prepared_timing_configuration_sha256'] = {'wrong-clocks.toml': '0' * 64}
+        variants.append(wrong_configuration)
+        for job in variants:
+            with self.subTest(job=job), self.assertRaises(ValueError):
+                self.save(job=job)
+        self.assertFalse((self.source / 'result.json').exists())
+
+    def test_changed_pinned_engine_is_rejected_before_result_creation(self):
+        self.old.write_bytes(b'changed simulator')
+        with self.assertRaises(ValueError):
+            self.save()
+        self.assertFalse((self.source / 'result.json').exists())
+
+    def test_clock_ratio_cannot_be_relabelled_by_a_new_plan(self):
+        with self.assertRaisesRegex(ValueError, 'clock ratio'):
+            self.save(dict(self.plan, source_ticks=2))
+        self.assertFalse((self.source / 'result.json').exists())
+
+
 class RuntimeLibraryBinding(unittest.TestCase):
     def test_each_job_loads_and_hashes_the_pinned_library_and_rejects_changes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -179,7 +282,10 @@ class RuntimeLibraryBinding(unittest.TestCase):
             (source / 'config-template.toml').write_text('[sim]\nreport="hbm.json"\n')
             attempt = source / 'attempt-001'
             attempt.mkdir()
-            plan = dict(bundle=str(root), simulator='simulator',
+            simulator = root / 'simulator'
+            simulator.write_bytes(b'simulator')
+            plan = dict(bundle=str(root), simulator=str(simulator),
+                        simulator_sha256=hashlib.sha256(simulator.read_bytes()).hexdigest(),
                         runtime_library=runtime_library_pin(library))
             job = make_job(root, plan, case, attempt)
             self.assertIn(str(library), job['hash_inputs'])
@@ -228,12 +334,15 @@ class TimingReportCoverage(unittest.TestCase):
             (root/'plan.json').write_text(json.dumps(dict(cases=cases,source_ticks=1,memory_ticks=1)))
             for case in cases:
                 d=root/case['name'];d.mkdir()
-            for case in cases[:8]:
+            for index, case in enumerate(cases[:8]):
                 (root/case['name']/'result.json').write_text(json.dumps(dict(
-                    global_finish_cycle=99,simulated_cycles=100,hbm_source_cycles_after_drain=101)))
+                    global_finish_cycle=99,simulated_cycles=100,hbm_source_cycles_after_drain=101,
+                    simulator=f'engine-{index % 2}',simulator_sha256=str(index % 2)*64)))
             partial=report(root)
             self.assertFalse(partial['passed'])
             self.assertEqual((partial['completed_cases'],partial['expected_cases']),(8,12))
+            self.assertEqual([row['simulator_sha256'] for row in partial['rows']],
+                             [str(index % 2)*64 for index in range(8)] + [None]*4)
             (root/'plan.json').write_text(json.dumps(dict(cases=cases[:8],source_ticks=1,memory_ticks=1)))
             legacy=report(root)
             self.assertTrue(legacy['passed'])
