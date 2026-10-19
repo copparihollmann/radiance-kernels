@@ -208,6 +208,20 @@ class DecoderCompilerTest(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 verify_native(target)
 
+    def test_four_clusters_keep_greedy_dependency_and_check_last_replica(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = generate('tinyllama', 1, 2, 1, 'greedy', Path(temporary),
+                              batch_clusters=4, warps=4)
+            self.assertIn('errors=0', verify_native(target))
+            source = target / 'native.cpp'
+            text = source.read_text()
+            self.assertIn('v_decode0_token_ids[i + 48u]', text)
+            needle = '  uint32_t errors = 0; float maximum = 0.0f;'
+            self.assertEqual(text.count(needle), 1)
+            source.write_text(text.replace(needle, '  v_decode0_token_ids[48] = -1;\n' + needle))
+            with self.assertRaises(subprocess.CalledProcessError):
+                verify_native(target)
+
     def test_two_cluster_buffers_and_second_output_are_checked(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = generate("tinyllama", 1, 2, 1, "greedy",

@@ -28,8 +28,8 @@ def gold_lines(path):
 
 def prepare(target: Path, frozen_data: Path | None = None):
     manifest = json.loads((target/'manifest.json').read_text())
-    if manifest['batch_clusters'] != 2 or not manifest['device_check_all_stages'] or manifest['generation'] != 'greedy':
-        raise ValueError('host stage checker requires the complete two-replica greedy source bundle')
+    if manifest['batch_clusters'] not in (2,4) or not manifest['device_check_all_stages'] or manifest['generation'] != 'greedy':
+        raise ValueError('host stage checker requires the complete two- or four-replica greedy source bundle')
     if frozen_data and gold_lines(target/'model_data.cpp') != gold_lines(frozen_data):
         raise ValueError('new format references differ from the frozen full-model reference')
     chunks = sorted(target.glob('verify_chunk_*.cpp'))
@@ -106,7 +106,7 @@ def prepare(target: Path, frozen_data: Path | None = None):
                  '\tcp $< $@\n')
     (target/'Makefile').write_text(makefile)
     reference_manifest = dict(schema='radiance-host-stage-references-v1',stages=manifest['stages'],
-        num_replicas=2,records=records,rtol=.005,atol=.0005,
+        num_replicas=manifest['batch_clusters'],records=records,rtol=.005,atol=.0005,
         frozen_data_sha256=sha(frozen_data)if frozen_data else None,
         scope='independentfrozenformatreferences; compare alltensorvalues read fromcompletedactualGPUruns, never inject into GPU RAM')
     (target/'host-stage-references.json').write_text(json.dumps(reference_manifest,indent=2)+'\n')
@@ -116,7 +116,7 @@ def prepare(target: Path, frozen_data: Path | None = None):
 
 def check(target: Path, result_dir: Path, clusters: int):
     refs = json.loads((target/'host-stage-references.json').read_text())
-    if clusters not in (1,2):
+    if clusters not in (1,2,4):
         raise ValueError('unsupported replica count')
     rows = []
     for cluster in range(clusters):

@@ -10,7 +10,7 @@ import sys
 import tempfile
 import unittest
 
-from full_model_timing import make_job, observe, process_snapshot, runtime_library_pin, summarize
+from full_model_timing import model_workloads, make_job, observe, process_snapshot, runtime_library_pin, summarize
 from run_e2e_queue import validate
 
 
@@ -201,6 +201,22 @@ class RuntimeLibraryBinding(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     runtime_library_pin(path)
 
+
+
+class TimingCoverage(unittest.TestCase):
+    def test_four_sm_timing_requires_every_model_and_rejects_duplicates(self):
+        models = ('tinyllama', 'deepseek_r1_distill_qwen_1_5b',
+                  'gemma_2_2b_it', 'smolvla_base')
+        rows = [dict(name=f'{model}-{n}sm', family='model', num_clusters=n)
+                for model in models for n in (1, 2, 4)]
+        self.assertEqual(len(model_workloads(dict(workloads=rows))), 12)
+        self.assertEqual(len(model_workloads(dict(workloads=[
+            row for row in rows if row['num_clusters'] != 4]))), 8)
+        for bad in (rows[:-1], rows + [rows[-1]],
+                    [dict(row, num_clusters=8) if row == rows[-1] else row for row in rows],
+                    [dict(row, name='unknown-4sm') if row == rows[-1] else row for row in rows]):
+            with self.assertRaises(ValueError):
+                model_workloads(dict(workloads=bad))
 
 if __name__ == '__main__':
     unittest.main()

@@ -325,7 +325,7 @@ def emit_stage(index: int, stage: dict, graph: stitch.Graph,
         from fallback_codegen import emit_call
         pure_body = body
         strides = {}
-        if batch_clusters == 2:
+        if batch_clusters > 1:
             for name in (*stage["reads"], stage["writes"]):
                 size = int(np.prod(graph.tensors[name]["shape"]))
                 strides[symbol(name)] = (size + 15) // 16 * 16 * 4
@@ -396,8 +396,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         raise ValueError(f"unsupported device optimization level: {device_opt}")
     if stages_per_object < 0:
         raise ValueError("stages per object cannot be negative")
-    if batch_clusters not in (1, 2):
-        raise ValueError("batch clusters must be one or two")
+    if batch_clusters not in (1, 2, 4):
+        raise ValueError("batch clusters must be one, two, or four")
     if prefill_logits not in ("all", "last"):
         raise ValueError("prefill logits must be all or last")
     if use_mx_vpu and prefill_logits != "all":
@@ -602,7 +602,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         dtype = "int32_t" if tensor["dtype"] == "int32" else "float"
         count = int(np.prod(tensor["shape"]))
         stride = (count + 15) // 16 * 16
-        if data is not None and batch_clusters == 2:
+        if data is not None and batch_clusters > 1:
             padded = np.zeros(stride, dtype=data.dtype)
             padded[:count] = data.ravel()
             data = np.tile(padded, batch_clusters)
@@ -796,14 +796,14 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     else:
         device_declarations = "\n".join(declarations)
     schedule = "\n".join(f"  mu_schedule(stage_{i}, "
-                         + ("(void*)(uintptr_t)replica" if batch_clusters == 2
+                         + ("(void*)(uintptr_t)replica" if batch_clusters > 1
                             else "nullptr") + f", {warps});\n"
                          + "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();"
                          for i in range(len(graph.stages)))
     if device_check_all_stages:
         def actual(out, count):
             return (f"{out}[i + replica * {((count + 15) // 16 * 16)}u]"
-                    if batch_clusters == 2 else f"{out}[i]")
+                    if batch_clusters > 1 else f"{out}[i]")
         float_verify = "\n".join(
             f"  errors = 0; uint32_t first_{index} = {count};\n"
             f"  for (uint32_t i = 0; i < {count}; ++i) "
@@ -824,7 +824,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         verify = "\n".join(
             f"  for (uint32_t i = 0; i < {count}; ++i) "
             f"if (!mu_close({out}[i"
-            + (f" + replica * {((count + 15) // 16 * 16)}u" if batch_clusters == 2
+            + (f" + replica * {((count + 15) // 16 * 16)}u" if batch_clusters > 1
                else "") + f"], {gold}[i], 5e-3f, 5e-4f)) ++errors;"
             for out, gold, count in device_checks)
     if stage_files and device_check_all_stages:
@@ -855,17 +855,17 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                       "#include \"kernel_verify.h\"\n"
                       + "\n".join(f"extern __global {dtype} {name}[];"
                                   for name, dtype in sorted(externs.items()))
-                      + f"\nbool verify_chunk_{first // stages_per_object:03d}({'uint32_t replica' if batch_clusters == 2 else ''}) {{\n"
+                      + f"\nbool verify_chunk_{first // stages_per_object:03d}({'uint32_t replica' if batch_clusters > 1 else ''}) {{\n"
                       "  uint32_t errors = 0;\n" + "\n".join(checks)
                       + "\n  return true;\n}\n")
             write_if_changed(target / filename, source)
         device_source_files.extend(verifier_files)
         device_declarations = ""
         verify = "\n".join(
-            f"  if (!verify_chunk_{index:03d}({'replica' if batch_clusters == 2 else ''})) return 0;"
+            f"  if (!verify_chunk_{index:03d}({'replica' if batch_clusters > 1 else ''})) return 0;"
             for index in range(len(verifier_files)))
         verify_prototypes = "\n".join(
-            f"bool verify_chunk_{index:03d}({'uint32_t' if batch_clusters == 2 else ''});"
+            f"bool verify_chunk_{index:03d}({'uint32_t' if batch_clusters > 1 else ''});"
             for index in range(len(verifier_files)))
     else:
         verify_prototypes = ""
@@ -874,7 +874,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
                      else "\n".join(stage_src))
     cpp = ("#include <mu_intrinsics.h>\n#include <mu_schedule.h>\n"
            "#include <stdint.h>\n#include \"kernel_verify.h\"\n"
-           + ("#include \"model_cluster_id.h\"\n" if batch_clusters == 2 else "") +
+           + ("#include \"model_cluster_id.h\"\n" if batch_clusters > 1 else "") +
            "#include \"pipeline_math.hpp\"\n"
            + ("#include \"pipeline_moe.hpp\"\n" if uses_moe else "")
            + ("#include \"pipeline_select_last.hpp\"\n"
@@ -889,8 +889,8 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + device_declarations + "\n" + device_stages + "\n" + verify_prototypes +
            "\nint main() {\n"
            + ("  const uint32_t replica = model_chain_cluster_id();\n"
-              if batch_clusters == 2 else "") + schedule +
-           ("\n  if (vx_core_id() != 0) { for (;;) {} }\n" if batch_clusters == 2
+              if batch_clusters > 1 else "") + schedule +
+           ("\n  if (vx_core_id() != 0) { for (;;) {} }\n" if batch_clusters > 1
             else "\n  if (mu_hart_id() != 0) { for (;;) {} }\n") +
            "  uint32_t errors = 0;\n" + verify +
            "\n  mu_tohost(errors ? ((errors << 1) | 1u) : 0u);\n  return 0;\n}\n")
@@ -898,7 +898,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     native_check_source = "\n".join(
         f"  for (uint32_t i = 0; i < {count}; ++i) {{\n"
         f"    const float delta = __builtin_fabsf({out}[i"
-        + (f" + {replica * ((count + 15) // 16 * 16)}u" if batch_clusters == 2
+        + (f" + {replica * ((count + 15) // 16 * 16)}u" if batch_clusters > 1
            else "") + f"] - {gold}[i]);\n"
         f"    if (delta > maximum) maximum = delta;\n"
         f"    if (delta > {literal(native_rtol)} * __builtin_fabsf({gold}[i]) + {literal(native_atol)}) ++errors;\n"
@@ -908,7 +908,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
     native_int_check_source = "\n".join(
         f"  for (uint32_t i = 0; i < {count}; ++i) "
         f"if ({out}[i"
-        + (f" + {replica * ((count + 15) // 16 * 16)}u" if batch_clusters == 2
+        + (f" + {replica * ((count + 15) // 16 * 16)}u" if batch_clusters > 1
            else "") + f"] != {gold}[i]) ++errors;"
         for replica in range(batch_clusters)
         for out, gold, count in integer_checks)
@@ -1205,8 +1205,8 @@ def main() -> None:
                         help="weights-image.json from export_decoder_weights.py")
     parser.add_argument("--stage-limit", type=int,
                         help="compile only the first N stages as a checkpoint probe")
-    parser.add_argument("--batch-clusters", type=int, choices=(1, 2), default=1,
-                        help="independent identical requests on one or two clusters")
+    parser.add_argument("--batch-clusters", type=int, choices=(1, 2, 4), default=1,
+                        help="independent identical requests on one, two, or four clusters")
     parser.add_argument("--warps", type=int, choices=(1, 2, 4), default=1,
                         help="scheduled warps per decoder stage; core-0 ownership is retained")
     parser.add_argument("--token-ids", type=int, nargs="+",

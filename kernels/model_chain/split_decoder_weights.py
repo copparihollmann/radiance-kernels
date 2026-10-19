@@ -32,8 +32,8 @@ def image_segments(manifest: dict) -> list[dict]:
 
 def verify_image_placement(elf: Path, images: list[dict], num_clusters: int = 1) -> None:
     """Reject preloads that overwrite ELF segments, stacks, or one another."""
-    if num_clusters not in (1, 2):
-        raise ValueError('placement check supports one or two Radiance clusters')
+    if num_clusters not in (1, 2, 4):
+        raise ValueError('placement check supports one, two, or four Radiance clusters')
     with elf.open("rb") as stream:
         header = stream.read(52)
         if (len(header) != 52 or header[:7] != b"\x7fELF\x01\x01\x01"):

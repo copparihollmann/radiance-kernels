@@ -4,7 +4,7 @@ from split_decoder_weights import image_segments
 
 
 def plan_replicas(arena_bytes, scratch_bytes, replicas=2, base=0x02000000):
-    if replicas not in (1, 2) or arena_bytes <= 0 or scratch_bytes <= 0:
+    if replicas not in (1, 2, 4) or arena_bytes <= 0 or scratch_bytes <= 0:
         raise ValueError('replicas require positive activation and scratch sizes')
     if base < 0x100000 or base % 4096:
         raise ValueError('replica pool must be page aligned above reserved low memory')

@@ -92,6 +92,29 @@ class CompleteOutputChecks(unittest.TestCase):
             second.write_bytes(bytes.fromhex('00000040'))  # FP32 2.0
             self.assertFalse(validate(job,log,0)['passed'])
 
+    def test_fourth_sm_missing_or_wrong_stage_output_cannot_pass(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
+            d=Path(folder);manifest=d/'manifest.json'
+            manifest.write_text(json.dumps(dict(host_stage_checks=True)))
+            ref=d/'gold.bin';ref.write_bytes(bytes.fromhex('0000803f'))
+            (d/'host-stage-references.json').write_text(json.dumps(dict(stages=1,rtol=.005,atol=.0005,
+                records=[dict(symbol='output',dtype='float32',elements=1,path=str(ref),
+                              sha256=hashlib.sha256(ref.read_bytes()).hexdigest())])))
+            journal=d/'progress.jsonl';journal.write_text(''.join(json.dumps(row)+'\n'for row in (
+                *[dict(event='stage_entry',cluster=c)for c in range(4)],dict(event='finish',passed=True))))
+            (d/'tensors').mkdir()
+            for c in range(4):(d/'tensors'/f'{c}-output.bin').write_bytes(ref.read_bytes())
+            job=dict(kind='isa',num_clusters=4,expected_stages=1,progress=str(journal),
+                     model_manifest=str(manifest),host_stage_result_dir=str(d))
+            log=''.join(f'cluster {c} isa-test passed with tohost=0\n'for c in range(4))
+            self.assertTrue(validate(job,log,0)['passed'])
+            last=d/'tensors/3-output.bin';last.unlink()
+            self.assertFalse(validate(job,log,0)['passed'])
+            last.write_bytes(bytes.fromhex('00000040'))
+            self.assertFalse(validate(job,log,0)['passed'])
+            last.write_bytes(ref.read_bytes())
+            self.assertFalse(validate(job,log.replace('cluster 3','cluster 2'),0)['passed'])
+
     def test_native_decoder_needs_every_replica_check_and_greedy_token(self):
         job = dict(kind='native', model='tinyllama', expected_stages=41,
                    num_replicas=2, reference_generated_token_ids=[61])

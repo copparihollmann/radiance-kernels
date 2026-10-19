@@ -19,6 +19,13 @@ The model cases include every layer and the frozen test inputs. The decoders
 use their recorded short prefill/decode sequences; SmolVLA includes the camera
 inputs and full denoising loop. The two-SM model cases run two independent
 replicas. Four-SM workloads and model sharding are not included.
+Model computation stays on core 0; core 1 waits. The v3 decoder binaries
+schedule one warp per stage, while SmolVLA schedules four. The newer decoder
+candidates also schedule four warps. The current buffer handoff does not
+provide coherence between the private core caches. Replica runs exercise
+throughput, not single-inference scaling.
+Four-SM generation and qualification are being added in a separate revision;
+the v3 archives keep their existing one-/two-SM contents.
 
 For STREAM, Spatter and xRAGE, names ending in `--1` or `--2` are the original
 one-SM controls with one or two logical partitions. Names ending in `--2sm`

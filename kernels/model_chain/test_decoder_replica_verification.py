@@ -11,10 +11,16 @@ from compile_decoder import generate
 
 class ReplicaVerifierTests(unittest.TestCase):
     def test_second_replica_float_and_token_corruption_are_detected(self):
+        self.check_replica_verifiers(2)
+
+    def test_fourth_replica_float_and_token_corruption_are_detected(self):
+        self.check_replica_verifiers(4)
+
+    def check_replica_verifiers(self, replicas):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             target = generate('tinyllama', 1, 2, 1, 'greedy', root,
-                              batch_clusters=2, device_check_all_stages=True,
+                              batch_clusters=replicas, device_check_all_stages=True,
                               stages_per_object=20)
             # Only replace the hardware tohost transport. The actual generated
             # verifier functions, tensor layouts and comparisons run unchanged.
@@ -52,23 +58,25 @@ inline bool mu_close(float a,float b,float r,float t){
                     size,stride = int(size),int(stride)
                     integer = f'extern __global int32_t {out}[];' in source
                     scalar = ctypes.c_int32 if integer else ctypes.c_float
-                    actual = (scalar*(2*stride)).in_dll(lib,out)
+                    actual = (scalar*(replicas*stride)).in_dll(lib,out)
                     expected = (scalar*size).in_dll(lib,gold)
-                    for replica in range(2):
+                    for replica in range(replicas):
                         for index in range(size):
                             actual[replica*stride+index] = expected[index]
                     (integers if integer else floats).append((actual,stride))
             self.assertTrue(floats and integers)
-            self.assertTrue(lib.run_verify(0))
-            self.assertTrue(lib.run_verify(1))
+            for replica in range(replicas):
+                self.assertTrue(lib.run_verify(replica))
             for actual,stride in (floats[0],integers[0]):
-                old = actual[stride]
-                actual[stride] = old+10000
-                self.assertTrue(lib.run_verify(0))
-                self.assertFalse(lib.run_verify(1))
+                last = (replicas - 1) * stride
+                old = actual[last]
+                actual[last] = old+10000
+                for replica in range(replicas - 1):
+                    self.assertTrue(lib.run_verify(replica))
+                self.assertFalse(lib.run_verify(replicas - 1))
                 self.assertNotEqual(ctypes.c_uint32.in_dll(lib,'last_tohost').value,0)
-                actual[stride] = old
-                self.assertTrue(lib.run_verify(1))
+                actual[last] = old
+                self.assertTrue(lib.run_verify(replicas - 1))
 
 
 if __name__ == '__main__':

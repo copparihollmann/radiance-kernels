@@ -7,8 +7,8 @@ that destination's owner. No cross-cluster barrier is needed between owners.
 
 
 def kernel_source(family: str, clusters: int = 2) -> str:
-    if family not in ('stream', 'spatter') or clusters != 2:
-        raise ValueError('qualified launcher supports STREAM/Spatter on two SMs')
+    if family not in ('stream', 'spatter') or clusters not in (2, 4):
+        raise ValueError('launcher supports STREAM/Spatter on two or four SMs')
     header = 'stream_ops.hpp' if family == 'stream' else 'spatter_body.hpp'
     return f'''#include <mu_intrinsics.h>
 #include <mu_schedule.h>

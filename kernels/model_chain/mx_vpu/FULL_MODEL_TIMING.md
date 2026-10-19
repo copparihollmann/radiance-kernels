@@ -3,7 +3,9 @@
 The full-model functional results use pure fallback helpers. Their ticks do not
 measure Muon computation or HBM latency. This runner uses the same qualified
 ELFs and input images with helpers disabled, core timing enabled, and coupled
-Ramulator HBM. It covers all four models on one and two SMs.
+Ramulator HBM. It covers all four models on one and two SMs. A bundle with four-SM entries
+adds four more cases; every model must be present at each declared SM count.
+Generation support alone does not qualify a four-SM bundle.
 
 From the managed task directory:
 
@@ -64,7 +66,7 @@ and final performance summaries retain stage cycles and memory/stall statistics.
 Each completed case has a `result.json` with its stage intervals and major
 sections. Intervals run from one core-0/warp-0 stage entry to the next and include
 launch and barrier gaps. The last interval includes final checking and the
-global completion tail. Two-SM timelines overlap: do not add them together or
+global completion tail. Multiple-SM timelines overlap: do not add them together or
 interpret them as isolated kernel-body measurements. Loading precedes cycle zero;
 host process wall time includes loading, simulation and checking.
 

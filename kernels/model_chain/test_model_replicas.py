@@ -56,6 +56,22 @@ class ReplicaTests(unittest.TestCase):
             with self.subTest(broken=broken[-100:]):
                 self.assertFalse(validate_log(broken, 2, 3673, True, True)['passed'])
 
+    def test_four_sm_pool_fits_below_program_and_reserves_four_stacks(self):
+        plan = plan_replicas(47193024, 262144, replicas=4)
+        self.assertEqual(plan['bytes'], 4 * plan['stride'])
+        self.assertLess(plan['base'] + plan['bytes'], 0x10000000)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'program.elf'
+            header = bytearray(52)
+            header[:7] = b'\x7fELF\x01\x01\x01'
+            struct.pack_into('<I', header, 28, 52)
+            struct.pack_into('<HH', header, 42, 32, 1)
+            path.write_bytes(header + struct.pack('<8I', 1, 0, 0x10000000, 0, 256, 256, 7, 4096))
+            image = dict(segments=[dict(gpu_base_address=0x7E900000, image_size_bytes=4096)])
+            verify_image_placement(path, [image], num_clusters=2)
+            with self.assertRaisesRegex(ValueError, 'warp stacks'):
+                verify_image_placement(path, [image], num_clusters=4)
+
     def test_pool_rejects_image_overlap_and_overflow(self):
         plan = plan_replicas(47193024, 262144)
         self.assertLess(plan['base'] + plan['bytes'], 0x10000000)
@@ -70,7 +86,13 @@ class ReplicaTests(unittest.TestCase):
                 plan_replicas(*args)
 
     def test_emitted_attention_uses_separate_context_and_scratch(self):
-        plan = plan_replicas(256, 32 * 1024 * 4)
+        self.check_attention_replicas(2)
+
+    def test_four_sm_attention_uses_disjoint_contexts_and_guards(self):
+        self.check_attention_replicas(4)
+
+    def check_attention_replicas(self, replicas):
+        plan = plan_replicas(256, 32 * 1024 * 4, replicas=replicas)
         graph = types.SimpleNamespace(tensors={})
         allocation = {name: dict(offset_bytes=i*64) for i, name in enumerate(('q', 'k', 'v', 'out'))}
         stage = dict(id='replica_attention', op='bidirectional_mha',
@@ -93,7 +115,7 @@ class ReplicaTests(unittest.TestCase):
                 run = ctypes.CDLL(str(lib)).run
                 run.argtypes = [ctypes.c_void_p]
                 pool = np.full(plan['bytes'], 0xa5, np.uint8)
-                for replica in range(2):
+                for replica in range(replicas):
                     start = replica * plan['stride'] + plan['guard_bytes']
                     body = pool[start:start+plan['body_bytes']]
                     body[:] = 0
@@ -103,8 +125,9 @@ class ReplicaTests(unittest.TestCase):
                 untouched = pool[plan['stride']:].copy()
                 run(pool.ctypes.data + plan['guard_bytes'])
                 np.testing.assert_array_equal(pool[plan['stride']:], untouched)
-                run(pool.ctypes.data + plan['stride'] + plan['guard_bytes'])
-                for replica in range(2):
+                for replica in range(1, replicas):
+                    run(pool.ctypes.data + replica * plan['stride'] + plan['guard_bytes'])
+                for replica in range(replicas):
                     start = replica * plan['stride'] + plan['guard_bytes']
                     actual = pool[start+192:start+240].view('f4')
                     np.testing.assert_allclose(actual, (replica+1)*0.75, atol=1e-6, rtol=1e-6)

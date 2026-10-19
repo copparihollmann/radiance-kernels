@@ -49,6 +49,20 @@ def check_runtime_library(plan):
     return pin
 
 
+def model_workloads(manifest):
+    rows = [row for row in manifest['workloads'] if row['family'] == 'model']
+    clusters = {row['num_clusters'] for row in rows}
+    if clusters not in ({1, 2}, {1, 2, 4}):
+        raise ValueError('expected one/two SMs, optionally with four SMs')
+    models = ('tinyllama', 'deepseek_r1_distill_qwen_1_5b',
+              'gemma_2_2b_it', 'smolvla_base')
+    expected = {(f'{model}-{count}sm', count) for model in models for count in clusters}
+    actual = [(row['name'], row['num_clusters']) for row in rows]
+    if len(actual) != len(expected) or set(actual) != expected:
+        raise ValueError('expected every full model at every declared SM count')
+    return rows
+
+
 def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, memory_ticks,
             runtime_library=None):
     bundle, cyclotron, simulator, output = [p.resolve() for p in
@@ -57,9 +71,7 @@ def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, mem
         raise ValueError('cycle limit and clock periods must be positive')
     runtime_pin = runtime_library_pin(runtime_library)
     manifest = json.loads((bundle / 'manifest.json').read_text())
-    rows = [row for row in manifest['workloads'] if row['family'] == 'model']
-    if len(rows) != 8 or {row['num_clusters'] for row in rows} != {1, 2}:
-        raise ValueError('expected all four models at one and two SMs')
+    rows = model_workloads(manifest)
     output.mkdir(parents=True, exist_ok=False)
     configurations = [cyclotron / 'config/timing' / name for name in [
         'radiance/gmem.toml', 'radiance/icache.toml', 'lsu_scheduler.toml',

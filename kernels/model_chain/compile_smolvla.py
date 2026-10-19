@@ -284,8 +284,8 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
              column_start: int = 0, column_count: int | None = None,
              original_golden: Path | None = None, clusters: int = 1,
              fallback_call_abi: bool = False) -> Path:
-    if clusters not in (1, 2):
-        raise ValueError("clusters must be one or two")
+    if clusters not in (1, 2, 4):
+        raise ValueError("clusters must be one, two, or four")
     if execution_backend not in ("muon", "rakanic_mx_vpu"):
         raise ValueError("unknown execution backend")
     use_mx_vpu = execution_backend == "rakanic_mx_vpu"
@@ -448,9 +448,9 @@ def generate(weight_image: Path, out_root: Path, stage_limit: int | None = None,
                      f"MU_NUM_THREADS * {warps} * "
                      f"{'MU_NUM_CORES * ' if all_cores else ''}1024")
     replicas = None
-    if clusters == 2:
+    if clusters > 1:
         threads = 16 * warps * (2 if all_cores else 1)
-        replicas = plan_replicas(storage['arena_bytes'], threads * 1024 * 4)
+        replicas = plan_replicas(storage['arena_bytes'], threads * 1024 * 4, replicas=clusters)
         check_images(replicas, [image, input_manifest, stage_golden_manifest])
     data = ("#include <mu_intrinsics.h>\n#include <stdint.h>\n"
             + (f"alignas(64) __global unsigned char v_arena[{storage['arena_bytes']}] = {{0}};\n"
@@ -746,7 +746,7 @@ def main() -> None:
     parser.add_argument("--stage-golden-image", type=Path)
     parser.add_argument("--stage-golden-sha256")
     parser.add_argument("--warps", type=int, default=1)
-    parser.add_argument("--clusters", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--clusters", type=int, choices=(1, 2, 4), default=1)
     parser.add_argument("--fallback-call-abi", action="store_true",
                         help="explicit pure-helper calls; unassisted ISA remains the default execution")
     parser.add_argument("--all-cores", action="store_true")
