@@ -10,6 +10,10 @@ attention/activation tensors before reporting its own printBuf status.
 `prepare_hbm.py` launches and waits for both clusters. This mapping tests
 two independent inferences; it does not split a single inference across SMs.
 
+Decoder stages default to one scheduled warp. `--warps 2` and `--warps 4`
+allow more warps to share the stage's work on core 0; the manifest records
+`scheduled_warps_per_stage`. This setting is independent of the SM count.
+
 The first [two-cluster TinyLlama candidate](evaluation/tinyllama-int8-batch2-hbm-candidate.json)
 contains all 1,133 stages per request and the same pinned INT8 weight image
 as the one-cluster build. Both generated C++ schedules pass 135 selected

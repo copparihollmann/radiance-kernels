@@ -369,8 +369,10 @@ def generate(model: str, layers: int, prefill: int, decode: int,
              native_rtol: float = 1e-4,
              native_atol: float = 1e-5,
              execution_backend: str = "muon", mx_linear_policy: str = "all",
-             fallback_call_abi: bool = False) -> Path:
+             fallback_call_abi: bool = False, warps: int = 1) -> Path:
     from build_fallback_plugin import CALL_SOURCES, HEADERS
+    if warps not in (1, 2, 4):
+        raise ValueError("warps must be one of 1, 2, or 4")
     if execution_backend not in ("muon", "rakanic_mx_vpu"):
         raise ValueError("unknown execution backend")
     use_mx_vpu = execution_backend == "rakanic_mx_vpu"
@@ -795,7 +797,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         device_declarations = "\n".join(declarations)
     schedule = "\n".join(f"  mu_schedule(stage_{i}, "
                          + ("(void*)(uintptr_t)replica" if batch_clusters == 2
-                            else "nullptr") + ", 1);\n"
+                            else "nullptr") + f", {warps});\n"
                          + "  mu_barrier(0, MU_NUM_CORES);\n  mu_fence();"
                          for i in range(len(graph.stages)))
     if device_check_all_stages:
@@ -883,7 +885,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
            + ("#include \"pipeline_packed.hpp\"\n" if uses_packed else "")
            + ("#include \"pipeline_tied.hpp\"\n" if uses_tied else "")
            + ("#include \"pipeline_fp32_tied.hpp\"\n" if uses_fp32_tied else "")
-           + "extern \"C\" uint32_t __mu_num_warps = 1;\n"
+           + f"extern \"C\" uint32_t __mu_num_warps = {warps};\n"
            + device_declarations + "\n" + device_stages + "\n" + verify_prototypes +
            "\nint main() {\n"
            + ("  const uint32_t replica = model_chain_cluster_id();\n"
@@ -1028,6 +1030,7 @@ def generate(model: str, layers: int, prefill: int, decode: int,
         "native_check_tolerance": {"rtol": native_rtol, "atol": native_atol}
         if not external else None,
         "batch_clusters": batch_clusters,
+        "scheduled_warps_per_stage": warps,
         "verified_tensors": (
             [stage["id"] for stage in graph.stages
              if graph.tensors[stage["writes"]]["dtype"] != "int32"]
@@ -1204,6 +1207,8 @@ def main() -> None:
                         help="compile only the first N stages as a checkpoint probe")
     parser.add_argument("--batch-clusters", type=int, choices=(1, 2), default=1,
                         help="independent identical requests on one or two clusters")
+    parser.add_argument("--warps", type=int, choices=(1, 2, 4), default=1,
+                        help="scheduled warps per decoder stage; core-0 ownership is retained")
     parser.add_argument("--token-ids", type=int, nargs="+",
                         help="prefill IDs; append decode IDs for teacher-forced mode")
     parser.add_argument("--verify-native", action="store_true")
@@ -1218,7 +1223,8 @@ def main() -> None:
                       args.weight_image, args.stage_limit, args.token_ids,
                       args.batch_clusters, args.prefill_logits,
                       args.control_sliding_window, args.native_rtol,
-                      args.native_atol, args.execution_backend, args.mx_linear_policy, args.fallback_call_abi)
+                      args.native_atol, args.execution_backend, args.mx_linear_policy,
+                      args.fallback_call_abi, args.warps)
     if args.verify_native and args.weight_image:
         parser.error("native C++ checking is not supported for external weight images")
     if args.verify_native or (args.build and args.weight_image is None):
