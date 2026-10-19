@@ -33,11 +33,29 @@ def toml_records(name, records):
         for row in records) + ']\n'
 
 
-def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, memory_ticks):
+def runtime_library_pin(path):
+    if path is None:
+        return None
+    path = Path(path).parent.resolve() / Path(path).name
+    if path.name != 'libramulator.so' or not path.is_file():
+        raise ValueError('runtime library must be an existing libramulator.so')
+    return dict(path=str(path), sha256=digest(path))
+
+
+def check_runtime_library(plan):
+    pin = plan.get('runtime_library')
+    if pin and runtime_library_pin(Path(pin['path'])) != pin:
+        raise ValueError('runtime library changed after preparation')
+    return pin
+
+
+def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, memory_ticks,
+            runtime_library=None):
     bundle, cyclotron, simulator, output = [p.resolve() for p in
         (bundle, cyclotron, simulator, output)]
     if min(cycle_limit, source_ticks, memory_ticks) <= 0:
         raise ValueError('cycle limit and clock periods must be positive')
+    runtime_pin = runtime_library_pin(runtime_library)
     manifest = json.loads((bundle / 'manifest.json').read_text())
     rows = [row for row in manifest['workloads'] if row['family'] == 'model']
     if len(rows) != 8 or {row['num_clusters'] for row in rows} != {1, 2}:
@@ -54,6 +72,8 @@ def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, mem
         'simulator': str(simulator), 'simulator_sha256': digest(simulator),
         'cycle_limit': cycle_limit, 'source_ticks': source_ticks,
         'memory_ticks': memory_ticks, 'hardware_calibrated': False, 'cases': []}
+    if runtime_pin:
+        metadata['runtime_library'] = runtime_pin
     summary_ref = manifest['evidence']['all_full_models']
     summary_path = local(bundle, summary_ref['path'])
     if digest(summary_path) != summary_ref['sha256']:
@@ -112,6 +132,7 @@ def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, mem
 
 
 def make_job(root, plan, case, attempt):
+    runtime = check_runtime_library(plan)
     source = root / case['name']
     row = json.loads((source / 'workload.json').read_text())
     bundle = Path(plan['bundle'])
@@ -127,7 +148,7 @@ def make_job(root, plan, case, attempt):
     path.write_text(config)
     inputs = [row['device_elf'], *row['loads']]
     inputs += [check['reference'] for check in row['checks'] if 'reference' in check]
-    return dict(name=case['name'], kind='isa', execution_mode='coupled_timing_hbm',
+    job = dict(name=case['name'], kind='isa', execution_mode='coupled_timing_hbm',
         num_clusters=case['num_clusters'], expected_stages=case['expected_stages'],
         expected_stage_order=case['expected_stage_order'], cwd=str(attempt),
         expected_gemmini=case['expected_gemmini'],
@@ -141,6 +162,10 @@ def make_job(root, plan, case, attempt):
             str(source / 'model.json'), *dict.fromkeys(str(local(bundle, ref['path'])) for ref in inputs)],
         env={'CYCLOTRON_PERF_LOG_DIR': str(attempt / 'performance_logs'),
              'CYCLOTRON_GRAPH_LOG': '0'})
+    if runtime:
+        job['hash_inputs'].append(runtime['path'])
+        job['env']['LD_LIBRARY_PATH'] = str(Path(runtime['path']).parent)
+    return job
 
 
 def summarize(journal, case):
@@ -204,6 +229,8 @@ def save_timing(root, plan, case, queue_path):
     if timing['simulated_cycles'] != timing['global_finish_cycle'] + 1:
         raise ValueError('console cycle count and completed journal disagree')
     timing['hbm_source_cycles_after_drain'] = json.loads(Path(job['hbm_report']).read_text())['source_cycles']
+    if plan.get('runtime_library'):
+        timing['runtime_library'] = plan['runtime_library']
     atomic_json(root / case['name'] / 'result.json', timing)
 
 
@@ -214,6 +241,7 @@ def run(root, tmpdir, names):
         raise ValueError('simulator changed after preparation')
     if digest(Path(plan['bundle']) / 'manifest.json') != plan['manifest_sha256']:
         raise ValueError('bundle changed after preparation')
+    check_runtime_library(plan)
     lock = (root / 'run.lock').open('a')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     # A killed supervisor can leave its queue or simulator alive. Never start
@@ -410,6 +438,8 @@ def main():
     prep.add_argument('--cycle-limit', type=int, default=10**13)
     prep.add_argument('--source-ticks', type=int, default=1)
     prep.add_argument('--memory-ticks', type=int, default=1)
+    prep.add_argument('--runtime-library', type=Path,
+                      help='pin a durable libramulator.so and set its loader directory for each job')
     execute = sub.add_parser('run')
     execute.add_argument('--root', type=Path, required=True)
     execute.add_argument('--tmpdir', type=Path, required=True)
@@ -422,7 +452,7 @@ def main():
     args = parser.parse_args()
     if args.command == 'prepare':
         plan = prepare(args.bundle, args.cyclotron, args.simulator, args.output,
-            args.cycle_limit, args.source_ticks, args.memory_ticks)
+            args.cycle_limit, args.source_ticks, args.memory_ticks, args.runtime_library)
         print(json.dumps(dict(prepared=len(plan['cases']), output=str(args.output))))
     elif args.command == 'run':
         def stop(signum, frame):

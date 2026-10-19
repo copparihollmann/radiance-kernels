@@ -10,7 +10,7 @@ import sys
 import tempfile
 import unittest
 
-from full_model_timing import observe, process_snapshot, summarize
+from full_model_timing import make_job, observe, process_snapshot, runtime_library_pin, summarize
 from run_e2e_queue import validate
 
 
@@ -160,6 +160,46 @@ class TimingObservation(unittest.TestCase):
         self.assertEqual(status['stage_entries_observed'], 18)
         self.assertEqual(status['current_cycle'], 101)
         self.assertEqual(status['completed_cases'], 0)
+
+
+class RuntimeLibraryBinding(unittest.TestCase):
+    def test_each_job_loads_and_hashes_the_pinned_library_and_rejects_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            library = root / 'runtime/libramulator.so'
+            library.parent.mkdir()
+            library.write_bytes(b'original runtime')
+            case = dict(name='model-1sm', num_clusters=1, expected_stages=1,
+                        expected_stage_order=[0], expected_gemmini={},
+                        prepared_timing_configuration_sha256={})
+            source = root / case['name']
+            source.mkdir()
+            (source / 'workload.json').write_text(json.dumps(dict(
+                device_elf=dict(path='device.elf'), loads=[], checks=[])))
+            (source / 'config-template.toml').write_text('[sim]\nreport="hbm.json"\n')
+            attempt = source / 'attempt-001'
+            attempt.mkdir()
+            plan = dict(bundle=str(root), simulator='simulator',
+                        runtime_library=runtime_library_pin(library))
+            job = make_job(root, plan, case, attempt)
+            self.assertIn(str(library), job['hash_inputs'])
+            self.assertEqual(job['env']['LD_LIBRARY_PATH'], str(library.parent))
+            library.write_bytes(b'changed runtime')
+            second = source / 'attempt-002'
+            second.mkdir()
+            with self.assertRaisesRegex(ValueError, 'runtime library changed'):
+                make_job(root, plan, case, second)
+            self.assertFalse((second / 'cyclotron.toml').exists())
+
+    def test_missing_or_misnamed_library_cannot_be_pinned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ['libramulator.so', 'wrong-name.so']:
+                path = root / name
+                if name != 'libramulator.so':
+                    path.write_bytes(b'runtime')
+                with self.assertRaises(ValueError):
+                    runtime_library_pin(path)
 
 
 if __name__ == '__main__':

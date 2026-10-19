@@ -12,6 +12,7 @@ python3 radiance-kernels/kernels/model_chain/mx_vpu/full_model_timing.py prepare
   --bundle artifacts/fpga-handoff-v3 \
   --cyclotron chipyard/generators/radiance/cyclotron \
   --simulator artifacts/e2e-hbm-audit/cyclotron-progress-v8 \
+  --runtime-library artifacts/e2e-hbm-audit/runtime-dependency-backup/libramulator.so \
   --output artifacts/e2e-hbm-audit/full-model-timing-v1
 
 python3 radiance-kernels/kernels/model_chain/mx_vpu/full_model_timing.py run \
@@ -30,6 +31,12 @@ default cycle limit is 10 trillion; reaching it is a failed attempt, never a
 completed result. Clock periods default to the documented 1:1 software control.
 Set `--source-ticks` and `--memory-ticks` when preparing a different clock ratio.
 These settings alone do not calibrate the simulator against a board.
+
+`--runtime-library` pins the supplied `libramulator.so`, adds its hash to every
+job, and sets the loader directory explicitly. Keep this copy outside temporary
+build directories for long runs. Preparation, resumed runs and new case launches
+reject a changed library. Omitting the option retains the simulator's normal
+loader search path.
 
 Run one heavy simulator at a time, including other control queues. The runner
 locks its own plan directory. It resumes completed cases by checking their
