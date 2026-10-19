@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import time
 import tomllib
 
@@ -130,6 +131,15 @@ def validate(job, log, returncode):
             counts = {cluster: sum(x['cluster'] == cluster for x in entries) for cluster in range(clusters)}
             result['stage_entries_per_cluster'] = counts
             result['complete_stage_count_pass'] = all(count == job['expected_stages'] for count in counts.values())
+        if job.get('expected_stage_order') is not None:
+            orders = {cluster: [] for cluster in range(clusters)}
+            for entry in entries:
+                indices = {int(index) for name in entry.get('symbols', [])
+                           for index in re.findall(r'stage_(\d+)(?:Pv|$)', name)}
+                orders.setdefault(entry['cluster'], []).append(
+                    next(iter(indices)) if len(indices) == 1 else None)
+            result['stage_order_pass'] = (set(orders) == set(range(clusters)) and
+                all(order == job['expected_stage_order'] for order in orders.values()))
         # Entries prove execution reached an address, not that a stage completed.
         result['journal_scope'] = 'core 0 warp 0 retired function entries; acceptance uses final ELF verification'
         if job.get('model_manifest'):
@@ -145,6 +155,13 @@ def validate(job, log, returncode):
                     result['host_stage_checks'] = checks
     else:
         raise ValueError('Unknown checker: ' + job['kind'])
+    if job.get('portable_bundle'):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from workload_bundle import check_outputs
+        checks = check_outputs(Path(job['portable_bundle']), job['portable_workload'],
+                               Path(job['portable_results']))
+        result['portable_outputs_pass'] = checks['passed']
+        result['portable_outputs'] = checks
     if job.get('execution_mode') == 'coupled_timing_hbm':
         config = (tomllib.loads(Path(job['command'][1]).read_text())
                   if job['kind'] != 'native' and job.get('command') else {})
