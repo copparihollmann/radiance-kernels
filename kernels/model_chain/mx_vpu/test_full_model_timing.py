@@ -195,7 +195,8 @@ class CompletedTimingIdentity(unittest.TestCase):
             json.dumps(dict(event='stage_entry', cluster=0, cycle=10, symbols=['_Z7stage_0Pvjjj'])) + '\n' +
             json.dumps(dict(event='finish', cycle=40, passed=True)) + '\n')
         self.hbm = self.attempt / 'hbm.json'
-        self.hbm.write_text(json.dumps(dict(source_cycles=43, source_ticks_per_period=1, memory_ticks_per_period=1)))
+        self.hbm.write_text(json.dumps(dict(source_cycles=43, source_ticks_per_period=1, memory_ticks_per_period=1,
+                                           line_bytes=32, sets=512, ways=8)))
         self.plan = dict(bundle=str(self.root), simulator=str(self.old),
                          simulator_sha256=self.sha(self.old), source_ticks=1, memory_ticks=1)
         self.job = dict(name=self.case['name'], kind='isa', execution_mode='coupled_timing_hbm',
@@ -219,6 +220,9 @@ class CompletedTimingIdentity(unittest.TestCase):
         result = json.loads((self.source / 'result.json').read_text())
         self.assertEqual(result['simulator_sha256'], self.sha(self.old))
         self.assertEqual(result['simulator'], str(self.old))
+        self.assertFalse(result['memory_model']['private_data_caches'])
+        self.assertEqual(result['memory_model']['shared_cache'], dict(line_bytes=32, sets=512, ways=8))
+        self.assertIn('bypassed', result['memory_model']['scope'])
 
     def test_new_job_uses_and_hashes_its_case_engine_override(self):
         (self.source / 'config-template.toml').write_text('[sim]\nreport="hbm.json"\n')

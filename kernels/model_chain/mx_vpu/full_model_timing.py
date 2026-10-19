@@ -26,6 +26,8 @@ CHAIN = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CHAIN))
 from workload_bundle import local
 
+HBM_MEMORY_SCOPE = 'Shared cache and HBM; private L0/L1 data caches bypassed'
+
 
 def toml_records(name, records):
     return name + ' = [' + ', '.join('{' + ', '.join(
@@ -96,7 +98,8 @@ def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, mem
         'bundle': str(bundle), 'manifest_sha256': digest(bundle / 'manifest.json'),
         'simulator': str(simulator), 'simulator_sha256': digest(simulator),
         'cycle_limit': cycle_limit, 'source_ticks': source_ticks,
-        'memory_ticks': memory_ticks, 'hardware_calibrated': False, 'cases': []}
+        'memory_ticks': memory_ticks, 'hardware_calibrated': False,
+        'memory_scope': HBM_MEMORY_SCOPE, 'cases': []}
     if runtime_pin:
         metadata['runtime_library'] = runtime_pin
     summary_ref = manifest['evidence']['all_full_models']
@@ -297,7 +300,10 @@ def save_timing(root, plan, case, queue_path):
     timing['simulated_cycles'] = job['simulated_cycles']
     if timing['simulated_cycles'] != timing['global_finish_cycle'] + 1:
         raise ValueError('console cycle count and completed journal disagree')
-    timing['hbm_source_cycles_after_drain'] = json.loads(Path(job['hbm_report']).read_text())['source_cycles']
+    hbm = json.loads(Path(job['hbm_report']).read_text())
+    timing['hbm_source_cycles_after_drain'] = hbm['source_cycles']
+    timing['memory_model'] = dict(scope=HBM_MEMORY_SCOPE, private_data_caches=False,
+        shared_cache={key: hbm[key] for key in ['line_bytes', 'sets', 'ways']})
     if plan.get('runtime_library'):
         timing['runtime_library'] = plan['runtime_library']
     atomic_json(root / case['name'] / 'result.json', timing)
@@ -399,6 +405,7 @@ def report(root):
         row = dict(name=case['name'], num_clusters=case['num_clusters'], status='pending',
             simulated_cycles=None, global_finish_cycle=None, hbm_source_cycles_after_drain=None,
             simulator=None, simulator_sha256=None,
+            memory_scope=None,
             source_ticks=plan['source_ticks'],
             memory_ticks=plan['memory_ticks'], hardware_calibrated=False)
         if path.exists():
@@ -407,6 +414,7 @@ def report(root):
                        simulated_cycles=result['simulated_cycles'],
                        hbm_source_cycles_after_drain=result['hbm_source_cycles_after_drain'],
                        simulator=result.get('simulator'), simulator_sha256=result.get('simulator_sha256'),
+                       memory_scope=result.get('memory_model', {}).get('scope'),
                        result_sha256=digest(path))
         rows.append(row)
     summary = dict(passed=len(rows) in (8, 12) and all(row['status'] == 'passed' for row in rows),
@@ -416,7 +424,7 @@ def report(root):
     atomic_json(root / 'timing-summary.json', summary)
     fields = ['name', 'num_clusters', 'status', 'simulated_cycles', 'global_finish_cycle',
               'hbm_source_cycles_after_drain',
-              'source_ticks', 'memory_ticks', 'hardware_calibrated', 'simulator_sha256']
+              'source_ticks', 'memory_ticks', 'hardware_calibrated', 'simulator_sha256', 'memory_scope']
     with (root / 'cycles.csv').open('w') as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()
