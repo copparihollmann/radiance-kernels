@@ -191,12 +191,16 @@ def validated_job(queue_path):
 
 
 def save_timing(root, plan, case, queue_path):
-    validated_job(queue_path)
+    job = validated_job(queue_path)
     journal = queue_path.parent.parent / 'progress.jsonl'
     timing = summarize(journal, case)
     timing.update(name=case['name'], queue_result=str(queue_path),
         source_ticks=plan['source_ticks'], memory_ticks=plan['memory_ticks'],
         simulator_sha256=plan['simulator_sha256'], journal_sha256=digest(journal))
+    timing['simulated_cycles'] = job['simulated_cycles']
+    if timing['simulated_cycles'] != timing['global_finish_cycle'] + 1:
+        raise ValueError('console cycle count and completed journal disagree')
+    timing['hbm_source_cycles_after_drain'] = json.loads(Path(job['hbm_report']).read_text())['source_cycles']
     atomic_json(root / case['name'] / 'result.json', timing)
 
 
@@ -293,11 +297,14 @@ def report(root):
     for case in plan['cases']:
         path = root / case['name'] / 'result.json'
         row = dict(name=case['name'], num_clusters=case['num_clusters'], status='pending',
-            global_finish_cycle=None, source_ticks=plan['source_ticks'],
+            simulated_cycles=None, global_finish_cycle=None, hbm_source_cycles_after_drain=None,
+            source_ticks=plan['source_ticks'],
             memory_ticks=plan['memory_ticks'], hardware_calibrated=False)
         if path.exists():
             result = json.loads(path.read_text())
             row.update(status='passed', global_finish_cycle=result['global_finish_cycle'],
+                       simulated_cycles=result['simulated_cycles'],
+                       hbm_source_cycles_after_drain=result['hbm_source_cycles_after_drain'],
                        result_sha256=digest(path))
         rows.append(row)
     summary = dict(passed=len(rows) == 8 and all(row['status'] == 'passed' for row in rows),
@@ -305,7 +312,8 @@ def report(root):
         scope='unassisted complete graphs with coupled HBM; configured software clocks; FPGA execution is separate',
         rows=rows)
     atomic_json(root / 'timing-summary.json', summary)
-    fields = ['name', 'num_clusters', 'status', 'global_finish_cycle',
+    fields = ['name', 'num_clusters', 'status', 'simulated_cycles', 'global_finish_cycle',
+              'hbm_source_cycles_after_drain',
               'source_ticks', 'memory_ticks', 'hardware_calibrated']
     with (root / 'cycles.csv').open('w') as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction='ignore')

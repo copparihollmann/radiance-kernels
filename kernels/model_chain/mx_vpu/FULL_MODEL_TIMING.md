@@ -52,3 +52,6 @@ host process wall time includes loading, simulation and checking.
 `timing-summary.json` and `cycles.csv` contain completed results and explicit
 pending cases. Pending cycles are empty. Existing helper-assisted functional
 passes, prefixes, projected runtimes and queued jobs do not complete this suite.
+The console's `simulated_cycles` is a count; `global_finish_cycle` is the
+zero-based finish timestamp and must be one less. The HBM source clock after
+accelerator finalization and draining is recorded separately.
