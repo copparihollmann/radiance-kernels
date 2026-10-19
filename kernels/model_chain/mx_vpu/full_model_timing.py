@@ -325,6 +325,82 @@ def report(root):
     return summary
 
 
+def process_snapshot(pid, command=None, root=None):
+    """Inspect identity without treating a saved PID as proof of liveness."""
+    if not pid:
+        return dict(confirmed_live=False, reason='no saved PID')
+    proc = Path('/proc') / str(pid)
+    try:
+        if proc.stat().st_uid != os.getuid():
+            return dict(pid=pid, confirmed_live=False, reason='different owner')
+        argv = [arg.decode() for arg in (proc / 'cmdline').read_bytes().split(b'\0') if arg]
+        state = (proc / 'stat').read_text().rsplit(') ', 1)[1].split()[0]
+    except FileNotFoundError:
+        return dict(pid=pid, confirmed_live=False, reason='process missing')
+    except OSError as error:
+        return dict(pid=pid, confirmed_live=None, reason='inspection failed: ' + str(error))
+    matches = argv == command if command is not None else (
+        str(root.resolve()) in argv and '--root' in argv and
+        any(Path(arg).name == 'full_model_timing.py' for arg in argv))
+    if not matches or state in ('Z', 'X'):
+        return dict(pid=pid, confirmed_live=False, reason='identity changed or process exited')
+    return dict(pid=pid, confirmed_live=True, state=state, paused=state in ('T', 't'))
+
+
+def observe(root, control_queues=()):
+    """Read worker/process/progress state; never launch, resume, or qualify a run."""
+    state = json.loads((root / 'supervisor.json').read_text())
+    summary = json.loads((root / 'timing-summary.json').read_text())
+    worker = process_snapshot(state.get('pid'), root=root)
+    result = dict(worker_status=state['status'], worker=worker,
+        completed_cases=summary['completed_cases'], expected_cases=summary['expected_cases'],
+        current_case=state.get('current_case'), updated=time.time(),
+        full_model_latency_established=summary['passed'], hardware_calibrated=False,
+        free_bytes=shutil.disk_usage(root).free)
+    if state['status'] == 'running' and worker['confirmed_live'] is not True:
+        result['worker_status'] = 'running_receipt_without_confirmed_worker'
+    if state.get('error'):
+        result['error'] = state['error']
+    if state.get('current_attempt'):
+        attempt = Path(state['current_attempt'])
+        queue_path = attempt / 'queue/results.json'
+        if queue_path.exists():
+            jobs = json.loads(queue_path.read_text())['jobs']
+            result['simulators'] = [process_snapshot(job.get('pid'), job['command'])
+                for job in jobs if job.get('pid')]
+        journal = attempt / 'progress.jsonl'
+        if journal.exists():
+            with journal.open('rb') as stream:
+                stream.seek(max(0, journal.stat().st_size - 131072))
+                lines = stream.read().splitlines()
+            entries = 0
+            for line in lines:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # A concurrent writer can leave a partial last line.
+                if 'cycle' in event:
+                    result['current_cycle'] = event['cycle']
+                if 'stage_entries' in event:
+                    entries = max(entries, event['stage_entries'])
+                elif event['event'] == 'stage_entry':
+                    entries += 1
+                    result['last_stage_symbols'] = event['symbols']
+            result['stage_entries_observed'] = entries
+    controls = []
+    for path in control_queues:
+        if not path.exists():
+            continue
+        for job in json.loads(path.read_text())['jobs']:
+            if job.get('status') == 'running':
+                process = process_snapshot(job.get('pid'), job['command'])
+                if process['confirmed_live']:
+                    controls.append(dict(name=job['name'], queue=str(path), process=process))
+    result['live_serial_controls'] = controls
+    result['scope'] = 'Observation only; saved running status and progress do not prove completion.'
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -340,6 +416,9 @@ def main():
     execute.add_argument('--names', nargs='+')
     collect = sub.add_parser('report')
     collect.add_argument('--root', type=Path, required=True)
+    status = sub.add_parser('status')
+    status.add_argument('--root', type=Path, required=True)
+    status.add_argument('--control-queue', type=Path, action='append', default=[])
     args = parser.parse_args()
     if args.command == 'prepare':
         plan = prepare(args.bundle, args.cyclotron, args.simulator, args.output,
@@ -350,6 +429,8 @@ def main():
             raise KeyboardInterrupt('received signal ' + str(signum))
         signal.signal(signal.SIGTERM, stop)
         run(args.root, args.tmpdir, args.names)
+    elif args.command == 'status':
+        print(json.dumps(observe(args.root, args.control_queue), indent=2))
     else:
         print(json.dumps(report(args.root), indent=2))
 

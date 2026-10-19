@@ -19,6 +19,9 @@ python3 radiance-kernels/kernels/model_chain/mx_vpu/full_model_timing.py run \
 
 python3 radiance-kernels/kernels/model_chain/mx_vpu/full_model_timing.py report \
   --root artifacts/e2e-hbm-audit/full-model-timing-v1
+
+python3 radiance-kernels/kernels/model_chain/mx_vpu/full_model_timing.py status \
+  --root artifacts/e2e-hbm-audit/full-model-timing-v1
 ```
 
 Preparation creates a new directory and checks the supplied binary, checkpoint,
@@ -33,6 +36,15 @@ locks its own plan directory. It resumes completed cases by checking their
 recorded inputs and acceptance checks again. A failed or interrupted case gets
 a new attempt directory when rerun; the previous attempt remains intact. It
 does not resume a simulated machine from an arbitrary cycle.
+
+`status` checks the saved worker PID against its owner and command and checks
+each simulator against its recorded command. It shows stopped processes and
+the latest progress, including a partially written journal. A saved `running`
+receipt can survive an interrupted worker, such as a full scratch filesystem;
+it does not prove that the worker is still alive. An unconfirmed process needs
+inspection before restarting. Status collection itself never starts or resumes
+a job. Pass `--control-queue path/to/results.json` to also show live control
+simulators while the model simulator is paused for a serial control run.
 
 A case passes only with successful completion in every configured cluster,
 every stage reached in order, the expected MX/VPU work, complete output checks,

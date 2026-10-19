@@ -2,11 +2,15 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
+import subprocess
+import sys
 import tempfile
 import unittest
 
-from full_model_timing import summarize
+from full_model_timing import observe, process_snapshot, summarize
 from run_e2e_queue import validate
 
 
@@ -94,6 +98,68 @@ class FullModelTiming(unittest.TestCase):
         self.write_journal(self.events)
         (outputs / '1.bin').unlink()
         self.assertFalse(validate(job, log, 0)['passed'])
+
+
+class TimingObservation(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name)
+        script = self.root / 'full_model_timing.py'
+        script.write_text('import time; time.sleep(60)\n')
+        self.command = [sys.executable, str(script), '--root', str(self.root)]
+        self.worker = self.child()
+        (self.root / 'supervisor.json').write_text(json.dumps(dict(
+            pid=self.worker.pid, status='running', current_case='model-1sm',
+            current_attempt=str(self.root / 'attempt-001'))))
+        (self.root / 'timing-summary.json').write_text(json.dumps(dict(
+            completed_cases=0, expected_cases=8, passed=False)))
+
+    def child(self):
+        process = subprocess.Popen(self.command)
+        def cleanup():
+            if process.poll() is None:
+                os.kill(process.pid, signal.SIGCONT)
+                process.terminate()
+                process.wait(timeout=5)
+        self.addCleanup(cleanup)
+        return process
+
+    def test_exited_worker_does_not_look_live_from_receipt(self):
+        self.worker.terminate()
+        self.worker.wait(timeout=5)
+        status = observe(self.root)
+        self.assertFalse(status['worker']['confirmed_live'])
+        self.assertEqual(status['worker_status'], 'running_receipt_without_confirmed_worker')
+        self.assertFalse(status['full_model_latency_established'])
+
+    def test_pid_with_a_different_command_does_not_confirm_identity(self):
+        self.assertTrue(process_snapshot(self.worker.pid, self.command)['confirmed_live'])
+        changed = process_snapshot(self.worker.pid, [*self.command, 'another-attempt'])
+        self.assertFalse(changed['confirmed_live'])
+
+    def test_paused_simulator_and_live_serial_control_are_visible(self):
+        simulator = self.child()
+        control = self.child()
+        attempt = self.root / 'attempt-001'
+        (attempt / 'queue').mkdir(parents=True)
+        job = dict(pid=simulator.pid, command=self.command, status='running', name='model')
+        (attempt / 'queue/results.json').write_text(json.dumps(dict(jobs=[job])))
+        controls = self.root / 'controls.json'
+        controls.write_text(json.dumps(dict(jobs=[dict(job, pid=control.pid, name='projection')])))
+        (attempt / 'progress.jsonl').write_text(
+            json.dumps(dict(event='heartbeat', cycle=100, stage_entries=17)) + '\n' +
+            json.dumps(dict(event='stage_entry', cycle=101, symbols=['stage_next'])) + '\n' +
+            '{"event":"heartbeat"')
+        os.kill(simulator.pid, signal.SIGSTOP)
+        os.waitpid(simulator.pid, os.WUNTRACED)
+        status = observe(self.root, [controls])
+        self.assertTrue(status['worker']['confirmed_live'])
+        self.assertTrue(status['simulators'][0]['paused'])
+        self.assertEqual(status['live_serial_controls'][0]['name'], 'projection')
+        self.assertEqual(status['stage_entries_observed'], 18)
+        self.assertEqual(status['current_cycle'], 101)
+        self.assertEqual(status['completed_cases'], 0)
 
 
 if __name__ == '__main__':
