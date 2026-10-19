@@ -32,6 +32,17 @@ def atomic_json(path, value):
     temporary.replace(path)
 
 
+def stage_identity(record, numeric=False):
+    names = {name for symbol in record.get('symbols', [])
+             for name in re.findall(r'(stage_\w+)Pvjjj', symbol)}
+    if len(names) != 1:
+        return None
+    name = next(iter(names))
+    if numeric:
+        return int(name[6:]) if name[6:].isdigit() else None
+    return name
+
+
 def validate(job, log, returncode):
     result = {'process_ok': returncode == 0}
     if job['kind'] == 'native':
@@ -133,13 +144,12 @@ def validate(job, log, returncode):
             result['complete_stage_count_pass'] = all(count == job['expected_stages'] for count in counts.values())
         if job.get('expected_stage_order') is not None:
             orders = {cluster: [] for cluster in range(clusters)}
+            expected = job['expected_stage_order']
+            numeric = bool(expected) and isinstance(expected[0], int)
             for entry in entries:
-                indices = {int(index) for name in entry.get('symbols', [])
-                           for index in re.findall(r'stage_(\d+)(?:Pv|$)', name)}
-                orders.setdefault(entry['cluster'], []).append(
-                    next(iter(indices)) if len(indices) == 1 else None)
+                orders.setdefault(entry['cluster'], []).append(stage_identity(entry, numeric))
             result['stage_order_pass'] = (set(orders) == set(range(clusters)) and
-                all(order == job['expected_stage_order'] for order in orders.values()))
+                all(order == expected for order in orders.values()))
         # Entries prove execution reached an address, not that a stage completed.
         result['journal_scope'] = 'core 0 warp 0 retired function entries; acceptance uses final ELF verification'
         if job.get('model_manifest'):

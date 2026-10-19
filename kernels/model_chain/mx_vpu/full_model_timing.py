@@ -20,7 +20,7 @@ import sys
 import time
 import tomllib
 
-from run_e2e_queue import atomic_json, digest, validate
+from run_e2e_queue import atomic_json, digest, stage_identity, validate
 
 CHAIN = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CHAIN))
@@ -101,7 +101,9 @@ def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, mem
         counts = qualified_models[model['model']]
         metadata['cases'].append(dict(name=row['name'], num_clusters=row['num_clusters'],
             expected_stages=model['stages'], stages=model['stage_backends'],
-            expected_stage_order=list(range(model['stages'])),
+            expected_stage_order=[('stage_v_' + re.sub(r'[^A-Za-z0-9_]', '_', stage['stage'])
+                if model['model'] == 'smolvla_base' else f'stage_{index}')
+                for index, stage in enumerate(model['stage_backends'])],
             expected_gemmini=dict(mx_loops=counts['mx_loops_per_sm'],
                 mesh_tiles=counts['mesh_tiles_per_sm'], vpu_commands=counts['vpu_commands_per_sm']),
             prepared_timing_configuration_sha256=pins))
@@ -153,14 +155,15 @@ def summarize(journal, case):
     if set(entries) != set(range(case['num_clusters'])):
         raise ValueError('missing cluster timeline')
     timelines = []
+    expected = case.get('expected_stage_order', list(range(case['expected_stages'])))
+    numeric = bool(expected) and isinstance(expected[0], int)
     for cluster, rows in sorted(entries.items()):
         if len(rows) != case['expected_stages']:
             raise ValueError('incomplete stage timeline')
         groups = defaultdict(int)
         intervals = []
         for index, row in enumerate(rows):
-            indices = {int(n) for name in row['symbols'] for n in re.findall(r'stage_(\d+)(?:Pv|$)', name)}
-            if indices != {index}:
+            if stage_identity(row, numeric) != expected[index]:
                 raise ValueError('stage timeline out of order')
             end = rows[index + 1]['cycle'] if index + 1 < len(rows) else finish['cycle']
             if end < row['cycle']:

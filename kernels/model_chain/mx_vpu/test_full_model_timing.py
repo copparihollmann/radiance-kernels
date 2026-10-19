@@ -55,6 +55,19 @@ class FullModelTiming(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     summarize(self.journal, self.case)
 
+    def test_smolvla_named_stage_symbols_follow_the_graph_order(self):
+        case = dict(self.case, expected_stage_order=['stage_v_camera0_patch_embed', 'stage_v_denoise0_euler'])
+        events = copy.deepcopy(self.events)
+        for event in events[:-1]:
+            index = 0 if 'stage_0' in event['symbols'][0] else 1
+            event['symbols'] = ['_Z32' + case['expected_stage_order'][index] + 'Pvjjj']
+        self.write_journal(events)
+        self.assertTrue(summarize(self.journal, case)['completed'])
+        events[2]['symbols'] = events[0]['symbols']
+        self.write_journal(events)
+        with self.assertRaises(ValueError):
+            summarize(self.journal, case)
+
     def test_successful_tohost_cannot_hide_wrong_order_or_missing_second_output(self):
         self.write_journal(self.events)
         outputs = self.root / 'outputs'
