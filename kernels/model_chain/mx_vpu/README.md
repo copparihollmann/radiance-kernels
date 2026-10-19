@@ -20,6 +20,29 @@ manifests retain every stage/backend/fallback. Latest HBM/HPC regression and lon
 runtime timing checks continue serially. See `functional_assist.md` and
 `artifacts/e2e-hbm-audit/summary.json` for current scopes and live results.
 
+## How the SMs are used
+
+HPC kernels partition one problem across the actual SMs. The concurrent
+variants use two cores per SM, four warps per core and 16 lanes per warp:
+128 scheduled threads per SM. Logical partition controls on a single SM
+are separate from the actual two- and four-SM runs.
+
+Model variants run one complete inference replica per SM, sharing immutable
+checkpoint storage and keeping separate activations and KV state. They measure
+concurrent inference, not the latency scaling of a single inference across SMs.
+Each replica computes on core 0; core 1 participates in launch synchronization
+but returns from stage computation. Private core caches do not supply the
+coherent buffer handoff needed to distribute dependent model stages over both
+cores. The newer decoder builds use four warps on core 0, or 64 active compute
+lanes per SM; the published v3 decoder binaries use one warp. SmolVLA uses four.
+
+All four full models have completed functional checks on one and two actual
+SMs. Four-SM generation is implemented, and a complete-output STREAM control
+has run on all four SMs with HBM requests from all eight cores. The remaining
+four-SM checks and unassisted whole-model timing are tracked separately in the
+task receipts; neither a build nor that STREAM control qualifies all workloads.
+Software execution also does not establish FPGA execution.
+
 `compile_decoder.py --execution-backend rakanic_mx_vpu` connects E4M3 matrix
 operations and BF16 residual/bias additions to TinyLlama, DeepSeek and Gemma's
 actual graph dependencies and greedy loops. `--mx-linear-policy all` accelerates
