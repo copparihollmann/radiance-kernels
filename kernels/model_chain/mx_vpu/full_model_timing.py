@@ -350,8 +350,8 @@ def report(root):
                        hbm_source_cycles_after_drain=result['hbm_source_cycles_after_drain'],
                        result_sha256=digest(path))
         rows.append(row)
-    summary = dict(passed=len(rows) == 8 and all(row['status'] == 'passed' for row in rows),
-        completed_cases=sum(row['status'] == 'passed' for row in rows), expected_cases=8,
+    summary = dict(passed=len(rows) in (8, 12) and all(row['status'] == 'passed' for row in rows),
+        completed_cases=sum(row['status'] == 'passed' for row in rows), expected_cases=len(plan['cases']),
         scope='unassisted complete graphs with coupled HBM; configured software clocks; FPGA execution is separate',
         rows=rows)
     atomic_json(root / 'timing-summary.json', summary)

@@ -10,7 +10,7 @@ import sys
 import tempfile
 import unittest
 
-from full_model_timing import model_workloads, make_job, observe, process_snapshot, runtime_library_pin, summarize
+from full_model_timing import report, model_workloads, make_job, observe, process_snapshot, runtime_library_pin, summarize
 from run_e2e_queue import validate
 
 
@@ -217,6 +217,35 @@ class TimingCoverage(unittest.TestCase):
                     [dict(row, name='unknown-4sm') if row == rows[-1] else row for row in rows]):
             with self.assertRaises(ValueError):
                 model_workloads(dict(workloads=bad))
+
+
+class TimingReportCoverage(unittest.TestCase):
+    def test_all_twelve_cases_are_required_and_counted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            cases=[dict(name=f'{model}-{n}sm',num_clusters=n)
+                   for model in ('tinyllama','deepseek','gemma','smol') for n in (1,2,4)]
+            (root/'plan.json').write_text(json.dumps(dict(cases=cases,source_ticks=1,memory_ticks=1)))
+            for case in cases:
+                d=root/case['name'];d.mkdir()
+            for case in cases[:8]:
+                (root/case['name']/'result.json').write_text(json.dumps(dict(
+                    global_finish_cycle=99,simulated_cycles=100,hbm_source_cycles_after_drain=101)))
+            partial=report(root)
+            self.assertFalse(partial['passed'])
+            self.assertEqual((partial['completed_cases'],partial['expected_cases']),(8,12))
+            (root/'plan.json').write_text(json.dumps(dict(cases=cases[:8],source_ticks=1,memory_ticks=1)))
+            legacy=report(root)
+            self.assertTrue(legacy['passed'])
+            self.assertEqual(legacy['expected_cases'],8)
+            (root/'plan.json').write_text(json.dumps(dict(cases=cases,source_ticks=1,memory_ticks=1)))
+            for case in cases[8:]:
+                (root/case['name']/'result.json').write_text(json.dumps(dict(
+                    global_finish_cycle=99,simulated_cycles=100,hbm_source_cycles_after_drain=101)))
+            completed=report(root)
+            self.assertTrue(completed['passed'])
+            self.assertEqual((completed['completed_cases'],completed['expected_cases']),(12,12))
+            self.assertEqual(len((root/'cycles.csv').read_text().splitlines()),13)
 
 if __name__ == '__main__':
     unittest.main()
