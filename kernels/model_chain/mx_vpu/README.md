@@ -27,6 +27,11 @@ variants use two cores per SM, four warps per core and 16 lanes per warp:
 128 scheduled threads per SM. Logical partition controls on a single SM
 are separate from the actual two- and four-SM runs.
 
+The four-SM Spatter launcher in `hpc_multism_balanced.py` interleaves output
+owners across SMs. A 256-owner gather then gives each SM 64 owners. Each owner
+keeps its existing serial transfer loop, preserving repeated-write ordering.
+The original generator remains pinned by the earlier execution receipts.
+
 Model variants run one complete inference replica per SM, sharing immutable
 checkpoint storage and keeping separate activations and KV state. They measure
 concurrent inference, not the latency scaling of a single inference across SMs.
