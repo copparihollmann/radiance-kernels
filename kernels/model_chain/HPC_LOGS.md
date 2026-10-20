@@ -41,3 +41,7 @@ with equal MX/Muon clocks, and `--gpu-clock-hz` with the actual Muon frequency
 to convert known logical payload bytes into useful bandwidth. Physical memory
 traffic, VPU busy utilization and lane efficiency require the optional counter
 records or complete issued-warp trace described in the handoff profiling guide.
+
+For exact trace CSV fields, external counter records and FPGA image requirements,
+see [TRACE_COUNTERS.md](TRACE_COUNTERS.md). The basic counters are already enabled;
+optional data collection requires an actual trace/counter source in the image.
