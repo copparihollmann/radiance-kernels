@@ -4,6 +4,9 @@
 #include <mu_intrinsics.h>
 #endif
 #include "../pipeline_math.hpp"
+#ifdef MX_MODEL_NO_VPU
+#include "muon_bf16_add.hpp"
+#endif
 
 // Model target: Rakanic/cyclotron + its pinned, unmodified libgemmini.
 // One issuing lane owns MMIO; its warp cooperates on scratchpad tile packing.
@@ -308,6 +311,9 @@ __attribute__((noinline)) // share the seven-register-argument VPU helper
 inline void mx_vpu_add(const RK_GLOBAL float* left, const RK_GLOBAL float* right,
                        RK_GLOBAL float* output, uint32_t count, uint32_t right_width,
                        uint32_t tid, uint32_t) {
+#ifdef MX_MODEL_NO_VPU
+  mx_muon_bf16_add(left, right, output, count, right_width, tid, 1);
+#else
   if (tid != 0) return;
   using namespace mx_model;
   for (uint32_t start = 0; start < count; start += 256) {
@@ -330,6 +336,7 @@ inline void mx_vpu_add(const RK_GLOBAL float* left, const RK_GLOBAL float* right
       output[start+p] = from_bf16(uint16_t(word >> (16*(p%2))));
     }
   }
+#endif
 }
 
 __attribute__((always_inline)) inline void mx_vpu_add_partitioned(const RK_GLOBAL float* left, const RK_GLOBAL float* right,
