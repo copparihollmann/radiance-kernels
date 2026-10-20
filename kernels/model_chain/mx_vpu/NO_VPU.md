@@ -18,8 +18,8 @@ weak out-of-line helper. Reusing the other objects avoids recompiling full model
 graphs. Verify the final symbol is strong (`T` in llvm-nm) and inspect its code;
 changing only a manifest flag does not remove VPU instructions.
 
-The delivery replaces all12model variants (four models,1/2/4SM). It retains the
-profiling hosts, debug ELFs, input/checkpoint blobs, references and final4SM
+The delivery replaces all 12 model variants (four models, on 1, 2 and 4 SMs). It retains the
+profiling hosts, debug ELFs, input/checkpoint blobs, references and final four-SM
 runtime. Output addresses and debug stage maps are regenerated after linking.
 The active master manifest records `requires_vpu:false` and the Muon BF16 fallback.
 It does not claim a fresh exhaustive full-model or FPGA correctness pass.
@@ -27,5 +27,5 @@ It does not claim a fresh exhaustive full-model or FPGA correctness pass.
 `test_muon_bf16_add.cpp` compares the new arithmetic against the original
 libgemmini VPU backend, including tails, broadcasts and in-place output. Compile
 it together with `runtime.cpp` and the pinned libgemmini archive using
-`-ffp-contract=off`. The delivery also runs short RV32 controls on1/2/4SM with
+`-ffp-contract=off`. The delivery also runs short RV32 controls on 1, 2 and 4 SMs with
 Gemmini disabled, comparing all outputs to the separate numerical format reference.
