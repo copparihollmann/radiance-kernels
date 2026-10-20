@@ -40,6 +40,7 @@ The nightly RTL is:
 | `host.h` | Host launch, result wait, integer helpers (the host Rocket has no FPU) |
 | `mx.h` | MxGemmini commands: loads, loops, scale memory, requantizer, stores |
 | `verify.h` | GPU-side comparison of a result tensor with a golden |
+| `profile.h`, `profile_host.h` | Optional 64-bit counter snapshots and post-run JSON; see [PROFILE.md](PROFILE.md) for cost and counter availability |
 
 ## Build and run
 
