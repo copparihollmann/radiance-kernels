@@ -49,6 +49,12 @@ MU_CFLAGS += -idirafter $(MU_LIBC_INCLUDE)
 endif
 MU_CFLAGS += $(KERNEL_MU_CFLAGS)
 
+# Freestanding C++ headers used by mu_intrinsics.h.
+MU_CXX_INCLUDE ?= $(lastword $(sort $(wildcard $(MU_LIBC_INCLUDE)/c++/*)))
+ifneq ($(MU_CXX_INCLUDE),)
+MU_CFLAGS += -idirafter $(MU_CXX_INCLUDE) -idirafter $(MU_CXX_INCLUDE)/riscv64-unknown-elf
+endif
+
 # Register budget.  Muon's renamer allocates a physical register on a warp's FIRST write of an
 # architectural register and never frees it; a core has 256 (Rename.scala:123 asserts on
 # overflow).  So warps_per_core * registers_per_warp must stay <= 256.  OCC is the warps per
@@ -61,6 +67,17 @@ MU_CFLAGS += -DNIGHTLY_OCC=$(OCC) -mllvm -riscv-max-allocatable-gprs=$(GPRS)
 MU_LINKER_SCRIPT ?= $(LIB)/linker/mu_link_nightly.ld
 MU_LDFLAGS := -nodefaultlibs -nostartfiles -Wl,-Bstatic,-T,$(MU_LINKER_SCRIPT),-z,norelro -fuse-ld=lld \
   $(LIB)/libmuonrt.a $(LIB)/tohost.S
+
+# Four-SM RTL aliases both cluster-ID and mhartid. Use a separate runtime so
+# boot stacks are repaired before any C++ code runs; keep 1/2-SM archives intact.
+MU_AR ?= $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-ar
+sm_runtime = $(if $(filter 4,$(1)),build/4sm/libmuonrt-cluster-id.a,$(LIB)/libmuonrt.a)
+build/4sm/libmuonrt-cluster-id.a: $(LIB)/libmuonrt.a $(LIB)/src/mu_start.S $(LIB)/src/mu_schedule.cpp $(wildcard $(LIB)/include/nightly/*.h) $(LIB)/include/mu_schedule.h $(NIGHTLY_DIR)/nightly.mk
+	mkdir -p build/4sm
+	$(MU_CXX) $(MU_CFLAGS) -DMU_CLUSTER_ID_FROM_PRINTBUF=1 -DMU_STACK_WORD_STRIDE=$(MU_STACK_WORD_STRIDE) -c $(LIB)/src/mu_schedule.cpp -o build/4sm/mu_schedule.cpp.o
+	$(MU_CXX) $(MU_CFLAGS) -DMU_CLUSTER_ID_FROM_PRINTBUF=1 -DMU_STACK_WORD_STRIDE=$(MU_STACK_WORD_STRIDE) -c $(LIB)/src/mu_start.S -o build/4sm/mu_start.S.o
+	cp $(LIB)/libmuonrt.a $@
+	$(MU_AR) r $@ build/4sm/mu_schedule.cpp.o build/4sm/mu_start.S.o
 ifdef MU_USE_LIBC
 MU_LDFLAGS += -L$(LLVM_MUON)/lib/riscv32-unknown-elf -lc -lm \
   -Wl,$(LLVM_MUON)/lib/clang/18/lib/riscv32-unknown-elf/libclang_rt.builtins.a
@@ -110,10 +127,10 @@ all: $(foreach s,$(SMS),build/$(s)sm/$(PROJECT).soc.elf)
 define SM_RULES
 build/$(1)sm/$(PROJECT).mu.o: $(MU_SRCS) $(DEPS) $(DEFS_STAMP) $(NIGHTLY_DIR)/nightly.mk $(wildcard $(LIB)/include/nightly/*.h) | build/$(1)sm
 	$(MU_CXX) $(MU_CFLAGS) -DNIGHTLY_CLUSTERS=$(1) $(DEFS) -c $(firstword $(MU_SRCS)) -o $$@
-build/$(1)sm/$(PROJECT).radiance.elf: build/$(1)sm/$(PROJECT).mu.o $(BLOB_OBJS)
-	$(MU_CXX) $(MU_CFLAGS) $$< $(BLOB_OBJS) $(MU_LDFLAGS) -o $$@
+build/$(1)sm/$(PROJECT).radiance.elf: build/$(1)sm/$(PROJECT).mu.o $(BLOB_OBJS) $(call sm_runtime,$(1))
+	$(MU_CXX) $(MU_CFLAGS) $$< $(BLOB_OBJS) $(subst $(LIB)/libmuonrt.a,$(call sm_runtime,$(1)),$(MU_LDFLAGS)) -o $$@
 	$(MU_OBJDUMP) -d $$@ > build/$(1)sm/$(PROJECT).radiance.dump
-build/$(1)sm/$(PROJECT).host.o: $(HOST_SRCS) $(DEPS) $(DEFS_STAMP) | build/$(1)sm
+build/$(1)sm/$(PROJECT).host.o: $(HOST_SRCS) $(DEPS) $(DEFS_STAMP) $(NIGHTLY_DIR)/nightly.mk $(wildcard $(LIB)/include/nightly/*.h) | build/$(1)sm
 	$(HOST_CXX) $(HOST_CFLAGS) -DNIGHTLY_CLUSTERS=$(1) $(DEFS) -c $(firstword $(HOST_SRCS)) -o $$@
 build/$(1)sm/$(PROJECT).fuse.elf: build/$(1)sm/$(PROJECT).radiance.elf $(DEFS_STAMP) $(SOC)/scramble_gpu_elf.py
 ifeq ($(MU_ADDR_HASH),1)

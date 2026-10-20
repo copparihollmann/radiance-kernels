@@ -25,6 +25,7 @@
 #ifndef NIGHTLY_CLUSTERS
 #define NIGHTLY_CLUSTERS 1
 #endif
+#include <nightly/cluster_id.h>
 
 /* Warps per core the kernel runs (set by nightly.mk from OCC, which also caps the compiler's
  * allocatable GPRs to 256/OCC).  The boot code spawns exactly this many warps, so no idle warp
@@ -44,9 +45,13 @@ static inline uint32_t nightly_mcycle(void) {
 }
 
 static inline uint32_t nightly_cluster_id(void) {
+#if NIGHTLY_CLUSTERS > 2
+  return mu_cluster_id();
+#else
   uint32_t c;
   asm volatile("csrr %0, %1" : "=r"(c) : "i"(MU_CSR_CLUSTER_ID));
   return c;
+#endif
 }
 
 static inline void nightly_pb_put(uint32_t slot, uint32_t v) {

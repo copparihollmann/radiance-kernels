@@ -10,6 +10,9 @@ typedef void (*mu_schedule_callback)(void *arg,
                                      uint32_t threads_per_threadblock,
                                      uint32_t threadblock_id);
 
+/* Runtime layers may override the default CSR-based identity. */
+uint32_t mu_cluster_id(void);
+
 void mu_schedule(mu_schedule_callback entry_point,
                  void * arg,
                  const uint32_t occupancy);

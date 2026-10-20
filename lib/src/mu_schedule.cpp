@@ -29,11 +29,15 @@ struct __attribute__((aligned(CACHE_LINE_BYTES))) Context {
  * Must occupy its own cache line (64B) to avoid flush races with adjacent data. */
 static volatile Context schedule_contexts[NUM_CORES_MAX];
 
+__attribute__((weak, noinline)) uint32_t mu_cluster_id(void) {
+    uint32_t cluster_id;
+    asm volatile("csrr %0, %1" : "=r"(cluster_id) : "i"(MU_CSR_CLUSTER_ID));
+    return cluster_id;
+}
+
 static void __attribute__((noinline)) mu_schedule_standalone() asm("__mu_schedule_standalone");
 static void __attribute__ ((noinline)) mu_schedule_standalone() {
-    uint32_t cluster_id = 0;
-    // TODO: clid not supported in assembler
-    asm volatile("csrr %0, %1" : "=r"(cluster_id) : "i"(MU_CSR_CLUSTER_ID));
+    const uint32_t cluster_id = mu_cluster_id();
     const auto core_id_in_cluster = vx_core_id();
     const auto cores_per_cluster = MU_NUM_CORES;
     const auto global_core_id = cluster_id * cores_per_cluster + core_id_in_cluster;
@@ -105,8 +109,7 @@ static void mu_schedule_manager() {
 void mu_schedule(mu_schedule_callback callback, void *arg, const uint32_t occupancy) {
     const auto core_id = vx_core_id();
     const auto thread_id = vx_thread_id();
-    uint32_t cluster_id;
-    asm volatile("csrr %0, %1" : "=r"(cluster_id) : "i"(MU_CSR_CLUSTER_ID));
+    const uint32_t cluster_id = mu_cluster_id();
     auto &context = schedule_contexts[cluster_id * MU_NUM_CORES + core_id];
     // Each core owns a cache-line-aligned context. Its worker warps share L0d,
     // while another core/cluster may launch a different callback or argument.

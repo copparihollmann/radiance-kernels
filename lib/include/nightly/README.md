@@ -32,6 +32,7 @@ The nightly RTL is:
 |---|---|
 | `pb.h` | printBuf mailbox, shared by the host and the GPU |
 | `device.h` | GPU launch, per-core start and end timestamps, barriers |
+| `cluster_id.h` | Four-SM physical cluster identity from the host mailbox |
 | `host.h` | Host launch, result wait, integer helpers (the host Rocket has no FPU) |
 | `mx.h` | MxGemmini commands: loads, loops, scale memory, requantizer, stores |
 | `verify.h` | GPU-side comparison of a result tensor with a golden |
@@ -48,3 +49,24 @@ The build scrambles the GPU load segments into the hashed DRAM layout (`MU_ADDR_
 default; `soc/scramble_gpu_elf.py`). Use `MU_ADDR_HASH=0` only to load through TSI
 (`RadianceHBMTSIConfig`) or to run on a config without the hash. A scrambled ELF fails on a config
 without the hash.
+
+## Four SMs
+
+Use `make SMS=4` with the matching four-SM image. In the current RTL, both the
+cluster-ID CSR and the cluster field of `mhartid` are one bit wide. SMs 2 and 3
+therefore report the same IDs as SMs 0 and 1.
+
+The four-SM build uses a separate runtime archive. Before releasing GPU reset,
+the host writes `0xC1D00000 | cluster_index` to slot 7 of each cluster's printBuf
+and sets LAUNCH. Startup uses that tag to place stacks and TLS; the scheduler
+and kernel use it for work ownership. Both scheduler context selection and
+worker entry must use `mu_cluster_id()`.
+
+Custom loaders must write the tags before releasing reset at `0x41000000`.
+Each slot is 64 bits wide; write the tag to both halves at host address
+`0x40080038 + cluster_index * 0x100000`. The CSR fallback supports older hosts
+on configurations with full IDs; it does not repair a missing tag on the
+narrow-ID four-SM image. Include `cluster_id.h` in the device entry translation
+unit only, and compile the startup runtime with
+`-DMU_CLUSTER_ID_FROM_PRINTBUF=1`. One- and two-SM builds retain their existing
+runtime archive.

@@ -12,6 +12,7 @@
  *   2, 3   START     GPU -> host: mcycle at kernel start, per core
  *   4, 5   END       GPU -> host: mcycle after the kernel's final barrier, per core
  *   6      STATUS    GPU -> host: kernel-defined status word (0 = none)
+ *   7      CLUSTER   host -> GPU: NIGHTLY_CLUSTER_TAG | physical cluster index
  *   8..15  PHASE     GPU -> host: kernel-defined phase stamps (mcycle), cluster core 0
  *   16..63 free
  */
@@ -28,9 +29,11 @@
 #define NIGHTLY_PB_START   2u   /* + core */
 #define NIGHTLY_PB_END     4u   /* + core */
 #define NIGHTLY_PB_STATUS  6u
+#define NIGHTLY_PB_CLUSTER 7u
 #define NIGHTLY_PB_PHASE   8u   /* + phase index, 0..7 */
 #define NIGHTLY_PB_HEARTBEAT 48u /* kernel progress value, printed by the host while it waits */
 
 #define NIGHTLY_LAUNCH_MAGIC 0x6E1A0C11u
+#define NIGHTLY_CLUSTER_TAG 0xC1D00000u
 
 #endif

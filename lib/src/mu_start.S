@@ -110,6 +110,27 @@ init_regs:
   # set stack pointer register
   li    sp, STACK_BASE_ADDR # load stack base address
   csrr  t0, mhartid
+#if defined(MU_CLUSTER_ID_FROM_PRINTBUF) && MU_CLUSTER_ID_FROM_PRINTBUF
+  # The narrow RTL cluster ID also aliases mhartid. Before using any stack,
+  # recover its cluster field from the host tag. Keep the hardware local-hart
+  # fields; the CSR geometry counts all configured warps, not just active ones.
+  li    t1, 0x80038
+  lw.shared t3, 0(t1)
+  srli  t2, t3, 16
+  li    t1, 0xc1d0
+  bne   t2, t1, .Lcluster_hart_ready
+  csrr  t1, nt
+  csrr  t2, nw
+  mul   t1, t1, t2
+  csrr  t2, 0xfc2
+  mul   t1, t1, t2
+  remu  t0, t0, t1
+  li    t2, 0xffff
+  and   t3, t3, t2
+  mul   t3, t3, t1
+  add   t0, t0, t3
+.Lcluster_hart_ready:
+#endif
 #if MU_STACK_WORD_STRIDE > 1
   # warp region = (1 << MU_LOG2_LANES) * STACK_SIZE, one per warp
   srl   t1, t0, MU_LOG2_LANES
