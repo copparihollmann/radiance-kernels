@@ -114,11 +114,14 @@ init_regs:
   # The narrow RTL cluster ID also aliases mhartid. Before using any stack,
   # recover its cluster field from the host tag. Keep the hardware local-hart
   # fields; the CSR geometry counts all configured warps, not just active ones.
+  # The GPU may boot before the host. No stack or TLS may use the
+  # aliased CSR identity while the physical cluster tag is still missing.
+.Lwait_cluster_tag:
   li    t1, 0x80038
   lw.shared t3, 0(t1)
   srli  t2, t3, 16
   li    t1, 0xc1d0
-  bne   t2, t1, .Lcluster_hart_ready
+  bne   t2, t1, .Lwait_cluster_tag
   csrr  t1, nt
   csrr  t2, nw
   mul   t1, t1, t2
