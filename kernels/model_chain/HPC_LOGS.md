@@ -22,9 +22,9 @@ saved-runs/
       output.bin
 ```
 
-Keep the full console log. `run-context.json` records the executed ELF hash,
-workload ID, topology and actual clock/counter semantics as described in
-`PROFILE.md`. `readbacks/` is optional; when present, all regions named in the
+Keep the full console log. The profiling host emits `RADIANCE_CONTEXT` with the
+executed ELF hash and topology. An optional `run-context.json` can add actual
+memory/clock settings. `readbacks/` is optional; when present, all regions named in the
 prepared dump plan are checked. GEMM also needs its per-SM mailbox files.
 
 The script writes one row per workload in `results.csv` and `results.json`,
@@ -34,9 +34,10 @@ VPU utilization, and lane efficiency. Unsupported data is null, not zero. Existi
 software model cycles appear in a separate column and are never substituted for
 measurements from your run.
 
-The current release binaries do not emit the new profiling records. Including
-this parser does not enable counters or create measurements. Without records,
-collection still reports available correctness results and marks profiling
-unavailable. The optional counter helpers and their output format are in
-`PROFILE.md`; instrumented workload integration remains pending. MX/VPU busy
-counters and lane efficiency require an appropriate trace/counter source.
+The profiling-ready release binaries emit whole-workload records. Older archives
+without those hooks remain usable for correctness collection; their missing
+profiling data stays unavailable. Supply `--mx-clock-ratio 1` only for an image
+with equal MX/Muon clocks, and `--gpu-clock-hz` with the actual Muon frequency
+to convert known logical payload bytes into useful bandwidth. Physical memory
+traffic, VPU busy utilization and lane efficiency require the optional counter
+records or complete issued-warp trace described in the handoff profiling guide.

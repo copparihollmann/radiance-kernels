@@ -1,6 +1,9 @@
 import json
 import unittest
-from profile_output import summarize
+from profile_output import summarize, parse_log, add_lane_trace
+import os
+from pathlib import Path
+import tempfile
 
 
 class ProfileOutputTests(unittest.TestCase):
@@ -61,6 +64,44 @@ class ProfileOutputTests(unittest.TestCase):
         for field, value in [('sm_count', True), ('peak_issue_per_core_per_cycle', float('nan')),
                              ('common_cycle_epoch', None), ('device_elf_sha256', 'unknown')]:
             with self.assertRaises(ValueError): self.run_rows(context=self.context | {field: value})
+
+    def test_embedded_context_completion_mx_clocks_and_host_are_separate(self):
+        context = self.context | dict(mx_useful_macs=25600, mx_instances=2, mx_peak_macs_per_cycle=256)
+        lines = ['RADIANCE_CONTEXT '+json.dumps(context)] + [
+            'RADIANCE_PROFILE '+json.dumps(r) for r in self.rows] + [
+            'RADIANCE_HOST '+json.dumps(dict(setup_cycles=100000, wait_cycles=200000,
+                                           setup_instructions=10000,wait_instructions=20000)),
+            'RADIANCE_DONE '+json.dumps(dict(workload='test-2sm', sms=2, device_code=0))]
+        result = parse_log(lines, mx_clock_ratio=0.5)
+        self.assertEqual(result['total']['work_cycles'], 110)
+        self.assertAlmostEqual(result['total']['mx_utilization'],25600/(110*.5*256*2))
+        self.assertEqual(result['host']['setup_cycles'],100000)
+        self.assertTrue(result['complete_run_log'])
+        with self.assertRaises(ValueError): parse_log(lines+lines)
+        with self.assertRaises(ValueError): parse_log(lines+['RADIANCE_FAILURE {"reason":"timeout"}'])
+
+    def test_zero_instruction_counter_is_not_a_measured_zero_ipc(self):
+        rows=[r | dict(instructions_end=r['instructions_begin']) for r in self.rows]
+        with self.assertRaises(ValueError): self.run_rows(rows)
+
+    def test_complete_issue_trace_lane_efficiency_is_scoped(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+            path=Path(directory)/'trace.csv'
+            text='cycle,sm,core,tmask\n'
+            for r in self.rows:
+                text+=f'{r["cycle_begin"]},'+f'{r["sm"]},{r["core"]},0xff\n'
+                text+=f'{r["cycle_end"]},'+f'{r["sm"]},{r["core"]},0xffff\n'
+            path.write_text(text)
+            result=self.run_rows();add_lane_trace(result,path)
+            self.assertEqual(result['total']['lane_efficiency'],.5)
+
+    def test_optional_work_memory_and_vpu_counters(self):
+        lines=['RADIANCE_PROFILE '+json.dumps(r) for r in self.rows]+[
+            'RADIANCE_MEMORY '+json.dumps(dict(scope='work',source='test counters',read_bytes=100,write_bytes=10)),
+            'RADIANCE_ENGINE '+json.dumps(dict(scope='work',source='test counters',engine='vpu',busy_cycles=20,capacity_cycles=100))]
+        result=parse_log(lines,self.context,gpu_clock_hz=1000)
+        self.assertEqual(result['total']['memory_bandwidth_bytes_per_second'],1000)
+        self.assertEqual(result['total']['vpu_utilization'],.2)
 
 
 if __name__ == '__main__': unittest.main()

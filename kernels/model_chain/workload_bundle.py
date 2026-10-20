@@ -205,10 +205,14 @@ def verify(root):
     return dict(passed=True, files=count, bytes=size, workloads=len(names))
 
 
-def prepare(root, name, output, loader, hash_size, hash_unit, hash_slices):
+def prepare(root, name, output, loader, hash_size, hash_unit, hash_slices, hold_for_readback=False):
     """Produce a self-contained RV64 boot ELF for one chosen loader path."""
     from package_firesim import package, package_hashed, verify_package, read_elf
     row = workload(root, name)
+    if hold_for_readback:
+        if 'soc_readback_elf' not in row:
+            raise ValueError('this bundle has no host that parks for readback: ' + name)
+        row = dict(row, soc_elf=row['soc_readback_elf'])
     for blob in [row['soc_elf'], *row['loads']]:
         if digest(local(root, blob['path'])) != blob['sha256']:
             raise ValueError('input changed: ' + blob['path'])
@@ -344,6 +348,7 @@ def main():
     s.add_argument('--loader', choices=['logical', 'direct-hashed'], required=True)
     s.add_argument('--hash-size', type=lambda x: int(x, 0), default=0x80000000)
     s.add_argument('--hash-unit', type=int, default=32); s.add_argument('--hash-slices', type=int, default=4)
+    s.add_argument('--hold-for-readback', action='store_true', help='Print counters then park the host for operator readback')
     c = sub.add_parser('check'); c.add_argument('name'); c.add_argument('--results', type=Path, required=True)
     args = p.parse_args()
     if args.command == 'build':
@@ -355,7 +360,7 @@ def main():
         return
     elif args.command == 'prepare':
         result = prepare(args.root, args.name, args.output, args.loader,
-                         args.hash_size, args.hash_unit, args.hash_slices)
+                         args.hash_size, args.hash_unit, args.hash_slices, args.hold_for_readback)
     else:
         result = check_outputs(args.root, args.name, args.results)
     print(json.dumps(result, indent=2))

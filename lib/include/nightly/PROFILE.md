@@ -2,7 +2,8 @@
 
 `profile.h` provides optional 64-bit Muon cycle and instruction snapshots.
 `profile_host.h` collects committed snapshots and prints JSON on Rocket after GPU work.
-These helpers are not yet enabled in the existing workload archives.
+The profiling-ready handoff enables these hooks in its workload binaries. Older
+archives shipped before that handoff contain the helpers without instrumentation.
 
 ## Cost and measurement boundaries
 

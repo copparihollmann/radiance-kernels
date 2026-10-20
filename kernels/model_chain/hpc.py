@@ -7,11 +7,11 @@ from pathlib import Path
 import sys
 
 from workloads import select
-from profile_output import PREFIX, summarize
+from profile_output import PREFIX, parse_log, add_lane_trace
 import workload_bundle as bundle
 
 
-def collect(root, selected, logs, output):
+def collect(root, selected, logs, output, *, mx_clock_ratio=None, gpu_clock_hz=None):
     output.mkdir(parents=True, exist_ok=True)
     reports = []
     for workload, meta in selected:
@@ -19,28 +19,49 @@ def collect(root, selected, logs, output):
         directory = logs / name
         console = directory / 'console.log'
         context = directory / 'run-context.json'
-        report = dict(workload=name, sm_count=meta['sm_count'], benchmark=meta['benchmark'],
+        report = dict(workload=name, kind=meta['kind'], model=meta.get('model'), sm_count=meta['sm_count'], benchmark=meta['benchmark'],
             correctness='not_checked', profile_status='unavailable',
-            work_cycles=None, ipc=None, simt_issue_utilization=None,
+            work_cycles=None, instructions=None, ipc=None, simt_issue_utilization=None,
             mx_utilization=None, vpu_utilization=None, lane_efficiency=None,
             software_model_cycles=workload.get('timing_qualification', {}).get('simulated_cycles'),
-            reason='No RADIANCE_PROFILE records; existing release ELFs do not emit them.')
+            reason='No RADIANCE_PROFILE records in the saved log.')
         if console.is_file():
             report['console_sha256'] = bundle.digest(console)
             with console.open() as stream:
-                records = [line for line in stream if line.startswith(PREFIX)]
+                records = [line for line in stream if line.startswith((PREFIX, 'RADIANCE_CONTEXT ',
+                    'RADIANCE_FAILURE ', 'RADIANCE_TRAP '))]
             if records:
                 try:
-                    ctx = json.loads(context.read_text())
+                    ctx = json.loads(context.read_text()) if context.exists() else None
+                    with console.open() as stream:
+                        result = parse_log(stream, ctx, mx_clock_ratio=mx_clock_ratio, gpu_clock_hz=gpu_clock_hz,
+                            useful_payload_bytes=workload.get('profiling', {}).get('useful_payload_bytes'))
+                    ctx = result['context']
                     if (ctx['workload'] != name or ctx['sm_count'] != meta['sm_count'] or
                             ctx['device_elf_sha256'] != workload['device_elf']['sha256']):
                         raise ValueError('run context does not match selected workload/ELF/SM count')
-                    result = summarize(records, ctx)
+                    for trace in [directory / 'issue-trace.csv.gz', directory / 'issue-trace.csv']:
+                        if trace.is_file():
+                            add_lane_trace(result, trace)
+                            break
                     bundle.write_json(output / (name + '-profile.json'), result)
                     report.update({key: result['total'][key] for key in
-                        ['work_cycles', 'ipc', 'simt_issue_utilization', 'mx_utilization',
+                        ['work_cycles', 'instructions', 'ipc', 'simt_issue_utilization', 'mx_utilization',
                          'vpu_utilization', 'lane_efficiency']})
-                    report.update(profile_status='parsed', reason=None)
+                    report.update(profile_status='parsed' if result['complete_run_log'] else 'partial',
+                                  reason=None if result['complete_run_log'] else 'Work records present; final RADIANCE_DONE is missing.')
+                    report['host'] = result['host']
+                    if result['host']:
+                        for phase in ['setup', 'wait']:
+                            for metric in ['cycles', 'ipc']:
+                                report['host_'+phase+'_'+metric] = result['host'][phase+'_'+metric]
+                    report['memory'] = result.get('memory')
+                    if result.get('memory'):
+                        report['memory_read_bytes'] = result['memory']['read_bytes']
+                        report['memory_write_bytes'] = result['memory']['write_bytes']
+                    report['memory_bandwidth_bytes_per_second'] = result['total'].get('memory_bandwidth_bytes_per_second')
+                    report['useful_payload_bytes_per_cycle'] = result['total'].get('useful_payload_bytes_per_cycle')
+                    report['useful_bandwidth_bytes_per_second'] = result['total'].get('useful_bandwidth_bytes_per_second')
                 except (OSError, KeyError, ValueError) as error:
                     report.update(profile_status='invalid', reason=str(error))
         else:
@@ -53,12 +74,14 @@ def collect(root, selected, logs, output):
             except (OSError, ValueError, KeyError) as error:
                 report.update(correctness='failed', check_error=str(error))
         reports.append(report)
-    bundle.write_json(output / 'results.json', dict(schema='radiance-hpc-results-v1',
+    bundle.write_json(output / 'results.json', dict(schema='radiance-workload-results-v1',
         manifest_sha256=bundle.digest(root / 'manifest.json'), rows=reports,
         note='Software model cycles are separate from measured run work cycles. Null means unavailable.'))
-    fields = ['workload', 'sm_count', 'benchmark', 'correctness', 'profile_status',
-              'work_cycles', 'ipc', 'simt_issue_utilization', 'mx_utilization',
-              'vpu_utilization', 'lane_efficiency', 'software_model_cycles', 'reason']
+    fields = ['workload', 'kind', 'model', 'sm_count', 'benchmark', 'correctness', 'profile_status',
+              'work_cycles', 'instructions', 'ipc', 'simt_issue_utilization', 'mx_utilization',
+              'vpu_utilization', 'lane_efficiency', 'memory_read_bytes', 'memory_write_bytes', 'useful_payload_bytes_per_cycle',
+              'useful_bandwidth_bytes_per_second', 'memory_bandwidth_bytes_per_second',
+              'host_setup_cycles', 'host_wait_cycles', 'host_setup_ipc', 'host_wait_ipc', 'software_model_cycles', 'reason']
     with (output / 'results.csv').open('w') as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()
@@ -78,6 +101,8 @@ def main():
         if name == 'collect':
             cmd.add_argument('--logs', type=Path, required=True)
             cmd.add_argument('--output', type=Path, required=True)
+            cmd.add_argument('--mx-clock-ratio', type=float)
+            cmd.add_argument('--gpu-clock-hz', type=float)
     args = parser.parse_args()
     manifest = bundle.load_manifest(args.root)
     selected = select(manifest, kinds=['hpc'], sms=args.sms, benchmarks=args.benchmark)
@@ -90,7 +115,8 @@ def main():
         print(json.dumps([dict(**meta, run_group=row.get('run_group', 'primary'))
                           for row, meta in selected], indent=2))
     else:
-        rows = collect(args.root, selected, args.logs, args.output)
+        rows = collect(args.root, selected, args.logs, args.output,
+                       mx_clock_ratio=args.mx_clock_ratio, gpu_clock_hz=args.gpu_clock_hz)
         print(json.dumps(dict(workloads=len(rows), profiles=sum(r['profile_status']=='parsed' for r in rows),
             correctness_passes=sum(r['correctness']=='passed' for r in rows), output=str(args.output))))
         if any(r['profile_status']=='invalid' or r['correctness']=='failed' for r in rows):
