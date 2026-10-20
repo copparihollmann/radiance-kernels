@@ -64,6 +64,30 @@ def case_simulator_pin(plan, case):
     return pin
 
 
+def case_bundle_pin(plan, case):
+    """Retained executions keep their actual bundle when other binaries change."""
+    pin = case.get('bundle_pin')
+    if pin is None:
+        pin = dict(path=plan['bundle'], manifest_sha256=plan.get('manifest_sha256'))
+    bundle = Path(pin['path']).resolve()
+    expected = pin.get('manifest_sha256')
+    if expected is not None and digest(bundle / 'manifest.json') != expected:
+        raise ValueError('case bundle changed after preparation')
+    return dict(path=str(bundle), manifest_sha256=expected)
+
+
+def cluster_initialization(row, qualified):
+    """Carry physical-SM boot tags into native timing without copying assistance."""
+    declared = row.get('smem_init_per_cluster')
+    configured = qualified.get('sim', {}).get('smem_init_per_cluster')
+    if declared is not None and configured is not None and declared != configured:
+        raise ValueError('bundle and qualified configuration disagree on per-SM initialization')
+    words = declared if declared is not None else configured
+    if words is not None and len(words) != row['num_clusters']:
+        raise ValueError('per-SM initialization does not cover the physical SMs')
+    return words
+
+
 def model_workloads(manifest):
     rows = [row for row in manifest['workloads'] if row['family'] == 'model']
     clusters = {row['num_clusters'] for row in rows}
@@ -135,6 +159,9 @@ def prepare(bundle, cyclotron, simulator, output, cycle_limit, source_ticks, mem
         prefix += f'num_clusters={row["num_clusters"]}\ntimeout={cycle_limit}\n'
         prefix += 'progress_every_cycles=10000000\n'
         prefix += 'smem_init=' + json.dumps(row['smem_init']) + '\n'
+        per_cluster = cluster_initialization(row, qualified)
+        if per_cluster is not None:
+            prefix += 'smem_init_per_cluster=' + json.dumps(per_cluster) + '\n'
         prefix += 'smem_dump=[]\nnightly_host_handshake=false\n'
         prefix += toml_records('gmem_load', [dict(address=load['address'],
             bytes=load['bytes'], path=str(local(bundle, load['path']))) for load in row['loads']])
@@ -164,7 +191,7 @@ def make_job(root, plan, case, attempt):
     simulator = case_simulator_pin(plan, case)
     source = root / case['name']
     row = json.loads((source / 'workload.json').read_text())
-    bundle = Path(plan['bundle'])
+    bundle = Path(case_bundle_pin(plan, case)['path'])
     reads = {check['file']: check for check in row['checks']}
     for name in reads:
         local(attempt, name).parent.mkdir(parents=True, exist_ok=True)
@@ -263,10 +290,14 @@ def check_case_job(root, plan, case, job):
             or Path(command[0]).resolve() != Path(simulator['path']).resolve()
             or job['input_sha256'].get(command[0]) != simulator['sha256']):
         raise ValueError('completed job used a different simulator')
-    bundle = Path(plan['bundle']).resolve()
+    bundle_pin = case_bundle_pin(plan, case)
+    bundle = Path(bundle_pin['path'])
     if (Path(job['portable_bundle']).resolve() != bundle
             or job['portable_workload'] != case['name']):
         raise ValueError('completed job used a different workload bundle')
+    if (bundle_pin['manifest_sha256'] is not None and
+            job['input_sha256'].get(str(bundle / 'manifest.json')) != bundle_pin['manifest_sha256']):
+        raise ValueError('completed job used a different bundle manifest')
     row = json.loads((root / case['name'] / 'workload.json').read_text())
     manifest = json.loads((bundle / 'manifest.json').read_text())
     declared = [item for item in manifest['workloads'] if item['name'] == case['name']]
@@ -295,6 +326,7 @@ def save_timing(root, plan, case, queue_path):
         source_ticks=plan['source_ticks'], memory_ticks=plan['memory_ticks'],
         simulator=job['command'][0], simulator_sha256=simulator['sha256'],
         journal_sha256=digest(journal))
+    timing['bundle_pin'] = case_bundle_pin(plan, case)
     if simulator.get('source_commit'):
         timing['simulator_source_commit'] = simulator['source_commit']
     timing['simulated_cycles'] = job['simulated_cycles']

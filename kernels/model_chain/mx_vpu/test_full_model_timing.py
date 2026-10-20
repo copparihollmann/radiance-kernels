@@ -8,10 +8,11 @@ import signal
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
-from full_model_timing import report, model_workloads, make_job, observe, process_snapshot, runtime_library_pin, save_timing, summarize
+from full_model_timing import cluster_initialization, prepare, report, model_workloads, make_job, observe, process_snapshot, runtime_library_pin, save_timing, summarize
 from run_e2e_queue import validate
 
 
@@ -235,6 +236,43 @@ class CompletedTimingIdentity(unittest.TestCase):
         self.assertIn(str(self.old), job['hash_inputs'])
         self.assertNotIn(str(self.new), job['hash_inputs'])
 
+    def test_retained_case_keeps_actual_bundle_and_manifest(self):
+        newer = self.root / 'new-bundle'
+        newer.mkdir()
+        (newer / 'manifest.json').write_text('{"workloads": []}')
+        plan = dict(self.plan, bundle=str(newer), manifest_sha256=self.sha(newer / 'manifest.json'))
+        pin = dict(path=str(self.root), manifest_sha256=self.sha(self.root / 'manifest.json'))
+        case = dict(self.case, bundle_pin=pin)
+        job = copy.deepcopy(self.job)
+        job['input_sha256'][str(self.root / 'manifest.json')] = pin['manifest_sha256']
+        self.save(plan, case, job)
+        result = json.loads((self.source / 'result.json').read_text())
+        self.assertEqual(result['bundle_pin'], pin)
+        with self.assertRaisesRegex(ValueError, 'different workload bundle'):
+            self.save(plan, self.case, job)
+        job['input_sha256'][str(self.root / 'manifest.json')] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'different bundle manifest'):
+            self.save(plan, case, job)
+        (self.root / 'manifest.json').write_text('{"changed": true}')
+        with self.assertRaisesRegex(ValueError, 'case bundle changed'):
+            self.save(plan, case, job)
+
+    def test_new_job_uses_retained_bundle_for_elf_inputs_and_checker(self):
+        (self.source / 'config-template.toml').write_text('[sim]\nreport="hbm.json"\n')
+        newer = self.root / 'new-bundle'
+        newer.mkdir()
+        (newer / 'manifest.json').write_text('{"workloads": []}')
+        plan = dict(self.plan, bundle=str(newer), manifest_sha256=self.sha(newer / 'manifest.json'))
+        case = dict(self.case, bundle_pin=dict(path=str(self.root),
+                                             manifest_sha256=self.sha(self.root / 'manifest.json')))
+        attempt = self.source / 'attempt-002'
+        attempt.mkdir()
+        job = make_job(self.root, plan, case, attempt)
+        self.assertEqual(job['portable_bundle'], str(self.root))
+        self.assertEqual(job['command'][3], str(self.elf))
+        self.assertIn(str(self.root / 'manifest.json'), job['hash_inputs'])
+        self.assertNotIn(str(newer / 'manifest.json'), job['hash_inputs'])
+
     def test_a_passed_job_cannot_be_relabelled_with_another_default_engine(self):
         plan = dict(self.plan, simulator=str(self.new), simulator_sha256=self.sha(self.new))
         with self.assertRaises(ValueError):
@@ -311,6 +349,63 @@ class RuntimeLibraryBinding(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     runtime_library_pin(path)
 
+
+
+class FourSMTimingPreparation(unittest.TestCase):
+    def test_native_configuration_keeps_physical_tags_and_discards_assistance(self):
+        from workload_bundle import Store
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            bundle = root / 'bundle'
+            bundle.mkdir()
+            store = Store(bundle)
+            def blob(name, data):
+                path = root / name
+                path.write_bytes(data)
+                return store.put(path)
+            tags = [[[0x80038, 0xc1d00000 | c], [0x8003c, 0xc1d00000 | c]] for c in range(4)]
+            cfg = ('[muon]\nnum_lanes=16\nnum_warps=8\nnum_cores=2\ncluster_id_bits=1\n'
+                   '[sim]\nfunctional_assist="old-assist.json"\nsmem_init_per_cluster=' +
+                   json.dumps(tags) + '\n')
+            model = dict(model='tinyllama', stages=1,
+                         stage_backends=[dict(stage='prefill.embedding')])
+            row = dict(name='tinyllama-4sm', family='model', num_clusters=4, loads=[], checks=[],
+                       smem_init=[[0x80000, 1]], smem_init_per_cluster=tags,
+                       device_elf=blob('device', b'qualified-device'),
+                       sources=dict(manifest=blob('model', json.dumps(model).encode()),
+                                    qualified_simulator_configuration=blob('config', cfg.encode())))
+            summary = dict(models=[dict(model='tinyllama', mx_loops_per_sm=1,
+                                        mesh_tiles_per_sm=2, vpu_commands_per_sm=1)])
+            manifest = dict(workloads=[row], evidence=dict(
+                all_full_models=blob('summary', json.dumps(summary).encode())))
+            (bundle / 'manifest.json').write_text(json.dumps(manifest))
+            cyclotron = root / 'cyclotron'
+            for name in ['radiance/gmem.toml', 'radiance/icache.toml', 'lsu_scheduler.toml',
+                         'smem.toml', 'writeback_operand_fetch.toml', 'barrier.toml',
+                         'fence.toml', 'dma_tensor.toml', 'radiance/execute.toml',
+                         'radiance/hazards.toml']:
+                path = cyclotron / 'config/timing' / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('# pinned timing control\n')
+            hbm = cyclotron / 'configs/hbm/hbm2-4ch.yaml'
+            hbm.parent.mkdir(parents=True)
+            hbm.write_text('pinned HBM control\n')
+            simulator = root / 'simulator'
+            simulator.write_bytes(b'pinned engine')
+            with patch('full_model_timing.model_workloads', return_value=[row]):
+                plan = prepare(bundle, cyclotron, simulator, root / 'timing', 100, 1, 1)
+            config = tomllib.loads((root / 'timing/tinyllama-4sm/config-template.toml').read_text())
+            self.assertEqual(config['muon']['cluster_id_bits'], 1)
+            self.assertEqual(config['sim']['smem_init_per_cluster'], tags)
+            self.assertEqual(config['sim']['num_clusters'], 4)
+            self.assertTrue(config['sim']['timing'])
+            self.assertNotIn('functional_assist', config['sim'])
+            self.assertNotIn('gmem_patches', config['sim'])
+            self.assertEqual(plan['cases'][0]['expected_gemmini']['mx_loops'], 1)
+            with self.assertRaises(ValueError):
+                cluster_initialization(dict(row, smem_init_per_cluster=tags[:3]), {})
+            with self.assertRaises(ValueError):
+                cluster_initialization(row, dict(sim=dict(smem_init_per_cluster=tags[::-1])))
 
 
 class TimingCoverage(unittest.TestCase):
