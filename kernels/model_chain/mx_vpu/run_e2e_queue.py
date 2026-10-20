@@ -43,6 +43,60 @@ def stage_identity(record, numeric=False):
     return name
 
 
+def gemmini_counts(job, log, clusters):
+    """Read inline counters or the current process's announced per-SM reports."""
+    loop_pattern = r'LOOP_WS pending (\d+), retired (\d+)'
+    tile_pattern = r'mesh: (\d+) tiles,.*VPU: (\d+) commands'
+    loops, tiles = re.findall(loop_pattern, log), re.findall(tile_pattern, log)
+    paths = re.findall(r'^Cyclotron: gemmini report in (.+)$', log, re.MULTILINE)
+    result = dict(loop_ws=loops, mesh_tiles_and_vpu=tiles, reports=[], report_binding_pass=True)
+    if not paths:
+        result['report_binding_pass'] = not job.get('gemmini_report_sha256')
+        return result
+    # Never search arbitrary directories or substitute stale reports. Cyclotron
+    # prints exactly the files it wrote under run_<timestamp>_<process ID>.
+    result['report_binding_pass'] = False
+    if loops or tiles or len(paths) != clusters or not job.get('cwd') or not job.get('pid'):
+        return result
+    cwd = Path(job['cwd']).resolve()
+    root = Path(job.get('env', {}).get('CYCLOTRON_PERF_LOG_DIR', 'performance_logs'))
+    root = (root if root.is_absolute() else cwd / root).resolve()
+    commands = re.findall(r'^Cyclotron: cluster (\d+) gemmini: (\d+) commands', log, re.MULTILINE)
+    if len(commands) != clusters or {int(c) for c, _ in commands} != set(range(clusters)):
+        return result
+    commands = {int(c): int(count) for c, count in commands}
+    reports = {}
+    for raw in paths:
+        path = Path(raw)
+        path = (path if path.is_absolute() else cwd / path).resolve()
+        cluster = re.fullmatch(r'gemmini_report_cluster(\d+)\.txt', path.name)
+        if (not cluster or path.parent.parent != root or
+                not re.fullmatch(r'run_\d+_' + str(job['pid']), path.parent.name)):
+            return result
+        cluster = int(cluster[1])
+        if cluster not in commands or cluster in reports:
+            return result
+        try:
+            text = path.read_text()
+            sha = digest(path)
+        except OSError:
+            return result
+        retired = re.findall(loop_pattern, text)
+        physical = re.findall(tile_pattern, text)
+        total = re.findall(r'^gemmini radiance: (\d+) commands', text, re.MULTILINE)
+        if (len(retired) != 1 or len(physical) != 1 or len(total) != 1 or
+                int(total[0]) != commands[cluster]):
+            return result
+        reports[cluster] = dict(cluster=cluster, path=str(path), sha256=sha,
+                                loop_ws=retired[0], mesh_tiles_and_vpu=physical[0])
+    result['reports'] = [reports[c] for c in range(clusters)]
+    pins = {r['path']: r['sha256'] for r in result['reports']}
+    result.update(loop_ws=[r['loop_ws'] for r in result['reports']],
+                  mesh_tiles_and_vpu=[r['mesh_tiles_and_vpu'] for r in result['reports']],
+                  report_binding_pass=job.get('gemmini_report_sha256', pins) == pins)
+    return result
+
+
 def validate(job, log, returncode):
     result = {'process_ok': returncode == 0}
     if job['kind'] == 'native':
@@ -125,12 +179,13 @@ def validate(job, log, returncode):
         result['tohost_pass'] = len(finished) == clusters and set(finished) == set(range(clusters))
         if job.get('expected_gemmini'):
             expected = job['expected_gemmini']
-            loops = re.findall(r'LOOP_WS pending (\d+), retired (\d+)', log)
-            tiles = re.findall(r'mesh: (\d+) tiles,.*VPU: (\d+) commands', log)
-            result['accelerator_counts_pass'] = (len(loops) == clusters and len(tiles) == clusters and
+            counts = gemmini_counts(job, log, clusters)
+            loops, tiles = counts['loop_ws'], counts['mesh_tiles_and_vpu']
+            result['accelerator_counts_pass'] = (counts['report_binding_pass'] and
+                len(loops) == clusters and len(tiles) == clusters and
                 all(int(pending) == 0 and int(retired) == expected['mx_loops'] for pending, retired in loops) and
                 all(int(mesh) == expected['mesh_tiles'] and int(vpu) == expected['vpu_commands'] for mesh,vpu in tiles))
-            result['accelerator_counts'] = dict(loop_ws=loops, mesh_tiles_and_vpu=tiles)
+            result['accelerator_counts'] = counts
         journal = Path(job['progress'])
         records = [json.loads(line) for line in journal.read_text().splitlines()] if journal.exists() else []
         entries = [x for x in records if x['event'] == 'stage_entry']
@@ -321,6 +376,9 @@ def main():
             job['seconds'] = time.time() - job['started']
             log = (dest / 'run.log').read_text()
             job['validation'] = validate(job, log, job['returncode'])
+            reports = job['validation'].get('accelerator_counts', {}).get('reports', [])
+            if reports:
+                job['gemmini_report_sha256'] = {r['path']: r['sha256'] for r in reports}
             job['log_sha256'] = digest(dest / 'run.log')
             job['native_command_counts'] = re.findall(r'MX_VPU_MODEL commands=(\d+) mx=(\d+) vpu=(\d+) cycles=(\d+)', log)
             job['device_command_counts'] = re.findall(r'cluster (\d+) gemmini: (\d+) commands', log)

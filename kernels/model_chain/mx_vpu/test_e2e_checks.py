@@ -205,6 +205,53 @@ class CompleteOutputChecks(unittest.TestCase):
             report.write_text(json.dumps(dict(unconsumed_requests=1, pending_dram=0)))
             self.assertFalse(validate(job, log, 0)['passed'])
 
+    def test_isa_reads_each_current_process_gemmini_report_and_rejects_stale_counts(self):
+        for clusters in (1, 2, 4):
+            with self.subTest(clusters=clusters), tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as folder:
+                root = Path(folder)
+                perf = root / 'performance_logs'
+                run = perf / 'run_123_456'
+                run.mkdir(parents=True)
+                journal = root / 'progress.jsonl'
+                journal.write_text(''.join(json.dumps(dict(event='stage_entry', cluster=c)) + '\n'
+                    for c in range(clusters)) + json.dumps(dict(event='finish', passed=True)) + '\n')
+                job = dict(kind='isa', num_clusters=clusters, expected_stages=1,
+                    progress=str(journal), cwd=str(root), pid=456,
+                    env=dict(CYCLOTRON_PERF_LOG_DIR=str(perf)),
+                    expected_gemmini=dict(mx_loops=4608, mesh_tiles=9216, vpu_commands=3072))
+                text = ('gemmini radiance: 123 commands (0 INST stores retried); LOOP_WS pending 0, retired 4608\n'
+                        '  mesh: 9216 tiles, 147456 busy cycles; VPU: 3072 commands\n')
+                paths = [run / f'gemmini_report_cluster{c}.txt' for c in range(clusters)]
+                for path in paths:
+                    path.write_text(text)
+                log = ''.join(f'Cyclotron: gemmini report in {p}\n'
+                    f'Cyclotron: cluster {c} gemmini: 123 commands (0 INST stores waited), busy until cycle 10\n'
+                    f'Cyclotron: cluster {c} isa-test passed with tohost=0\n' for c, p in enumerate(paths))
+                actual = validate(job, log, 0)
+                self.assertTrue(actual['passed'], actual)
+                reports = actual['accelerator_counts']['reports']
+                self.assertEqual([r['cluster'] for r in reports], list(range(clusters)))
+                job['gemmini_report_sha256'] = {r['path']: r['sha256'] for r in reports}
+                self.assertTrue(validate(job, log, 0)['passed'])
+                for broken in (text.replace('retired 4608', 'retired 4607'),
+                               text.replace('9216 tiles', '9215 tiles'),
+                               text.replace('3072 commands', '3071 commands'),
+                               text.replace('pending 0', 'pending 1'),
+                               text.replace('123 commands', '124 commands'),
+                               text + 'changed bytes with identical counters\n'):
+                    paths[0].write_text(broken)
+                    self.assertFalse(validate(job, log, 0)['passed'])
+                paths[0].write_text(text)
+                for broken in (log.replace(str(paths[0]), str(root / paths[0].name)),
+                               log.replace('run_123_456', 'run_123_999'),
+                               log + f'Cyclotron: gemmini report in {paths[0]}\n',
+                               log.replace(f'Cyclotron: gemmini report in {paths[0]}\n', '')):
+                    self.assertFalse(validate(job, broken, 0)['passed'])
+                if clusters > 1:
+                    self.assertFalse(validate(job, log.replace(str(paths[1]), str(paths[0])), 0)['passed'])
+                paths[0].unlink()
+                self.assertFalse(validate(job, log, 0)['passed'])
+
     def test_functional_isa_scope_requires_explicit_matching_configuration(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as temporary:
             directory=Path(temporary);config=directory/'cyclotron.toml';journal=directory/'progress.jsonl'
