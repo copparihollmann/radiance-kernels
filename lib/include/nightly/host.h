@@ -92,11 +92,6 @@ static inline void nightly_host_launch(uint32_t n_clusters, uint32_t arg = 0) {
   asm volatile("fence" ::: "memory");
   for (uint32_t cl = 0; cl < n_clusters; cl++) nightly_pb_write(cl, NIGHTLY_PB_LAUNCH, NIGHTLY_LAUNCH_MAGIC);
   asm volatile("fence" ::: "memory");
-  if (n_clusters > 2) {
-    /* Startup reads the physical cluster tag before placing stacks. */
-    *(volatile uint32_t *)0x41000000ull = 0;
-    asm volatile("fence" ::: "memory");
-  }
 }
 
 static inline int nightly_host_wait(uint32_t n_clusters, uint64_t max_polls = 50000000ull) {
