@@ -531,7 +531,8 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
 
 def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
             host_lock: Path | None = None,
-            exclude_families: set[str] | None = None) -> None:
+            exclude_families: set[str] | None = None,
+            include_jobs: set[str] | None = None) -> None:
     plan = json.loads(plan_path.read_text())
     if plan.get("schema") != "radiance-fpga-1a-campaign-plan-v1":
         raise ValueError("unsupported plan schema")
@@ -546,9 +547,17 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
             raise ValueError(f"asset changed after planning: {label}")
 
     excluded = exclude_families or set()
+    included = include_jobs or set()
+    known_job_ids = {job["id"] for job in plan["jobs"]}
+    unknown_job_ids = included - known_job_ids
+    if unknown_job_ids:
+        raise ValueError(
+            "unknown campaign job IDs: " + ", ".join(sorted(unknown_job_ids))
+        )
     selected_jobs = [
         job for job in plan["jobs"]
         if job["workload"].get("family") not in excluded
+        and (not included or job["id"] in included)
     ]
     if not selected_jobs:
         raise ValueError("campaign selection produced no jobs")
@@ -556,6 +565,11 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
         print(
             f"excluded {len(plan['jobs']) - len(selected_jobs)} jobs from families: "
             + ", ".join(sorted(excluded)),
+            flush=True,
+        )
+    if included:
+        print(
+            f"selected {len(selected_jobs)} explicitly requested job(s)",
             flush=True,
         )
 
@@ -667,6 +681,10 @@ def main() -> None:
         choices=("stream", "spatter", "xrage", "fp8_gemm"),
         help="skip a quarantined workload family; may be specified more than once",
     )
+    running.add_argument(
+        "--include-job", action="append", default=[], metavar="JOB_ID",
+        help="run only an exact plan job ID; may be specified more than once",
+    )
     summary = sub.add_parser("summarize")
     summary.add_argument("--plan", type=Path, required=True)
     summary.add_argument("--out", type=Path, required=True)
@@ -683,7 +701,7 @@ def main() -> None:
             print(f"planned {len(plan['jobs'])} runs under {args.out.resolve()}")
         elif args.command == "run":
             execute(args.plan.resolve(), args.rerun_failed, args.parallel_targets,
-                    args.host_lock, set(args.exclude_family))
+                    args.host_lock, set(args.exclude_family), set(args.include_job))
         else:
             summarize(args.plan.resolve(), args.out.resolve())
     except (ValueError, SafetyAbort) as error:

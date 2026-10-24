@@ -24,7 +24,8 @@ python3 campaign.py plan \
   --asset-manifest "$ROOT/runs/campaign-single-1b/assets.json" \
   --assets "$ROOT/artifacts/nicolas-fpga-assets-v1" \
   --out "$ROOT/runs/campaign-single-1b"
-python3 campaign.py run --plan "$ROOT/runs/campaign-single-1b/plan.json"
+python3 campaign.py run --plan "$ROOT/runs/campaign-single-1b/plan.json" \
+  --host-lock /scratch/agustin/share/firesim-host.lock
 python3 campaign.py summarize --plan "$ROOT/runs/campaign-single-1b/plan.json" \
   --out "$ROOT/reports/campaign-single-1b.json"
 ```
@@ -68,6 +69,12 @@ or busy and never changes the file contents or timestamps. Do not point this at
 another user's private lock without their agreement. This mechanism prevents
 the programming race only when every hardware entry point uses the same inode;
 the process monitor remains a fallback for non-cooperating commands.
+
+Use repeatable `--include-job JOB_ID` arguments to execute an exact subset of
+a hash-verified plan, such as one reduced loader canary before expanding to a
+whole configuration matrix. Unknown IDs fail closed, and the first selected
+job for each target always uses the programming form; image reuse is confined
+to later selected jobs in the same campaign process.
 
 For Nicolas's launcher, `-b NAME` selects the paired archive and driver from
 the copied registry; the final positional argument is the workload ELF. For

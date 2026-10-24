@@ -123,6 +123,18 @@ class CampaignTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "selection produced no jobs"):
                 execute(plan_path, rerun_failed=False, host_lock=host_lock,
                         exclude_families={"stream"})
+            with self.assertRaisesRegex(ValueError, "unknown campaign job IDs"):
+                execute(plan_path, rerun_failed=False, host_lock=host_lock,
+                        include_jobs={"not-a-real-job"})
+            selected_id = plan["jobs"][0]["id"]
+            execute(plan_path, rerun_failed=False, host_lock=host_lock,
+                    include_jobs={selected_id})
+            self.assertTrue(
+                Path(plan["jobs"][0]["result_dir"], "result.json").is_file()
+            )
+            self.assertFalse(
+                Path(plan["jobs"][1]["result_dir"], "result.json").exists()
+            )
             execute(plan_path, rerun_failed=False, host_lock=host_lock)
             execute(plan_path, rerun_failed=False, host_lock=host_lock)
             report = summarize(plan_path, root / "summary.json")
