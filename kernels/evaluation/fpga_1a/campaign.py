@@ -94,7 +94,8 @@ def process_table() -> list[dict]:
                 "pid": int(entry.name), "ppid": int(fields["PPid"]),
                 "uid": int(fields["Uid"].split()[0]), "argv": argv,
             })
-        except (FileNotFoundError, PermissionError, KeyError, ValueError):
+        except (FileNotFoundError, ProcessLookupError, PermissionError,
+                KeyError, ValueError):
             # Processes can exit while /proc is being sampled.
             continue
     return rows

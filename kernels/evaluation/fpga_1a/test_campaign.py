@@ -5,16 +5,21 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from campaign import (SafetyAbort, descendant_pids, exclusive_host_lock,
                       execute, external_firesim_activity, inventory,
                       is_firesim_hardware_process, load_assets, make_plan,
-                      sha256, summarize)
+                      process_table, sha256, summarize)
 
 
 class CampaignTest(unittest.TestCase):
+    def test_process_table_tolerates_disappearing_proc_entry(self):
+        with patch.object(Path, "read_bytes", side_effect=ProcessLookupError):
+            self.assertEqual(process_table(), [])
+
     def test_cooperative_host_lock_is_exclusive_and_read_only(self):
         with tempfile.TemporaryDirectory() as directory:
             lock = Path(directory) / "firesim-host.lock"
