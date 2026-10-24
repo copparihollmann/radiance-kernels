@@ -49,6 +49,12 @@ MU_CFLAGS += -idirafter $(MU_LIBC_INCLUDE)
 endif
 MU_CFLAGS += $(KERNEL_MU_CFLAGS)
 
+# freestanding libstdc++ headers (<type_traits> in mu_intrinsics.h)
+MU_CXX_INCLUDE ?= $(lastword $(sort $(wildcard $(MU_LIBC_INCLUDE)/c++/*)))
+ifneq ($(MU_CXX_INCLUDE),)
+MU_CFLAGS += -idirafter $(MU_CXX_INCLUDE) -idirafter $(MU_CXX_INCLUDE)/riscv64-unknown-elf
+endif
+
 # Register budget.  Muon's renamer allocates a physical register on a warp's FIRST write of an
 # architectural register and never frees it; a core has 256 (Rename.scala:123 asserts on
 # overflow).  So warps_per_core * registers_per_warp must stay <= 256.  OCC is the warps per
@@ -57,6 +63,14 @@ MU_CFLAGS += $(KERNEL_MU_CFLAGS)
 OCC ?= 8
 GPRS := $(if $(filter 1 2,$(OCC)),128,$(if $(filter 3 4,$(OCC)),64,32))
 MU_CFLAGS += -DNIGHTLY_OCC=$(OCC) -mllvm -riscv-max-allocatable-gprs=$(GPRS)
+
+# The Muon runtime, built here when missing or older than its sources (a fresh checkout has no lib/libmuonrt.a):
+# llvm-muon's llvm-ar (no riscv32 gcc-ar needed) and the freestanding libc / libstdc++ headers the nightly headers use.
+LIB_SRCS := $(wildcard $(LIB)/src/*) $(wildcard $(LIB)/include/*.h) $(wildcard $(LIB)/include/nightly/*.h)
+$(LIB)/libmuonrt.a: $(LIB_SRCS)
+	$(MAKE) -C $(LIB) libmuonrt.a LLVM_MUON=$(LLVM_MUON) AR=$(LLVM_MUON)/bin/llvm-ar \
+	  RISCV_TOOLCHAIN_PATH=$(RISCV_TOOLCHAIN_PATH) MU_STACK_WORD_STRIDE=$(MU_STACK_WORD_STRIDE) \
+	  MU_EXTRA_DEFS="$(if $(MU_LIBC_INCLUDE),-idirafter $(MU_LIBC_INCLUDE)) $(if $(MU_CXX_INCLUDE),-idirafter $(MU_CXX_INCLUDE) -idirafter $(MU_CXX_INCLUDE)/riscv64-unknown-elf)"
 
 MU_LINKER_SCRIPT ?= $(LIB)/linker/mu_link_nightly.ld
 MU_LDFLAGS := -nodefaultlibs -nostartfiles -Wl,-Bstatic,-T,$(MU_LINKER_SCRIPT),-z,norelro -fuse-ld=lld \
@@ -92,13 +106,16 @@ STAMP_TEXT := $(DEFS) MU_ADDR_HASH=$(MU_ADDR_HASH)
 $(shell mkdir -p build; printf '%s\n' "$(STAMP_TEXT)" | cmp -s - $(DEFS_STAMP) || printf '%s\n' "$(STAMP_TEXT)" > $(DEFS_STAMP))
 
 MU_OBJCOPY := $(LLVM_MUON)/bin/llvm-objcopy
-# one object per blob: build/blobs/<name>.o holds <name>.bin in section .regionN
-blob_obj = build/blobs/$(basename $(notdir $(1))).o
+# one object per blob: $(BLOB_DIR)/<name>.o holds <name>.bin in section .regionN.  A project that builds several
+# data sets with the same blob names (llama_e2e: one per model) sets BLOB_DIR per data set, or a build whose data is
+# up to date links the objects of whichever data set was converted last.
+BLOB_DIR ?= build/blobs
+blob_obj = $(BLOB_DIR)/$(basename $(notdir $(1))).o
 blob_sec = $(patsubst .%,%,$(suffix $(basename $(notdir $(1)))))
 BLOB_OBJS := $(foreach b,$(BLOBS),$(call blob_obj,$(b)))
 define BLOB_RULE
 $(call blob_obj,$(1)): $(1)
-	mkdir -p build/blobs
+	mkdir -p $(BLOB_DIR)
 	$(MU_OBJCOPY) -I binary -O elf32-littleriscv \
 	  --rename-section .data=.$(call blob_sec,$(1)),alloc,load,contents,data $$< $$@
 endef
@@ -110,10 +127,10 @@ all: $(foreach s,$(SMS),build/$(s)sm/$(PROJECT).soc.elf)
 define SM_RULES
 build/$(1)sm/$(PROJECT).mu.o: $(MU_SRCS) $(DEPS) $(DEFS_STAMP) $(NIGHTLY_DIR)/nightly.mk $(wildcard $(LIB)/include/nightly/*.h) | build/$(1)sm
 	$(MU_CXX) $(MU_CFLAGS) -DNIGHTLY_CLUSTERS=$(1) $(DEFS) -c $(firstword $(MU_SRCS)) -o $$@
-build/$(1)sm/$(PROJECT).radiance.elf: build/$(1)sm/$(PROJECT).mu.o $(BLOB_OBJS)
+build/$(1)sm/$(PROJECT).radiance.elf: build/$(1)sm/$(PROJECT).mu.o $(BLOB_OBJS) $(LIB)/libmuonrt.a
 	$(MU_CXX) $(MU_CFLAGS) $$< $(BLOB_OBJS) $(MU_LDFLAGS) -o $$@
 	$(MU_OBJDUMP) -d $$@ > build/$(1)sm/$(PROJECT).radiance.dump
-build/$(1)sm/$(PROJECT).host.o: $(HOST_SRCS) $(DEPS) $(DEFS_STAMP) | build/$(1)sm
+build/$(1)sm/$(PROJECT).host.o: $(HOST_SRCS) $(DEPS) $(DEFS_STAMP) $(NIGHTLY_DIR)/nightly.mk $(wildcard $(LIB)/include/nightly/*.h) | build/$(1)sm
 	$(HOST_CXX) $(HOST_CFLAGS) -DNIGHTLY_CLUSTERS=$(1) $(DEFS) -c $(firstword $(HOST_SRCS)) -o $$@
 build/$(1)sm/$(PROJECT).fuse.elf: build/$(1)sm/$(PROJECT).radiance.elf $(DEFS_STAMP) $(SOC)/scramble_gpu_elf.py
 ifeq ($(MU_ADDR_HASH),1)
