@@ -108,6 +108,7 @@ class CampaignTest(unittest.TestCase):
                     "runner": "runner.py",
                     "require_per_sm_timing": True,
                     "run_argv": ["python3", "{runner}", "{elf}", "{bitstream}"],
+                    "reuse_argv": ["python3", "missing-reuse-runner.py", "{elf}"],
                 }],
             }
             asset_path = root / "assets.json"
@@ -149,6 +150,58 @@ class CampaignTest(unittest.TestCase):
             result = json.loads(Path(plan["jobs"][0]["result_dir"], "result.json").read_text())
             self.assertTrue(result["per_sm_timing_complete"])
             self.assertEqual(len(result["core_kernel_cycles"]), 2)
+            for job in plan["jobs"]:
+                request = json.loads(Path(job["result_dir"], "request.json").read_text())
+                self.assertFalse(request["reused_loaded_bitstream"])
+                self.assertNotIn("missing-reuse-runner.py", request["argv"])
+
+    def test_failed_job_stops_campaign_and_requires_explicit_rerun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            assets = root / "assets"
+            assets.mkdir()
+            (assets / "one.bit").write_bytes(b"prebuilt-bitstream")
+            (assets / "runner.py").write_text("print('FAIL')\n")
+            workloads = []
+            for operation in ("copy", "scale"):
+                elf = root / f"{operation}.elf"
+                elf.write_bytes(operation.encode())
+                workloads.append({
+                    "name": f"stream--{operation}--1sm", "family": "stream",
+                    "operation": operation, "sm_count": 1, "loader": "logical",
+                    "elf": str(elf), "elf_sha256": sha256(elf), "status": "built",
+                })
+            build_path = root / "build.json"
+            build_path.write_text(json.dumps({
+                "hardware_rebuilt": False, "no_vpu": True,
+                "workloads": workloads,
+            }))
+            asset_path = root / "assets.json"
+            asset_path.write_text(json.dumps({
+                "schema": "radiance-fpga-1a-assets-v1",
+                "targets": [{
+                    "id": "one", "kind": "firesim", "sm_count": 1,
+                    "memory": "dram", "loader": "logical",
+                    "bitstream": "one.bit", "runner": "runner.py",
+                    "run_argv": ["python3", "{runner}", "{elf}", "{bitstream}"],
+                }],
+            }))
+            run_root = root / "runs"
+            plan = make_plan(build_path, asset_path, assets, run_root,
+                             warmups=0, repetitions=1, allow_incomplete=True)
+            host_lock = root / "host.lock"
+            host_lock.write_bytes(b"")
+            with self.assertRaisesRegex(SafetyAbort, "failed; stopping"):
+                execute(run_root / "plan.json", rerun_failed=False,
+                        host_lock=host_lock)
+            first = Path(plan["jobs"][0]["result_dir"])
+            second = Path(plan["jobs"][1]["result_dir"])
+            self.assertEqual(json.loads((first / "result.json").read_text())["status"],
+                             "failed")
+            self.assertFalse((second / "request.json").exists())
+            with self.assertRaisesRegex(SafetyAbort, "prior failed result"):
+                execute(run_root / "plan.json", rerun_failed=False,
+                        host_lock=host_lock)
 
     def test_rejects_omitted_bitstream(self):
         with tempfile.TemporaryDirectory() as directory:

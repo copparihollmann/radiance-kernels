@@ -15,23 +15,19 @@ CONFIGS = {
 }
 
 
-def command(config: str, reuse: bool) -> list[str]:
-    argv = [
+def command(config: str) -> list[str]:
+    return [
         "timeout", "--signal=TERM", "--kill-after=30", "1800",
         "bash", "{runner}", "-b", "{bitstream_config}",
-        "--bdf", "{bdf}", "--fastloadmem",
+        "--bdf", "{bdf}", "--fastloadmem", "{elf}",
     ]
-    if reuse:
-        argv.append("--no-program")
-    argv.append("{elf}")
-    return argv
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--bdf", default="1b:00.0")
+    parser.add_argument("--bdf", default="1a:00.0")
     args = parser.parse_args()
 
     spec = json.loads(args.input.read_text())
@@ -48,8 +44,8 @@ def main() -> None:
         config = CONFIGS[target["id"]]
         target["bdf"] = args.bdf
         target["bitstream_config"] = config
-        target["run_argv"] = command(config, reuse=False)
-        target["reuse_argv"] = command(config, reuse=True)
+        target["run_argv"] = command(config)
+        target.pop("reuse_argv", None)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(spec, indent=2) + "\n")
 

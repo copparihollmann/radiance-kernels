@@ -414,18 +414,33 @@ def expand(argv: list[str], values: dict[str, object]) -> list[str]:
 
 def execute_job(job: dict, asset_root: Path, receipts: dict,
                 rerun_failed: bool, reuse_loaded: bool) -> tuple[bool, bool]:
-    """Execute one job; return (did_run, target_image_is_known_loaded)."""
+    """Execute one job; FireSim images are always reprogrammed between jobs."""
     result_dir = Path(job["result_dir"])
     result_file = result_dir / "result.json"
     if result_file.is_file():
         old = json.loads(result_file.read_text())
-        if old.get("status") == "passed" or not rerun_failed:
+        if old.get("status") == "passed":
             return False, reuse_loaded
+        if not rerun_failed:
+            raise SafetyAbort(
+                f"{job['id']}: prior failed result requires inspection; "
+                "resume with --rerun-failed only after the cause is understood"
+            )
     result_dir.mkdir(parents=True, exist_ok=True)
     values = context(job, asset_root, result_dir)
     target = job["target"]
-    argv_template = target.get("reuse_argv") if reuse_loaded else None
-    argv = expand(argv_template or target["run_argv"], values)
+    # Reusing a programmed Corigine image across independent FireSim processes
+    # is unsafe on harp.  Three isolated campaigns passed exactly three runs and
+    # reset the host while the fourth --no-program run polled ZERO_FINISHED.
+    # Always take the full run_argv path, even when a historical plan includes a
+    # reuse_argv field.
+    argv_template = target["run_argv"]
+    argv = expand(argv_template, values)
+    if target.get("kind") == "firesim" and "--no-program" in argv:
+        raise SafetyAbort(
+            f"{job['id']}: refusing unsafe FireSim --no-program reuse; "
+            "every job must reprogram its selected bitstream"
+        )
     env = None
     if target.get("env"):
         import os
@@ -433,7 +448,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
         env.update({key: str(value).format_map(values)
                     for key, value in target["env"].items()})
     request = {"job": job, "argv": argv, "asset_receipts": receipts,
-               "reused_loaded_bitstream": bool(argv_template)}
+               "reused_loaded_bitstream": False}
     write_json(result_dir / "request.json", request)
     guard_host = target.get("kind") == "firesim" and bool(target.get("bdf"))
     if guard_host:
@@ -508,7 +523,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
         "kernel_cycles": int(cycles[-1]) if cycles else None,
         "core_kernel_cycles": core_cycles,
         "per_sm_timing_complete": timing_complete,
-        "reused_loaded_bitstream": bool(argv_template),
+        "reused_loaded_bitstream": False,
         "wall_seconds": round(time.time() - started, 6),
     }
     parser_argv = target.get("parser_argv")
@@ -526,8 +541,11 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
             result["parser_error"] = f"parser exited {parsed.returncode}"
     write_json(result_file, result)
     print(f"{job['id']}: {result['status']}", flush=True)
-    image_loaded = reuse_loaded or "=== Bring-up done ===" in output
-    return True, image_loaded
+    if not passed:
+        raise SafetyAbort(
+            f"{job['id']}: failed; stopping the campaign before another FPGA job"
+        )
+    return True, False
 
 
 def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
