@@ -359,7 +359,10 @@ def write_destination_groups(case: dict) -> None:
 
 
 def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
-            loader: str = "logical") -> dict:
+            loader: str = "logical", source_pad_lines: int = 0,
+            output_pad_lines: int = 0) -> dict:
+    if not 0 <= source_pad_lines < 64 or not 0 <= output_pad_lines < 64:
+        raise ValueError("cache padding must be between 0 and 63 lines")
     GENERATED.mkdir(exist_ok=True)
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
@@ -420,10 +423,15 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
     for name in ARRAYS:
         if name == case["output"]:
             continue
-        asm.extend([".balign 64", f".globl spatter_{name}", f"spatter_{name}:"])
+        asm.append(".balign 64")
+        if name == case["source"] and source_pad_lines:
+            asm.append(f".zero {source_pad_lines * 64}")
+        asm.extend([f".globl spatter_{name}", f"spatter_{name}:"])
         asm.append(f'.incbin "generated/{names[name]}"' if name in names else ".long 0")
+    asm.extend(['.section .bss,"aw",@nobits', '.balign 64'])
+    if output_pad_lines:
+        asm.append(f'.zero {output_pad_lines * 64}')
     asm.extend([
-        '.section .bss,"aw",@nobits', '.balign 64',
         '.globl spatter_guard_before', 'spatter_guard_before:', '.zero 64',
         '.globl spatter_' + case["output"], 'spatter_' + case["output"] + ':',
         f'.zero {case["dst_length"] * 8}',
@@ -447,6 +455,9 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "source_tag": case["payload_tag"],
         "requested_local_work_size": case["requested_local_work_size"],
         "muon_warps_per_core": 4,
+        "source_pad_cache_lines": source_pad_lines,
+        "output_pad_cache_lines": output_pad_lines,
+        "layout_padding_bytes": (source_pad_lines + output_pad_lines) * 64,
         "source_elements": case["src_length"], "output_elements": case["dst_length"],
         "logical_payload_bytes": case["count"] * case["length"] * 16,
         "expected_digest": None if expected is None else f"{expected:016x}",
@@ -506,6 +517,10 @@ def main() -> int:
     parser.add_argument("--loader", choices=("logical", "direct-hashed"),
                         default="logical",
                         help="logical GPU loading, or direct loading that bypasses the RTL hash")
+    parser.add_argument("--source-pad-lines", type=int, default=0,
+                        help="0..63 cache lines inserted before the main source array")
+    parser.add_argument("--output-pad-lines", type=int, default=0,
+                        help="0..63 cache lines inserted before the destination array")
     parser.add_argument("--count", type=int,
                         help="replace the suite repetition count for a clearly labeled scaled run")
     parser.add_argument("--iteration-start", type=int, default=0,
@@ -536,6 +551,8 @@ def main() -> int:
         parser.error("--count must be positive")
     if args.iteration_start < 0:
         parser.error("--iteration-start must be nonnegative")
+    if not 0 <= args.source_pad_lines < 64 or not 0 <= args.output_pad_lines < 64:
+        parser.error("cache padding must be between 0 and 63 lines")
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     if args.sim_only:
@@ -543,6 +560,8 @@ def main() -> int:
             parser.error("--sim-only requires --simv and excludes --prepare-only/--build-only")
         if args.full_host_check or args.host_timing:
             parser.error("--sim-only uses the existing ELF; readback and timing flags require a rebuild")
+        if args.source_pad_lines or args.output_pad_lines:
+            parser.error("--sim-only uses the cache padding already recorded in the existing ELF")
         if not (out / "result.json").exists() or not (out / "kernel.soc.elf").exists():
             parser.error("--sim-only requires result.json and kernel.soc.elf in --out")
         manifest = json.loads((out / "result.json").read_text())
@@ -568,7 +587,10 @@ def main() -> int:
                 parser.error("the iteration chunk extends past the original count")
         case["iteration_start"] = args.iteration_start
         case["source_index_base"] = args.iteration_start * case["delta"]
-        manifest = prepare(case, args.suite, args.case, args.sms, args.loader)
+        manifest = prepare(
+            case, args.suite, args.case, args.sms, args.loader,
+            args.source_pad_lines, args.output_pad_lines,
+        )
         manifest["original_count"] = original_count
         manifest["count_overridden"] = args.count is not None and args.count != original_count
         manifest["spatter_revision"] = git_revision(args.suite.parent)

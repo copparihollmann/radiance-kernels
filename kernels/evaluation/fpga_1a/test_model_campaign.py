@@ -56,6 +56,20 @@ class ModelCampaignTests(unittest.TestCase):
         self.assertIn("words = 20", gmem[0])
         self.assertIn("expected_nonzero_u64 = 7", gmem[0])
 
+    def test_spatter_output_padding_adjusts_check_address(self):
+        row = {"name": "spatter--case-4-pad--4sm", "family": "spatter",
+               "sm_count": 4}
+        result = {"output_elements": 4, "expected_digest": "abcd",
+                  "output_pad_cache_lines": 12}
+        original = MC.output_address
+        MC.output_address = lambda _elf: 0x10204140
+        try:
+            gmem, smem = MC.workload_checks(row, result, Path("kernel.elf"))
+        finally:
+            MC.output_address = original
+        self.assertEqual(smem, [])
+        self.assertIn("address = 0x10204440", gmem[0])
+
 
 if __name__ == "__main__":
     unittest.main()

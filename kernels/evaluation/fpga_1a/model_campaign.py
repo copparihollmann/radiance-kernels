@@ -90,6 +90,8 @@ def workload_checks(row: dict, result: dict, elf: Path) -> tuple[list[str], list
     family = row["family"]
     if family in ("stream", "spatter", "xrage"):
         address = output_address(elf)
+        if family == "spatter":
+            address += int(result.get("output_pad_cache_lines", 0)) * 64
         if family == "stream":
             words = int(result.get("output_element_count", result["stream_elements"]))
         else:

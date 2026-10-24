@@ -138,6 +138,15 @@ and scratch size are recorded in `result.json`.
 pattern. It is not performance-equivalent to the original repetition count.
 The output directory contains `kernel.soc.elf`, `result.json`, and `build.log`.
 
+For controlled L0 cache-set experiments, `--source-pad-lines N` and
+`--output-pad-lines N` insert 0 through 63 whole 64-byte cache lines before
+the selected source or destination allocation. The default is zero, and the
+chosen offsets plus total padding bytes are recorded in `result.json`.
+Destination padding remains outside the guard region, so both guards stay
+adjacent to the checked output. These options change memory layout only; they
+must not be treated as an optimization without matching correctness and timing
+evidence.
+
 For the newer hashed `RadianceHBMConfig` with direct DRAM loading (`+loadmem`
 or FireSim LoadMem), set `MU_ADDR_HASH=1` when building. The hash parameters
 must match the RTL. Use `MU_ADDR_HASH=0` for the earlier unhashed image or a

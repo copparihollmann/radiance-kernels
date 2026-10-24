@@ -9,8 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from run import (destination, fnv, normalize, parse_pattern, payload, reference,
-                 sample_digest, source_index, source_tag,
+from run import (GENERATED, destination, fnv, normalize, parse_pattern, payload,
+                 prepare, reference, sample_digest, source_index, source_tag,
                  write_source, written_destination_count)
 from plan import execute_reference, fuse_gather_scatter, stitch_reference
 from run_chain import expected_output
@@ -178,6 +178,22 @@ class SpatterMappingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "needs a scatter"):
             normalize({"kernel": "Gather", "pattern": [0, 1],
                        "collision-policy": "ordered"})
+
+    def test_records_optional_cache_line_padding(self):
+        case = normalize({"kernel": "Gather", "pattern": [0, 1], "count": 1})
+        suite = Path(__file__).parent / "smoke.json"
+        result = prepare(case, suite, 0, sms=2, loader="logical",
+                         source_pad_lines=3, output_pad_lines=5)
+        assembly = (Path(__file__).parent / "data.S").read_text()
+        self.assertEqual(result["source_pad_cache_lines"], 3)
+        self.assertEqual(result["output_pad_cache_lines"], 5)
+        self.assertEqual(result["layout_padding_bytes"], 512)
+        self.assertIn(".zero 192\n.globl spatter_sparse", assembly)
+        self.assertIn(".zero 320\n.globl spatter_guard_before", assembly)
+        self.assertIn(".zero 64\n.globl spatter_dense", assembly)
+        self.assertTrue(GENERATED.joinpath("manifest.json").is_file())
+        with self.assertRaisesRegex(ValueError, "between 0 and 63"):
+            prepare(case, suite, 0, source_pad_lines=64)
 
 
 if __name__ == "__main__":

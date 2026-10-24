@@ -1,13 +1,15 @@
 """Focused tests for STREAM input generation and occupancy selection."""
 
+import importlib.util
 from pathlib import Path
-import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import run
+RUN_PATH = Path(__file__).resolve().parent / "run.py"
+RUN_SPEC = importlib.util.spec_from_file_location("stream_run", RUN_PATH)
+assert RUN_SPEC is not None and RUN_SPEC.loader is not None
+run = importlib.util.module_from_spec(RUN_SPEC)
+RUN_SPEC.loader.exec_module(run)
 
 
 class StreamRunTest(unittest.TestCase):
