@@ -22,7 +22,8 @@ class AssembleManifestTests(unittest.TestCase):
             result = {
                 "status": "built", "sm_count": 4, "loader": "logical",
                 "kind": "scatter", "collision_policy": "ordered", "case": 1,
-                "muon_warps_per_core": 8, "correctness": "digest-checked",
+                "destination_group_count": 17, "muon_warps_per_core": 8,
+                "correctness": "digest-checked",
                 "kernel_revision": "abc", "kernel_source_sha256": "def",
             }
             (build / "result.json").write_text(json.dumps(result))
@@ -32,6 +33,7 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(manifest["artifact_base_revisions"], ["abc"])
             row = manifest["workloads"][0]
             self.assertEqual(row["operation"], "scatter-ordered")
+            self.assertEqual(row["destination_group_count"], 17)
             self.assertEqual(row["muon_warps_per_core"], 8)
             self.assertEqual(row["elf_sha256"], AM.sha256(build / "kernel.soc.elf"))
 

@@ -16,6 +16,7 @@ extern __global uint32_t spatter_sparse[];
 extern __global uint32_t spatter_dense[];
 extern __global uint32_t spatter_sparse_gather[];
 extern __global uint32_t spatter_sparse_scatter[];
+extern __global uint32_t spatter_group_destinations[];
 extern __global uint32_t spatter_group_offsets[];
 extern __global uint32_t spatter_group_tasks[];
 extern __global uint32_t spatter_gather_scratch[];
@@ -61,12 +62,12 @@ static void scatter_stage(void*, uint32_t tid, uint32_t threads_per_block,
                           uint32_t block_id) {
 #if SPATTER_CHAIN_ORDERED_COLLISIONS
   const MuPartition range = mu_contiguous_partition(
-      SPATTER_OUTPUT_LENGTH, NIGHTLY_CLUSTERS, block_id, 8u);
-  for (uint32_t owner = range.begin + tid; owner < range.end;
-       owner += threads_per_block) {
-    const uint32_t end = spatter_group_offsets[owner + 1u];
-    for (uint32_t k = spatter_group_offsets[owner]; k < end; ++k) {
-      scatter_chain_task(spatter_group_tasks[k], owner);
+      SPATTER_GROUP_COUNT, NIGHTLY_CLUSTERS, block_id, 8u);
+  for (uint32_t group = range.begin + tid; group < range.end;
+       group += threads_per_block) {
+    const uint32_t end = spatter_group_offsets[group + 1u];
+    for (uint32_t k = spatter_group_offsets[group]; k < end; ++k) {
+      scatter_chain_task(spatter_group_tasks[k], spatter_group_destinations[group]);
     }
   }
 #else
@@ -213,12 +214,12 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
   // The host groups tasks by destination in their original order. One lane
   // owns each destination, so colliding 64-bit stores cannot interleave.
   const MuPartition range = mu_contiguous_partition(
-      SPATTER_OUTPUT_LENGTH, NIGHTLY_CLUSTERS, block_id, 8u);
-  for (uint32_t owner = range.begin + tid; owner < range.end;
-       owner += threads_per_block) {
-    const uint32_t end = spatter_group_offsets[owner + 1u];
-    for (uint32_t k = spatter_group_offsets[owner]; k < end; ++k) {
-      scatter_task(spatter_group_tasks[k], owner);
+      SPATTER_GROUP_COUNT, NIGHTLY_CLUSTERS, block_id, 8u);
+  for (uint32_t group = range.begin + tid; group < range.end;
+       group += threads_per_block) {
+    const uint32_t end = spatter_group_offsets[group + 1u];
+    for (uint32_t k = spatter_group_offsets[group]; k < end; ++k) {
+      scatter_task(spatter_group_tasks[k], spatter_group_destinations[group]);
     }
   }
 #else

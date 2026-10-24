@@ -12,7 +12,8 @@ import subprocess
 
 REPO = Path(__file__).resolve().parents[3]
 PASSTHROUGH = (
-    "case", "collision_policy", "muon_warps_per_core",
+    "case", "collision_policy", "destination_group_count",
+    "muon_warps_per_core",
     "source_pad_cache_lines", "output_pad_cache_lines",
 )
 

@@ -26,7 +26,8 @@ FNV_PRIME = 0x100000001B3
 KINDS = {"gather": 0, "scatter": 1, "gs": 2, "multigather": 3, "multiscatter": 4}
 ARRAYS = (
     "pattern", "pattern_gather", "pattern_scatter", "sparse", "dense",
-    "sparse_gather", "sparse_scatter", "group_offsets", "group_tasks",
+    "sparse_gather", "sparse_scatter", "group_destinations",
+    "group_offsets", "group_tasks",
 )
 
 
@@ -331,7 +332,7 @@ def write_source(path: Path, length: int, tag: int, base_index: int = 0) -> None
             stream.write(struct.pack(f"<{len(chunk)}Q", *chunk))
 
 
-def write_destination_groups(case: dict) -> None:
+def write_destination_groups(case: dict) -> int:
     """Stable counting sort of transfers by destination, preserving every write.
 
     Each destination is owned by one GPU lane. Writes to a repeated address
@@ -354,8 +355,13 @@ def write_destination_groups(case: dict) -> None:
         dst = destination(case, i, j)
         ordered[cursor[dst]] = task
         cursor[dst] += 1
-    write_u32(GENERATED / "group_offsets.bin", offsets)
+    occupied = array("I", (index for index, count in enumerate(counts) if count))
+    compact_offsets = array("I", (offsets[index] for index in occupied))
+    compact_offsets.append(tasks)
+    write_u32(GENERATED / "group_destinations.bin", occupied)
+    write_u32(GENERATED / "group_offsets.bin", compact_offsets)
     write_u32(GENERATED / "group_tasks.bin", ordered)
+    return len(occupied)
 
 
 def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
@@ -372,8 +378,10 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
     write_source(GENERATED / "source.bin", case["src_length"],
                  case["payload_tag"], case.get("source_index_base", 0))
     if case["collision_policy"] == "ordered":
-        write_destination_groups(case)
+        destination_group_count = write_destination_groups(case)
     else:
+        destination_group_count = 0
+        write_u32(GENERATED / "group_destinations.bin", [])
         write_u32(GENERATED / "group_offsets.bin", [])
         write_u32(GENERATED / "group_tasks.bin", [])
     expected, overlap = reference(case)
@@ -404,6 +412,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define SPATTER_DELTA_SCATTER {case['delta_scatter']}u",
         f"#define SPATTER_GATHER_FINAL_WRAP {case['gather_final_wrap']}u",
         f"#define SPATTER_ORDERED_COLLISIONS {int(case['collision_policy'] == 'ordered')}",
+        f"#define SPATTER_GROUP_COUNT {destination_group_count}u",
         f"#define SPATTER_OUTPUT_LENGTH {case['dst_length']}u",
         f"#define SPATTER_EXPECTED_DIGEST 0x{(expected or 0):016x}ULL",
         f"#define SPATTER_READBACK_SAMPLES {readback_samples}u",
@@ -418,6 +427,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
     names = {
         "pattern": "pattern.bin", "pattern_gather": "pattern_gather.bin",
         "pattern_scatter": "pattern_scatter.bin",
+        "group_destinations": "group_destinations.bin",
         "group_offsets": "group_offsets.bin", "group_tasks": "group_tasks.bin",
         case["source"]: "source.bin",
     }
@@ -469,6 +479,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "expected_nonzero_outputs": expected_nonzero_outputs if exploratory else None,
         "destination_overlap": overlap,
         "collision_policy": case["collision_policy"],
+        "destination_group_count": destination_group_count,
         "gather_iteration_partition": gather_iteration_partition,
         "gather_scratch_elements": gather_scratch_elements if gather_iteration_partition else 0,
         "pattern_inputs": case.get("_pattern_inputs", []),

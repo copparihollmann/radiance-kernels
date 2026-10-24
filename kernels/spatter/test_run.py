@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from run import (GENERATED, destination, fnv, normalize, parse_pattern, payload,
                  prepare, reference, sample_digest, source_index, source_tag,
-                 write_source, written_destination_count)
+                 write_destination_groups, write_source,
+                 written_destination_count)
 from plan import execute_reference, fuse_gather_scatter, stitch_reference
 from run_chain import expected_output
 
@@ -204,6 +205,17 @@ class SpatterMappingTest(unittest.TestCase):
         self.assertIn("#define NIGHTLY_OCC 8", config)
         with self.assertRaisesRegex(ValueError, "warps_per_core"):
             prepare(case, suite, 0, warps_per_core=3)
+
+    def test_ordered_schedule_compacts_empty_destinations(self):
+        case = normalize({"kernel": "Scatter", "pattern": [3, 3, 10],
+                          "count": 1, "collision-policy": "ordered"})
+        self.assertEqual(write_destination_groups(case), 2)
+        def words(name):
+            data = GENERATED.joinpath(name).read_bytes()
+            return list(struct.unpack(f"<{len(data) // 4}I", data))
+        self.assertEqual(words("group_destinations.bin"), [3, 10])
+        self.assertEqual(words("group_offsets.bin"), [0, 2, 3])
+        self.assertEqual(words("group_tasks.bin"), [0, 1, 2])
 
 
 if __name__ == "__main__":

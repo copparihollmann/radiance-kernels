@@ -209,6 +209,11 @@ and serializes conflicts. Its cycles describe that mapping, not the upstream
 CUDA `atomicExch` implementation. The default parallel path retains its
 exploratory status when destinations overlap.
 
+The ordered schedule stores only occupied destination IDs plus compact group
+offsets; device lanes do not scan holes in a sparse output address range. Task
+IDs within each destination remain in original source order, preserving the
+same deterministic final value and full-output digest.
+
 For the five standard GPU STREAM cases, pass the tracked
 `inputs/standard-suite/basic-tests/gpu-stream.json` and case indices 0 through
 4. The tracked `inputs/standard-suite/app-traces/lulesh.json` and
