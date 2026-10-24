@@ -78,7 +78,11 @@ def prepare(gather: dict, scatter: dict, suites: tuple[Path, Path],
     positions = [i * (len(output) - 1) // (samples - 1) for i in range(samples)] if samples else []
     expected_sample = fnv(output[i] for i in positions) if samples else None
     config = [
-        "#pragma once", "#define SPATTER_KIND 2", "#define SPATTER_CHAIN 1",
+        "#pragma once",
+        "#define HPC_SM_COUNT 1u",
+        "#define NIGHTLY_CLUSTERS 1",
+        "#define NIGHTLY_OCC 4",
+        "#define SPATTER_KIND 2", "#define SPATTER_CHAIN 1",
         f"#define SPATTER_GATHER_LENGTH {gather['length']}u",
         f"#define SPATTER_GATHER_COUNT {gather['count']}u",
         f"#define SPATTER_GATHER_WRAP {gather['wrap']}u",

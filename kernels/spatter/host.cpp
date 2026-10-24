@@ -1,10 +1,11 @@
 #include <stdint.h>
 #include <radiance.h>
+#include "generated/config.h"
+#include <nightly/host.h>
 #if SPATTER_DIAGNOSTIC_READBACK || defined(RAD_HOST_TIMING)
 #include <rad_host.h>
 #endif
 
-#include "generated/config.h"
 #include "generated/symbols.h"
 
 static uint64_t output_digest() {
@@ -56,8 +57,6 @@ static void clear_output() {
 }
 
 int main() {
-  tohost = 0;
-  *tocpu = 0;
   volatile uint32_t* before = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(SPATTER_GUARD_BEFORE_ADDR));
   volatile uint32_t* after = reinterpret_cast<volatile uint32_t*>(
@@ -69,17 +68,17 @@ int main() {
   clear_output();
   asm volatile("fence rw, rw" ::: "memory");
 #ifdef RAD_HOST_TIMING
-  const uint64_t release_cycle = rad_rdcycle();
+  const uint64_t release_cycle = nightly_rdcycle();
 #endif
-  WRITE_MMIO_32(RAD_HOST_GPU_RESET, 0);
-
-  while (!READ_MMIO_32(RAD_HOST_GPU_ALL_FINISHED)) {}
+  nightly_host_launch(NIGHTLY_CLUSTERS);
+  const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
 #ifdef RAD_HOST_TIMING
-  const uint64_t completion_cycle = rad_rdcycle();
+  const uint64_t completion_cycle = nightly_rdcycle();
 #endif
+  nightly_host_report(NIGHTLY_CLUSTERS);
   asm volatile("fence rw, rw" ::: "memory");
 
-  bool passed = guards_intact();
+  bool passed = completed && guards_intact();
 #if SPATTER_EXPLORATORY
   // Read a destination known to be written. Its final value depends on
   // scheduling when several threads target the same address.
@@ -135,9 +134,7 @@ int main() {
   rad_putc('\n');
   rad_flush();
 #endif
-  // The fused startup loop ignores main()'s return value. HTIF uses 1 for
-  // success and 3 for failure; publish only after the full readback check.
-  tohost = passed ? 1 : 3;
-  asm volatile("fence rw, rw" ::: "memory");
-  for (;;) {}
+  nh_puts(passed ? "PASS\n" : "FAIL\n");
+  nh_flush();
+  exit(passed ? 0 : 1);
 }

@@ -142,6 +142,26 @@ class SpatterMappingTest(unittest.TestCase):
         self.assertEqual(parse_pattern("MS1:4:2:3", 8), ([0, 1, 4, 5], 8))
         self.assertEqual(parse_pattern("LAPLACIAN:1:1:4", 8), ([0, 1, 2], 1))
 
+    def test_binary_pattern_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pattern = root / "pattern.u32le"
+            pattern.write_bytes(struct.pack("<4I", 7, 0, 11, 3))
+            import hashlib
+            descriptor = {
+                "file": pattern.name, "format": "u32le", "length": 4,
+                "bytes": 16, "sha256": hashlib.sha256(pattern.read_bytes()).hexdigest(),
+            }
+            values, delta = parse_pattern(descriptor, 8, root)
+            self.assertEqual(list(values), [7, 0, 11, 3])
+            self.assertEqual(delta, 8)
+            case = normalize({"kernel": "Gather", "pattern": descriptor,
+                              "count": 1}, root)
+            self.assertEqual(case["length"], 4)
+            self.assertEqual(case["_pattern_inputs"][0]["sha256"], descriptor["sha256"])
+            with self.assertRaisesRegex(ValueError, "hash differs"):
+                parse_pattern({**descriptor, "sha256": "0" * 64}, 8, root)
+
     def test_rejects_unsupported_memory_semantics(self):
         for option, value in (("atomic-writes", True), ("boundary", 4),
                               ("compress", True), ("shared-memory", 1024)):

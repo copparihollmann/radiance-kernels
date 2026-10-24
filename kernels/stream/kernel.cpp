@@ -1,11 +1,11 @@
-#include <mu_intrinsics.h>
-#include <mu_schedule.h>
 #include <stdint.h>
 
 #include "generated/config.h"
+#include <mu_partition.h>
+#include <nightly/device.h>
 
-#define STREAM_WARPS 4
-extern "C" uint32_t __mu_num_warps = STREAM_WARPS;
+static_assert(NIGHTLY_CLUSTERS == HPC_SM_COUNT,
+              "host and device cluster counts must match");
 
 extern "C" {
 extern __global float stream_a[];
@@ -15,9 +15,12 @@ extern __global float stream_c[];
 
 static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
                         uint32_t block_id) {
-  const uint32_t global_tid = block_id * threads_per_block + tid;
-  const uint32_t global_threads = MU_NUM_CLUSTERS * threads_per_block;
-  for (uint32_t i = global_tid; i < STREAM_ELEMENTS;) {
+  // float32 has 16 elements per 64-byte line.  Give each SM whole,
+  // contiguous lines so no line ping-pongs between SM-private caches.
+  const MuPartition range = mu_contiguous_partition(
+      STREAM_ELEMENTS, NIGHTLY_CLUSTERS, block_id, 16u);
+  for (uint32_t i = range.begin + tid; i < range.end;
+       i += threads_per_block) {
 #if STREAM_KIND == 0
     stream_c[i] = stream_a[i];
 #elif STREAM_KIND == 1
@@ -27,13 +30,8 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
 #elif STREAM_KIND == 3
     stream_a[i] = stream_b[i] + 2.0f * stream_c[i];
 #endif
-    if (STREAM_ELEMENTS - i <= global_threads) break;
-    i += global_threads;
   }
+  nightly_kernel_end(tid, threads_per_block);
 }
 
-int main() {
-  mu_schedule(kernel_body, nullptr, STREAM_WARPS);
-  mu_fence();
-  return 0;
-}
+int main() { return nightly_main(kernel_body, nullptr); }

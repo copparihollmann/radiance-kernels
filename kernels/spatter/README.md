@@ -116,6 +116,13 @@ build a particular JSON case:
 python3 run.py --suite smoke.json --case 0 --out runs/smoke-0 --build-only
 ```
 
+Pass `--sms 1`, `--sms 2`, or `--sms 4` to select the physical SM count.
+Gather and ordered Scatter assign contiguous, 64-byte-aligned destination
+ranges to SMs; parallel Scatter assigns contiguous blocks of transfer tasks.
+This avoids the former cross-SM lane interleaving. The host tags every physical
+SM before reset release and reports the compute-only `kernel_cycles` interval
+after all cores have fenced their output.
+
 `run.py` owns the shared `generated/` directory, so build cases sequentially.
 `--prepare-only` emits the plan, data, config and manifest without compiling.
 `--count N` makes a clearly labeled scaled run while preserving the input
@@ -188,6 +195,19 @@ For LANL `datafiles/xrage/asteroid/spatter.json`, pattern 5 is case 4 and
 pattern 9 is case 8. Original-size xRAGE5 has 8,368,968 gather addresses;
 xRAGE9 has 6,664,304 scatter addresses. The input JSON used for the evaluation
 has SHA-256 `7325525ada0dacb6e1206717d242f6721b6d8da77718506fd909444c388f7733`.
+When only the portable FPGA handoff is available, recover those exact patterns
+from its receipt-checked load images without creating a giant JSON array:
+
+```sh
+python3 tools/extract-xrage-bundle.py --bundle /path/to/fpga-handoff-hpc-all-sm \
+  --out /scratch/$USER/radiance-xrage
+python3 run.py --suite /scratch/$USER/radiance-xrage/xrage-suite.json \
+  --case 0 --sms 4 --out runs/xrage-gather-4sm --build-only
+```
+
+The emitted suite uses `u32le` binary-pattern descriptors with byte count,
+length, and SHA-256 receipts. `run.py` validates all three before using a
+pattern and records the resolved input receipt in `result.json`.
 For xRAGE9, `--collision-policy ordered` creates a complete-output-checkable
 mapping of the repeated destinations. Keep its results separate from both the
 default parallel mapping and Spatter's CUDA atomic result.

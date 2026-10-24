@@ -1,0 +1,55 @@
+{
+  "schema": "radiance-fpga-1a-assets-v1",
+  "targets": [
+    {
+      "id": "firesim-2sm-hbm-example",
+      "kind": "firesim",
+      "sm_count": 2,
+      "memory": "hbm",
+      "loader": "direct-hashed",
+      "bitstream": "bitstreams/2sm-hbm/firesim.bit",
+      "runtime_config": "configs/2sm-hbm/config_runtime.yaml",
+      "hwdb_config": "configs/2sm-hbm/config_hwdb.yaml",
+      "runner": "scripts/run-one-firesim.sh",
+      "run_argv": [
+        "bash",
+        "{runner}",
+        "--bitstream",
+        "{bitstream}",
+        "--runtime-config",
+        "{runtime_config}",
+        "--hwdb-config",
+        "{hwdb_config}",
+        "--elf",
+        "{elf}",
+        "--out",
+        "{out}"
+      ]
+    },
+    {
+      "id": "model-4sm-dram-example",
+      "kind": "model",
+      "sm_count": 4,
+      "memory": "dram",
+      "loader": "direct-hashed",
+      "runner": "bin/cyclotron-cluster-id-v18",
+      "model_config": "configs/model/4sm-dram.toml",
+      "run_argv": [
+        "{runner}",
+        "--config",
+        "{model_config}",
+        "--elf",
+        "{elf}",
+        "--output",
+        "{out}"
+      ],
+      "parser": "scripts/parse-model.py",
+      "parser_argv": [
+        "python3",
+        "{parser}",
+        "--run-dir",
+        "{out}"
+      ]
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 #include <stdint.h>
 #include <radiance.h>
+#include "generated/config.h"
+#include <nightly/host.h>
 #ifdef RAD_HOST_TIMING
 #include <rad_host.h>
 #endif
 
-#include "generated/config.h"
 #include "generated/symbols.h"
 
 static uint64_t digest_output() {
@@ -42,8 +43,6 @@ static bool guards_intact() {
 }
 
 int main() {
-  tohost = 0;
-  *tocpu = 0;
   volatile uint32_t* before = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(STREAM_GUARD_BEFORE_ADDR));
   volatile uint32_t* after = reinterpret_cast<volatile uint32_t*>(
@@ -54,15 +53,16 @@ int main() {
   }
   asm volatile("fence rw, rw" ::: "memory");
 #ifdef RAD_HOST_TIMING
-  const uint64_t release_cycle = rad_rdcycle();
+  const uint64_t release_cycle = nightly_rdcycle();
 #endif
-  WRITE_MMIO_32(RAD_HOST_GPU_RESET, 0);
-  while (!READ_MMIO_32(RAD_HOST_GPU_ALL_FINISHED)) {}
+  nightly_host_launch(NIGHTLY_CLUSTERS);
+  const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
 #ifdef RAD_HOST_TIMING
-  const uint64_t completion_cycle = rad_rdcycle();
+  const uint64_t completion_cycle = nightly_rdcycle();
 #endif
+  nightly_host_report(NIGHTLY_CLUSTERS);
   asm volatile("fence rw, rw" ::: "memory");
-  const bool passed = guards_intact() &&
+  const bool passed = completed && guards_intact() &&
       digest_output() == STREAM_EXPECTED_READBACK_DIGEST;
 #ifdef RAD_HOST_TIMING
   rad_puts("HOST_RELEASE_TO_DONE_CYCLES=");
@@ -70,7 +70,7 @@ int main() {
   rad_putc('\n');
   rad_flush();
 #endif
-  tohost = passed ? 1 : 3;
-  asm volatile("fence rw, rw" ::: "memory");
-  for (;;) {}
+  nh_puts(passed ? "PASS\n" : "FAIL\n");
+  nh_flush();
+  exit(passed ? 0 : 1);
 }

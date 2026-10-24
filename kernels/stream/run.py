@@ -56,7 +56,8 @@ def write_input(path: Path, name: str, elements: int) -> None:
 
 
 def prepare(kind: str, elements: int, out: Path,
-            full_host_check: bool = False) -> dict:
+            full_host_check: bool = False, sms: int = 1,
+            loader: str = "logical") -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
     if elements * 12 + 0x100000 > 0x70000000:
@@ -75,6 +76,9 @@ def prepare(kind: str, elements: int, out: Path,
     expected_sample = digest(values[i] for i in positions) if samples else None
     config = [
         "#pragma once",
+        f"#define HPC_SM_COUNT {sms}u",
+        f"#define NIGHTLY_CLUSTERS {sms}",
+        "#define NIGHTLY_OCC 4",
         f"#define STREAM_KIND {KINDS[kind]}",
         f"#define STREAM_ELEMENTS {elements}u",
         f"#define STREAM_READBACK_SAMPLES {samples}u",
@@ -98,9 +102,17 @@ def prepare(kind: str, elements: int, out: Path,
     build_rules = ROOT.parent / "addr_hash_stamp.mk"
     source.update(build_rules.name.encode())
     source.update(build_rules.read_bytes())
+    for path in (ROOT.parents[1] / "lib/include/mu_partition.h",
+                 ROOT.parents[1] / "lib/include/nightly/device.h",
+                 ROOT.parents[1] / "lib/include/nightly/host.h"):
+        source.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
+        source.update(path.read_bytes())
     for name in ("run.py", "Makefile", "kernel.cpp", "host.cpp", "emit_symbols.py"):
+        source.update(name.encode())
         source.update((ROOT / name).read_bytes())
     case = {"kind": f"stream-{kind}", "stream_operation": kind,
+            "sm_count": sms,
+            "loader": loader, "gpu_address_hash": loader == "direct-hashed",
             "pattern_length": elements, "stream_elements": elements,
             "count": 1, "output_elements": elements // 2,
             "logical_payload_bytes": elements * (12 if kind in ("add", "triad") else 8),
@@ -126,6 +138,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kind", choices=KINDS, required=True)
     parser.add_argument("--elements", type=int, default=65536)
+    parser.add_argument("--sms", type=int, choices=(1, 2, 4), default=1,
+                        help="physical SMs used by this ELF")
+    parser.add_argument("--loader", choices=("logical", "direct-hashed"),
+                        default="logical",
+                        help="logical GPU loading, or direct loading that bypasses the RTL hash")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--full-host-check", action="store_true",
@@ -134,12 +151,14 @@ def main() -> None:
                         help="print RV64 release-to-all-finished cycle interval")
     args = parser.parse_args()
     out = args.out.resolve()
-    case = prepare(args.kind, args.elements, out, args.full_host_check)
+    case = prepare(args.kind, args.elements, out, args.full_host_check,
+                   args.sms, args.loader)
     case["host_timing_requested"] = args.host_timing
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:
         return
     build_env = os.environ.copy()
+    build_env["MU_ADDR_HASH"] = "1" if args.loader == "direct-hashed" else "0"
     if args.host_timing:
         build_env["EXTRA_HOST_CXXFLAGS"] = (
             build_env.get("EXTRA_HOST_CXXFLAGS", "") +

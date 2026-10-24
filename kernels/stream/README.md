@@ -5,7 +5,7 @@ with the Spatter measurements.
 
 The four independent STREAM operations use float32 arrays: Copy `C=A`, Scale
 `B=2*C`, Add `C=A+B`, and Triad `A=B+2*C`. They build through `../common.mk`
-and run on the same one-cluster Radiance SoC as `kernels/spatter`. The generated
+and run on the same Radiance SoC as `kernels/spatter`. The generated
 inputs are exact small integers in float32, so the expected output digest does
 not depend on rounding differences. One operation runs per ELF; a complete
 four-stage STREAM sequence would use a different data dependency and timing
@@ -23,6 +23,12 @@ python3 run.py --kind scale --elements 65536 --out runs/scale-65536
 python3 run.py --kind add --elements 65536 --out runs/add-65536
 python3 run.py --kind triad --elements 65536 --out runs/triad-65536
 ```
+
+Pass `--sms 1`, `--sms 2`, or `--sms 4` to build for that many physical SMs.
+Each SM owns a contiguous range aligned to a 64-byte cache line. The host tags
+every physical SM before releasing reset, and the kernel reports `kernel_cycles`
+from the earliest core start through the latest post-fence completion stamp.
+Use an ELF only with a hardware configuration having at least that many SMs.
 
 Build cases sequentially because they share `generated/`. Each output has a
 manifest, build log, and fused ELF. The RV64 host checks a complete digest for

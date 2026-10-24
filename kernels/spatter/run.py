@@ -14,6 +14,7 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
+from typing import Sequence
 
 from plan import plan_for
 
@@ -35,13 +36,49 @@ def positive(value: object, name: str, allow_zero: bool = False) -> int:
     return value
 
 
-def parse_pattern(value: object, delta: int) -> tuple[list[int], int]:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(8 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def parse_pattern(value: object, delta: int,
+                  base_dir: Path | None = None) -> tuple[Sequence[int], int]:
     if isinstance(value, list):
         if not value:
             raise ValueError("empty pattern")
         return [positive(v, "pattern index", True) for v in value], delta
+    if isinstance(value, dict):
+        if value.get("format") != "u32le" or not isinstance(value.get("file"), str):
+            raise ValueError("binary pattern needs file and format=u32le")
+        path = Path(value["file"])
+        if not path.is_absolute():
+            if base_dir is None:
+                raise ValueError("relative binary pattern needs a suite directory")
+            path = base_dir / path
+        path = path.resolve()
+        if not path.is_file() or path.stat().st_size == 0 or path.stat().st_size % 4:
+            raise ValueError(f"binary pattern is missing, empty, or not u32-aligned: {path}")
+        expected_bytes = value.get("bytes")
+        if expected_bytes is not None and positive(expected_bytes, "pattern bytes") != path.stat().st_size:
+            raise ValueError(f"binary pattern size differs from receipt: {path}")
+        expected_hash = value.get("sha256")
+        actual_hash = file_sha256(path)
+        if expected_hash is not None and expected_hash != actual_hash:
+            raise ValueError(f"binary pattern hash differs from receipt: {path}")
+        values = array("I")
+        with path.open("rb") as stream:
+            values.fromfile(stream, path.stat().st_size // 4)
+        if sys.byteorder != "little":
+            values.byteswap()
+        expected_length = value.get("length")
+        if expected_length is not None and positive(expected_length, "pattern length") != len(values):
+            raise ValueError(f"binary pattern length differs from receipt: {path}")
+        return values, delta
     if not isinstance(value, str):
-        raise ValueError("pattern must be an array or Spatter pattern string")
+        raise ValueError("pattern must be an array, u32le file, or Spatter pattern string")
     parts = value.upper().split(":")
     if parts[0] == "UNIFORM" and len(parts) in (3, 4):
         length = positive(int(parts[1]), "uniform length")
@@ -78,7 +115,7 @@ def parse_pattern(value: object, delta: int) -> tuple[list[int], int]:
     raise ValueError(f"unsupported Spatter pattern: {value[:80]}")
 
 
-def normalize(raw: dict) -> dict:
+def normalize(raw: dict, base_dir: Path | None = None) -> dict:
     for key in ("atomic-writes", "boundary", "compress", "shared-memory"):
         if raw.get(key):
             raise ValueError(f"{key} is not supported by the Radiance mapping")
@@ -102,13 +139,13 @@ def normalize(raw: dict) -> dict:
     delta = positive(raw.get("delta", 8), "delta", True)
     delta_gather = positive(raw.get("delta-gather", 8), "delta-gather", True)
     delta_scatter = positive(raw.get("delta-scatter", 8), "delta-scatter", True)
-    pattern, delta = parse_pattern(raw["pattern"], delta) if "pattern" in raw else ([], delta)
+    pattern, delta = parse_pattern(raw["pattern"], delta, base_dir) if "pattern" in raw else ([], delta)
     gather, delta_gather = (
-        parse_pattern(raw["pattern-gather"], delta_gather)
+        parse_pattern(raw["pattern-gather"], delta_gather, base_dir)
         if "pattern-gather" in raw else ([], delta_gather)
     )
     scatter, delta_scatter = (
-        parse_pattern(raw["pattern-scatter"], delta_scatter)
+        parse_pattern(raw["pattern-scatter"], delta_scatter, base_dir)
         if "pattern-scatter" in raw else ([], delta_scatter)
     )
     pattern_size = raw.get("pattern-size")
@@ -165,6 +202,23 @@ def normalize(raw: dict) -> dict:
         collision_policy=collision_policy,
         requested_local_work_size=local_work_size,
     )
+    case["_pattern_inputs"] = []
+    for key in ("pattern", "pattern-gather", "pattern-scatter"):
+        descriptor = raw.get(key)
+        if not isinstance(descriptor, dict):
+            continue
+        path = Path(descriptor["file"])
+        if not path.is_absolute():
+            path = (base_dir / path) if base_dir is not None else path
+        path = path.resolve()
+        case["_pattern_inputs"].append({
+            "field": key,
+            "path": str(path),
+            "format": "u32le",
+            "bytes": path.stat().st_size,
+            "length": path.stat().st_size // 4,
+            "sha256": file_sha256(path),
+        })
     case["_plan"] = plan_for(case)
     return case
 
@@ -247,7 +301,7 @@ def sample_digest(case: dict, samples: int = 64) -> int:
     return fnv(selected[pos] for pos in positions)
 
 
-def write_u32(path: Path, values: list[int]) -> None:
+def write_u32(path: Path, values: Sequence[int]) -> None:
     with path.open("wb") as stream:
         if not values:
             stream.write(b"\0\0\0\0")
@@ -293,7 +347,8 @@ def write_destination_groups(case: dict) -> None:
     write_u32(GENERATED / "group_tasks.bin", ordered)
 
 
-def prepare(case: dict, suite: Path, case_id: int) -> dict:
+def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
+            loader: str = "logical") -> dict:
     GENERATED.mkdir(exist_ok=True)
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
@@ -312,6 +367,9 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
     expected_sample = sample_digest(case, readback_samples) if readback_samples else 0
     lines = [
         "#pragma once",
+        f"#define HPC_SM_COUNT {sms}u",
+        f"#define NIGHTLY_CLUSTERS {sms}",
+        "#define NIGHTLY_OCC 4",
         f"#define SPATTER_KIND {KINDS[case['kind']]}",
         "#define SPATTER_CHAIN 0",
         f"#define SPATTER_PATTERN_LENGTH {case['length']}u",
@@ -355,6 +413,8 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
     dataset_hash = hashlib.sha256(suite.read_bytes()).hexdigest()
     manifest = {
         "suite": str(suite.resolve()), "suite_sha256": dataset_hash, "case": case_id,
+        "sm_count": sms,
+        "loader": loader, "gpu_address_hash": loader == "direct-hashed",
         "kind": case["kind"], "pattern_length": case["length"],
         "address_plan": address_plan,
         "count": case["count"], "wrap": case["wrap"],
@@ -371,6 +431,7 @@ def prepare(case: dict, suite: Path, case_id: int) -> dict:
         "exploratory_probe_index": probe_index if overlap else None,
         "destination_overlap": overlap,
         "collision_policy": case["collision_policy"],
+        "pattern_inputs": case.get("_pattern_inputs", []),
         "status": "prepared",
     }
     (GENERATED / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -397,6 +458,11 @@ def source_hash() -> str:
     build_rules = ROOT.parent / "addr_hash_stamp.mk"
     digest.update(str(build_rules.name).encode())
     digest.update(build_rules.read_bytes())
+    for path in (ROOT.parents[1] / "lib/include/mu_partition.h",
+                 ROOT.parents[1] / "lib/include/nightly/device.h",
+                 ROOT.parents[1] / "lib/include/nightly/host.h"):
+        digest.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
+        digest.update(path.read_bytes())
     for name in ("run.py", "plan.py", "Makefile", "kernel.cpp", "spatter_ops.hpp", "host.cpp",
                  "emit_symbols.py", "cyclotron-no-trace.patch"):
         digest.update(name.encode())
@@ -408,6 +474,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", required=True, type=Path)
     parser.add_argument("--case", type=int, default=0, help="zero-based JSON configuration index")
+    parser.add_argument("--sms", type=int, choices=(1, 2, 4), default=1,
+                        help="physical SMs used by this ELF")
+    parser.add_argument("--loader", choices=("logical", "direct-hashed"),
+                        default="logical",
+                        help="logical GPU loading, or direct loading that bypasses the RTL hash")
     parser.add_argument("--count", type=int,
                         help="replace the suite repetition count for a clearly labeled scaled run")
     parser.add_argument("--iteration-start", type=int, default=0,
@@ -460,7 +531,7 @@ def main() -> int:
             raw_case["collision-policy"] = args.collision_policy
         if args.count is not None:
             raw_case["count"] = args.count
-        case = normalize(raw_case)
+        case = normalize(raw_case, args.suite.resolve().parent)
         if args.iteration_start:
             if args.count is None:
                 parser.error("--iteration-start requires an explicit --count")
@@ -470,7 +541,7 @@ def main() -> int:
                 parser.error("the iteration chunk extends past the original count")
         case["iteration_start"] = args.iteration_start
         case["source_index_base"] = args.iteration_start * case["delta"]
-        manifest = prepare(case, args.suite, args.case)
+        manifest = prepare(case, args.suite, args.case, args.sms, args.loader)
         manifest["original_count"] = original_count
         manifest["count_overridden"] = args.count is not None and args.count != original_count
         manifest["spatter_revision"] = git_revision(args.suite.parent)
@@ -506,6 +577,8 @@ def main() -> int:
     try:
         if not args.sim_only:
             build_env = os.environ.copy()
+            build_env["MU_ADDR_HASH"] = (
+                "1" if args.loader == "direct-hashed" else "0")
             host_flags = []
             if args.full_host_check:
                 host_flags.append("-DSPATTER_FORCE_FULL_READBACK=1")
