@@ -37,3 +37,11 @@ The generic parser recognizes `PASS`, FireSim's `*** PASSED ***`, and
 the parser should emit one JSON object on stdout. All job requests, logs,
 per-run results, and the median/min/max summary stay under the chosen campaign
 directory.
+
+`model_campaign.py` drives only Cyclotron's public generic DRAM timing model.
+It selects logical-loader ELFs, initializes the nightly launch mailboxes for
+every physical SM, checks output digests (or exact distinct-destination
+coverage for parallel overlapping scatter), checks GEMM's device verifier, and reports the
+nightly START-to-END kernel span. It deliberately records `is_hbm: false`;
+HBM results must come from Nicolas's copied model/configuration assets through
+`campaign.py`.

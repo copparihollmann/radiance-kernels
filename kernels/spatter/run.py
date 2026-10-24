@@ -277,6 +277,17 @@ def reference(case: dict) -> tuple[int | None, bool]:
     return (None if overlap and case["collision_policy"] == "parallel" else fnv(output)), overlap
 
 
+def written_destination_count(case: dict) -> int:
+    """Number of distinct destination elements touched by a scatter case."""
+    if case["kind"] in ("gather", "multigather"):
+        return case["dst_length"]
+    seen = bytearray(case["dst_length"])
+    for i in range(case["count"]):
+        for j in range(case["length"]):
+            seen[destination(case, i, j)] = 1
+    return sum(seen)
+
+
 def sample_digest(case: dict, samples: int = 64) -> int:
     """Expected digest over evenly spaced output positions for RTL readback."""
     n = min(samples, case["dst_length"])
@@ -363,6 +374,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
     expected, overlap = reference(case)
     exploratory = overlap and case["collision_policy"] == "parallel"
     probe_index = destination(case, 0, 0) if exploratory else 0
+    expected_nonzero_outputs = written_destination_count(case) if exploratory else 0
     readback_samples = min(64, case["dst_length"]) if case["dst_length"] > 1024 and not exploratory else 0
     expected_sample = sample_digest(case, readback_samples) if readback_samples else 0
     lines = [
@@ -385,6 +397,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define SPATTER_READBACK_SAMPLES {readback_samples}u",
         f"#define SPATTER_EXPECTED_SAMPLE_DIGEST 0x{expected_sample:016x}ULL",
         f"#define SPATTER_EXPLORATORY_PROBE_INDEX {probe_index}u",
+        f"#define SPATTER_EXPECTED_NONZERO_OUTPUTS {expected_nonzero_outputs}u",
         f"#define SPATTER_EXPLORATORY {int(exploratory)}",
     ]
     (GENERATED / "config.h").write_text("\n".join(lines) + "\n")
@@ -429,6 +442,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "expected_sample_digest": f"{expected_sample:016x}" if readback_samples else None,
         "readback_samples": readback_samples,
         "exploratory_probe_index": probe_index if overlap else None,
+        "expected_nonzero_outputs": expected_nonzero_outputs if exploratory else None,
         "destination_overlap": overlap,
         "collision_policy": case["collision_policy"],
         "pattern_inputs": case.get("_pattern_inputs", []),

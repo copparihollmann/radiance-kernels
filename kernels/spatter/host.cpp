@@ -80,12 +80,15 @@ int main() {
 
   bool passed = completed && guards_intact();
 #if SPATTER_EXPLORATORY
-  // Read a destination known to be written. Its final value depends on
-  // scheduling when several threads target the same address.
+  // Collisions make the final values schedule-dependent, but every source
+  // payload is nonzero. Check exact destination coverage, not one probe: a
+  // wrong SM partition can otherwise skip half the tasks and still pass.
   volatile uint32_t* output = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(SPATTER_OUTPUT_ADDR));
-  const uint32_t probe = SPATTER_EXPLORATORY_PROBE_INDEX * 2u;
-  passed = passed && ((output[probe] | output[probe + 1u]) != 0u);
+  uint32_t nonzero_outputs = 0;
+  for (uint32_t i = 0; i < SPATTER_OUTPUT_LENGTH; ++i)
+    nonzero_outputs += (output[2u * i] | output[2u * i + 1u]) != 0u;
+  passed = passed && nonzero_outputs == SPATTER_EXPECTED_NONZERO_OUTPUTS;
 #elif SPATTER_FORCE_FULL_READBACK
   const uint64_t actual_digest = output_digest();
   passed = passed && actual_digest == SPATTER_EXPECTED_DIGEST;

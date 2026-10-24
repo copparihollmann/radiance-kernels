@@ -10,7 +10,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from run import (destination, fnv, normalize, parse_pattern, payload, reference,
-                 sample_digest, source_index, source_tag, write_source)
+                 sample_digest, source_index, source_tag,
+                 write_source, written_destination_count)
 from plan import execute_reference, fuse_gather_scatter, stitch_reference
 from run_chain import expected_output
 
@@ -57,6 +58,7 @@ class SpatterMappingTest(unittest.TestCase):
         self.assertEqual(ordered["_plan"].schedule, "destination_owner")
         self.assertEqual(reference(ordered),
                          (fnv([payload(2, 1)]), True))
+        self.assertEqual(written_destination_count(colliding), 1)
 
     def test_wrap_one_gather_final_chunk_matches_full_count(self):
         full = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
