@@ -123,6 +123,15 @@ This avoids the former cross-SM lane interleaving. The host tags every physical
 SM before reset release and reports the compute-only `kernel_cycles` interval
 after all cores have fenced their output.
 
+Repeated Gather and MultiGather have fewer unique output owners than transfer
+tasks.  On the 4-SM build, `run.py` therefore partitions iteration ranges
+instead of stopping at owner parallelism.  Each SM sends overwritten values to
+its own scratch buffer and the SM holding an owner's final iteration publishes
+one checked value to the dense output.  This preserves every benchmark load and
+store, removes cross-SM output races, and avoids a host-mediated phase.  The
+1-SM and 2-SM builds retain the faster direct owner path; the selected strategy
+and scratch size are recorded in `result.json`.
+
 `run.py` owns the shared `generated/` directory, so build cases sequentially.
 `--prepare-only` emits the plan, data, config and manifest without compiling.
 `--count N` makes a clearly labeled scaled run while preserving the input
