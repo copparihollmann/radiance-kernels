@@ -11,6 +11,7 @@ repetitions safely.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
@@ -23,14 +24,17 @@ import time
 PASS = re.compile(r"(?:^|\n)(?:PASS|\*\*\* PASSED \*\*\*)", re.MULTILINE)
 FAIL = re.compile(r"(?:^|\n)(?:FAIL|\*\*\* FAILED \*\*\*)", re.MULTILINE)
 CYCLES = re.compile(r"\bkernel_cycles\s*[=:]\s*(\d+)")
+CORE_CYCLES = re.compile(
+    r"cluster\s+(\d+)\s+core\s+(\d+):\s+start=(\d+)\s+end=(\d+)\s+cycles=(\d+)"
+)
 ROLES = {
     ".bit": "bitstream", ".xclbin": "bitstream", ".bin": "binary",
     ".elf": "elf", ".json": "configuration", ".yaml": "configuration",
     ".yml": "configuration", ".toml": "configuration", ".ini": "configuration",
     ".py": "script", ".sh": "script", ".pl": "script",
 }
-PATH_FIELDS = ("bitstream", "runtime_config", "hwdb_config", "model_config",
-               "runner", "parser")
+PATH_FIELDS = ("bitstream", "driver", "runtime_config", "hwdb_config",
+               "model_config", "runner", "parser")
 
 
 def sha256(path: Path) -> str:
@@ -123,6 +127,15 @@ def load_assets(path: Path, asset_root: Path) -> tuple[dict, dict]:
             raise ValueError(f"{target_id}: model run_argv does not consume model_config")
         if target.get("parser_argv") and not target.get("parser"):
             raise ValueError(f"{target_id}: parser_argv needs a copied parser")
+        reuse_argv = target.get("reuse_argv")
+        if reuse_argv is not None and (
+                not isinstance(reuse_argv, list) or not reuse_argv or
+                not all(isinstance(v, str) for v in reuse_argv)):
+            raise ValueError(f"{target_id}: reuse_argv must be a nonempty string array")
+        bdf = target.get("bdf")
+        if bdf is not None and not re.fullmatch(
+                r"[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7]", str(bdf)):
+            raise ValueError(f"{target_id}: invalid FPGA BDF: {bdf!r}")
         for field in PATH_FIELDS:
             raw = target.get(field)
             if raw is not None:
@@ -223,7 +236,7 @@ def context(job: dict, asset_root: Path, result_dir: Path) -> dict[str, object]:
         "elf": workload["elf"], "out": str(result_dir), "target_id": target["id"],
         "memory": target["memory"], "sm_count": target["sm_count"],
         "loader": target["loader"], "repetition": job["repetition"],
-        "phase": job["phase"],
+        "phase": job["phase"], "bdf": target.get("bdf", ""),
     }
     for field in PATH_FIELDS:
         values[field] = str((asset_root / target[field]).resolve()) if target.get(field) else ""
@@ -239,7 +252,86 @@ def expand(argv: list[str], values: dict[str, object]) -> list[str]:
         raise ValueError(f"unknown run_argv placeholder: {error.args[0]}") from error
 
 
-def execute(plan_path: Path, rerun_failed: bool) -> None:
+def execute_job(job: dict, asset_root: Path, receipts: dict,
+                rerun_failed: bool, reuse_loaded: bool) -> tuple[bool, bool]:
+    """Execute one job; return (did_run, target_image_is_known_loaded)."""
+    result_dir = Path(job["result_dir"])
+    result_file = result_dir / "result.json"
+    if result_file.is_file():
+        old = json.loads(result_file.read_text())
+        if old.get("status") == "passed" or not rerun_failed:
+            return False, reuse_loaded
+    result_dir.mkdir(parents=True, exist_ok=True)
+    values = context(job, asset_root, result_dir)
+    target = job["target"]
+    argv_template = target.get("reuse_argv") if reuse_loaded else None
+    argv = expand(argv_template or target["run_argv"], values)
+    env = None
+    if target.get("env"):
+        import os
+        env = os.environ.copy()
+        env.update({key: str(value).format_map(values)
+                    for key, value in target["env"].items()})
+    request = {"job": job, "argv": argv, "asset_receipts": receipts,
+               "reused_loaded_bitstream": bool(argv_template)}
+    write_json(result_dir / "request.json", request)
+    started = time.time()
+    with (result_dir / "stdout.log").open("w") as stdout, \
+            (result_dir / "stderr.log").open("w") as stderr:
+        completed = subprocess.run(argv, cwd=asset_root, env=env,
+                                   stdout=stdout, stderr=stderr, check=False)
+    output = (result_dir / "stdout.log").read_text(errors="replace") + "\n" + \
+             (result_dir / "stderr.log").read_text(errors="replace")
+    cycles = CYCLES.findall(output)
+    core_cycles = [
+        {"cluster": int(cluster), "core": int(core), "start": int(start),
+         "end": int(end), "cycles": int(duration)}
+        for cluster, core, start, end, duration in CORE_CYCLES.findall(output)
+    ]
+    expected_cores = {
+        (cluster, core)
+        for cluster in range(int(target["sm_count"]))
+        for core in range(2)
+    }
+    observed_cores = {(row["cluster"], row["core"]) for row in core_cycles}
+    timing_complete = (len(core_cycles) == len(expected_cores) and
+                       observed_cores == expected_cores and
+                       all(row["end"] >= row["start"] and
+                           row["cycles"] == row["end"] - row["start"]
+                           for row in core_cycles))
+    passed = (bool(PASS.search(output)) and not FAIL.search(output) and
+              completed.returncode == 0)
+    if target.get("require_per_sm_timing"):
+        passed = passed and bool(cycles) and timing_complete
+    result = {
+        "schema": "radiance-fpga-1a-job-result-v1", "id": job["id"],
+        "status": "passed" if passed else "failed", "returncode": completed.returncode,
+        "kernel_cycles": int(cycles[-1]) if cycles else None,
+        "core_kernel_cycles": core_cycles,
+        "per_sm_timing_complete": timing_complete,
+        "reused_loaded_bitstream": bool(argv_template),
+        "wall_seconds": round(time.time() - started, 6),
+    }
+    parser_argv = target.get("parser_argv")
+    if parser_argv:
+        parsed = subprocess.run(expand(parser_argv, values), cwd=asset_root,
+                                capture_output=True, text=True, check=False)
+        (result_dir / "parser.stdout").write_text(parsed.stdout)
+        (result_dir / "parser.stderr").write_text(parsed.stderr)
+        if parsed.returncode == 0:
+            try:
+                result["parsed"] = json.loads(parsed.stdout)
+            except json.JSONDecodeError:
+                result["parser_error"] = "parser stdout is not JSON"
+        else:
+            result["parser_error"] = f"parser exited {parsed.returncode}"
+    write_json(result_file, result)
+    print(f"{job['id']}: {result['status']}", flush=True)
+    image_loaded = reuse_loaded or "=== Bring-up done ===" in output
+    return True, image_loaded
+
+
+def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False) -> None:
     plan = json.loads(plan_path.read_text())
     if plan.get("schema") != "radiance-fpga-1a-campaign-plan-v1":
         raise ValueError("unsupported plan schema")
@@ -252,54 +344,29 @@ def execute(plan_path: Path, rerun_failed: bool) -> None:
         path = inside(asset_root, receipt["path"], label)
         if path.stat().st_size != receipt["bytes"] or sha256(path) != receipt["sha256"]:
             raise ValueError(f"asset changed after planning: {label}")
+
+    grouped: dict[str, list[dict]] = {}
     for job in plan["jobs"]:
-        result_dir = Path(job["result_dir"])
-        result_file = result_dir / "result.json"
-        if result_file.is_file():
-            old = json.loads(result_file.read_text())
-            if old.get("status") == "passed" or not rerun_failed:
-                continue
-        result_dir.mkdir(parents=True, exist_ok=True)
-        values = context(job, asset_root, result_dir)
-        argv = expand(job["target"]["run_argv"], values)
-        env = None
-        if job["target"].get("env"):
-            import os
-            env = os.environ.copy()
-            env.update({key: str(value).format_map(values)
-                        for key, value in job["target"]["env"].items()})
-        request = {"job": job, "argv": argv, "asset_receipts": plan["asset_receipts"]}
-        write_json(result_dir / "request.json", request)
-        started = time.time()
-        with (result_dir / "stdout.log").open("w") as stdout, \
-                (result_dir / "stderr.log").open("w") as stderr:
-            completed = subprocess.run(argv, cwd=asset_root, env=env,
-                                       stdout=stdout, stderr=stderr, check=False)
-        output = (result_dir / "stdout.log").read_text(errors="replace") + "\n" + \
-                 (result_dir / "stderr.log").read_text(errors="replace")
-        passed = bool(PASS.search(output)) and not FAIL.search(output) and completed.returncode == 0
-        match = CYCLES.findall(output)
-        result = {
-            "schema": "radiance-fpga-1a-job-result-v1", "id": job["id"],
-            "status": "passed" if passed else "failed", "returncode": completed.returncode,
-            "kernel_cycles": int(match[-1]) if match else None,
-            "wall_seconds": round(time.time() - started, 6),
-        }
-        parser_argv = job["target"].get("parser_argv")
-        if parser_argv:
-            parsed = subprocess.run(expand(parser_argv, values), cwd=asset_root,
-                                    capture_output=True, text=True, check=False)
-            (result_dir / "parser.stdout").write_text(parsed.stdout)
-            (result_dir / "parser.stderr").write_text(parsed.stderr)
-            if parsed.returncode == 0:
-                try:
-                    result["parsed"] = json.loads(parsed.stdout)
-                except json.JSONDecodeError:
-                    result["parser_error"] = "parser stdout is not JSON"
-            else:
-                result["parser_error"] = f"parser exited {parsed.returncode}"
-        write_json(result_file, result)
-        print(f"{job['id']}: {result['status']}", flush=True)
+        grouped.setdefault(job["target_id"], []).append(job)
+
+    def run_target(jobs: list[dict]) -> None:
+        image_loaded = False
+        for job in jobs:
+            _, image_loaded = execute_job(
+                job, asset_root, plan["asset_receipts"], rerun_failed, image_loaded)
+
+    if parallel_targets and len(grouped) > 1:
+        bdfs = [jobs[0]["target"].get("bdf") for jobs in grouped.values()
+                if jobs[0]["target"].get("kind") == "firesim"]
+        if any(not bdf for bdf in bdfs) or len(bdfs) != len(set(bdfs)):
+            raise ValueError("parallel FireSim targets require distinct nonempty BDFs")
+        with ThreadPoolExecutor(max_workers=len(grouped)) as pool:
+            futures = [pool.submit(run_target, jobs) for jobs in grouped.values()]
+            for future in futures:
+                future.result()
+    else:
+        for jobs in grouped.values():
+            run_target(jobs)
 
 
 def summarize(plan_path: Path, out: Path) -> dict:
@@ -351,6 +418,8 @@ def main() -> None:
     running = sub.add_parser("run")
     running.add_argument("--plan", type=Path, required=True)
     running.add_argument("--rerun-failed", action="store_true")
+    running.add_argument("--parallel-targets", action="store_true",
+                         help="run distinct fixed-BDF targets concurrently")
     summary = sub.add_parser("summarize")
     summary.add_argument("--plan", type=Path, required=True)
     summary.add_argument("--out", type=Path, required=True)
@@ -366,7 +435,7 @@ def main() -> None:
                              args.allow_incomplete_build)
             print(f"planned {len(plan['jobs'])} runs under {args.out.resolve()}")
         elif args.command == "run":
-            execute(args.plan.resolve(), args.rerun_failed)
+            execute(args.plan.resolve(), args.rerun_failed, args.parallel_targets)
         else:
             summarize(args.plan.resolve(), args.out.resolve())
     except ValueError as error:

@@ -20,7 +20,9 @@ class CampaignTest(unittest.TestCase):
             (assets / "one.bit").write_bytes(b"prebuilt-bitstream")
             (assets / "runtime.yaml").write_text("runtime: test\n")
             (assets / "runner.py").write_text(
-                "print('PASS')\nprint('kernel_cycles=1234')\n"
+                "print('cluster 0 core 0: start=1 end=1201 cycles=1200')\n"
+                "print('cluster 0 core 1: start=2 end=1235 cycles=1233')\n"
+                "print('kernel_cycles=1234')\nprint('PASS')\n"
             )
             elf = root / "kernel.soc.elf"
             elf.write_bytes(b"elf")
@@ -41,6 +43,7 @@ class CampaignTest(unittest.TestCase):
                     "memory": "hbm", "loader": "logical",
                     "bitstream": "one.bit", "runtime_config": "runtime.yaml",
                     "runner": "runner.py",
+                    "require_per_sm_timing": True,
                     "run_argv": ["python3", "{runner}", "{elf}", "{bitstream}"],
                 }],
             }
@@ -61,6 +64,9 @@ class CampaignTest(unittest.TestCase):
             self.assertFalse(report["missing_jobs"])
             self.assertEqual(report["rows"][0]["measure_passes"], 3)
             self.assertEqual(report["rows"][0]["median_kernel_cycles"], 1234)
+            result = json.loads(Path(plan["jobs"][0]["result_dir"], "result.json").read_text())
+            self.assertTrue(result["per_sm_timing_complete"])
+            self.assertEqual(len(result["core_kernel_cycles"]), 2)
 
     def test_rejects_omitted_bitstream(self):
         with tempfile.TemporaryDirectory() as directory:
