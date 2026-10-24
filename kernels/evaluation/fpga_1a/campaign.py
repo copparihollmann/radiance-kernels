@@ -121,8 +121,31 @@ def load_assets(path: Path, asset_root: Path) -> tuple[dict, dict]:
         joined_argv = "\0".join(argv)
         if "{elf}" not in joined_argv:
             raise ValueError(f"{target_id}: run_argv does not consume the ELF")
-        if target["kind"] == "firesim" and "{bitstream}" not in joined_argv:
-            raise ValueError(f"{target_id}: FireSim run_argv does not consume the bitstream")
+        registry_config = target.get("bitstream_config")
+        registry_selected = "{bitstream_config}" in joined_argv
+        if target["kind"] == "firesim" and not (
+                "{bitstream}" in joined_argv or registry_selected):
+            raise ValueError(
+                f"{target_id}: FireSim run_argv must consume either the bitstream "
+                "path or a registry bitstream_config"
+            )
+        if registry_selected:
+            if not isinstance(registry_config, str) or not registry_config:
+                raise ValueError(f"{target_id}: missing bitstream_config")
+            expected_archive = f"firesim_radiance{registry_config}.tar.gz"
+            expected_driver = (
+                f"FireSim-corigine_mimicturbo_gt-radiance{registry_config}"
+            )
+            if Path(str(target.get("bitstream", ""))).name != expected_archive:
+                raise ValueError(
+                    f"{target_id}: -b {registry_config} does not match "
+                    f"bitstream {target.get('bitstream')!r}"
+                )
+            if Path(str(target.get("driver", ""))).name != expected_driver:
+                raise ValueError(
+                    f"{target_id}: -b {registry_config} does not match "
+                    f"driver {target.get('driver')!r}"
+                )
         if target["kind"] == "model" and "{model_config}" not in joined_argv:
             raise ValueError(f"{target_id}: model run_argv does not consume model_config")
         if target.get("parser_argv") and not target.get("parser"):
@@ -148,6 +171,17 @@ def load_assets(path: Path, asset_root: Path) -> tuple[dict, dict]:
             raise ValueError(f"{target_id}: FireSim target has no bitstream")
         if target["kind"] == "model" and "model_config" not in target:
             raise ValueError(f"{target_id}: model target has no model_config")
+    single_bdf = spec.get("single_fpga_bdf")
+    if single_bdf is not None:
+        mismatched = [
+            target["id"] for target in targets
+            if target.get("kind") == "firesim" and target.get("bdf") != single_bdf
+        ]
+        if mismatched:
+            raise ValueError(
+                f"single_fpga_bdf {single_bdf} is not used by: " +
+                ", ".join(mismatched)
+            )
     referenced = [t["bitstream"] for t in targets if t.get("bitstream")]
     if len(referenced) != len(set(referenced)):
         raise ValueError("each bitstream must be represented by exactly one target")
@@ -237,6 +271,7 @@ def context(job: dict, asset_root: Path, result_dir: Path) -> dict[str, object]:
         "memory": target["memory"], "sm_count": target["sm_count"],
         "loader": target["loader"], "repetition": job["repetition"],
         "phase": job["phase"], "bdf": target.get("bdf", ""),
+        "bitstream_config": target.get("bitstream_config", ""),
     }
     for field in PATH_FIELDS:
         values[field] = str((asset_root / target[field]).resolve()) if target.get(field) else ""

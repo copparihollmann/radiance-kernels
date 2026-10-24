@@ -88,6 +88,38 @@ class CampaignTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "two.bit"):
                 load_assets(path, root)
 
+    def test_registry_selected_bitstream_and_single_bdf(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "firesim_radiance1SM_DRAM.tar.gz"
+            driver = root / "FireSim-corigine_mimicturbo_gt-radiance1SM_DRAM"
+            runner = root / "run.sh"
+            archive.write_bytes(b"archive")
+            driver.write_bytes(b"driver")
+            runner.write_text("#!/bin/sh\n")
+            spec = {
+                "schema": "radiance-fpga-1a-assets-v1",
+                "single_fpga_bdf": "1b:00.0",
+                "targets": [{
+                    "id": "one", "kind": "firesim", "sm_count": 1,
+                    "memory": "dram", "loader": "logical", "bdf": "1b:00.0",
+                    "bitstream": archive.name, "driver": driver.name,
+                    "runner": runner.name, "bitstream_config": "1SM_DRAM",
+                    "run_argv": [
+                        "bash", "{runner}", "-b", "{bitstream_config}",
+                        "--bdf", "{bdf}", "{elf}",
+                    ],
+                }],
+            }
+            path = root / "assets.json"
+            path.write_text(json.dumps(spec))
+            loaded, _ = load_assets(path, root)
+            self.assertEqual(loaded["targets"][0]["bdf"], "1b:00.0")
+            spec["targets"][0]["driver"] = "wrong-driver"
+            path.write_text(json.dumps(spec))
+            with self.assertRaisesRegex(ValueError, "does not match driver"):
+                load_assets(path, root)
+
 
 if __name__ == "__main__":
     unittest.main()

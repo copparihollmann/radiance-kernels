@@ -16,13 +16,17 @@ replace its example commands with Nicolas's copied scripts and exact arguments.
 ROOT=/scratch/agustin/radiance-fpga-1a
 python3 campaign.py inventory --assets "$ROOT/handoff" \
   --out "$ROOT/reports/asset-inventory.json"
+python3 make_single_fpga_assets.py \
+  --input "$ROOT/artifacts/nicolas-fpga-assets-v1/assets.json" \
+  --output "$ROOT/runs/campaign-single-1b/assets.json" --bdf 1b:00.0
 python3 campaign.py plan \
   --build-manifest "$ROOT/runs/source-matrix-v4/manifest.json" \
-  --asset-manifest "$ROOT/handoff/assets.json" \
-  --assets "$ROOT/handoff" --out "$ROOT/runs/campaign-v1"
-python3 campaign.py run --plan "$ROOT/runs/campaign-v1/plan.json" --parallel-targets
-python3 campaign.py summarize --plan "$ROOT/runs/campaign-v1/plan.json" \
-  --out "$ROOT/reports/campaign-v1.json"
+  --asset-manifest "$ROOT/runs/campaign-single-1b/assets.json" \
+  --assets "$ROOT/artifacts/nicolas-fpga-assets-v1" \
+  --out "$ROOT/runs/campaign-single-1b"
+python3 campaign.py run --plan "$ROOT/runs/campaign-single-1b/plan.json"
+python3 campaign.py summarize --plan "$ROOT/runs/campaign-single-1b/plan.json" \
+  --out "$ROOT/reports/campaign-single-1b.json"
 ```
 
 Planning requires all four STREAM operations, five GPU-STREAM Spatter cases,
@@ -33,12 +37,20 @@ runtime configuration, script, and parser is hashed before execution; changed
 assets invalidate the plan. Copied simulator drivers are first-class hashed assets,
 not untracked command-line inputs. Completed repetitions are resumable.
 
-FireSim targets may provide a fixed `bdf` and a `reuse_argv`. With
-`--parallel-targets`, each target runs serially on its own distinct FPGA while
-different targets run concurrently. The first pending job for each target always
-uses `run_argv` to program the copied image; only later jobs in that same process
-use `reuse_argv` (normally Nicolas's launcher with `--no-program`). This avoids
-flashing on every workload without trusting stale state from an earlier run.
+FireSim targets provide one fixed `bdf` and may provide a `reuse_argv`. FPGA
+target groups must be sequential: Corigine programming disconnects the selected
+card and performs a host-wide PCIe rescan, so `--parallel-targets` is rejected
+for FireSim plans. The recommended manifest maps every configuration to one
+physical card (`1b:00.0`). The first pending job for each configuration uses
+`run_argv` and therefore reprograms that card; only later jobs in that same
+process use `reuse_argv` with `--no-program`.
+
+For Nicolas's launcher, `-b NAME` selects the paired archive and driver from
+the copied registry; the final positional argument is the workload ELF. For
+example, the programming form is `run.sh -b 2SM_HBM --bdf 1b:00.0 ELF`, while
+the same-image reuse form adds `--no-program`. Registry-driven plans retain and
+hash the explicit archive/driver paths, and planning rejects a `-b` name whose
+expected filenames do not match those receipts.
 
 The generic parser recognizes `PASS`, FireSim's `*** PASSED ***`, and
 `kernel_cycles=N`. Set `require_per_sm_timing` to require exactly two valid
