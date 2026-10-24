@@ -530,7 +530,8 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
 
 
 def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
-            host_lock: Path | None = None) -> None:
+            host_lock: Path | None = None,
+            exclude_families: set[str] | None = None) -> None:
     plan = json.loads(plan_path.read_text())
     if plan.get("schema") != "radiance-fpga-1a-campaign-plan-v1":
         raise ValueError("unsupported plan schema")
@@ -544,8 +545,22 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
         if path.stat().st_size != receipt["bytes"] or sha256(path) != receipt["sha256"]:
             raise ValueError(f"asset changed after planning: {label}")
 
+    excluded = exclude_families or set()
+    selected_jobs = [
+        job for job in plan["jobs"]
+        if job["workload"].get("family") not in excluded
+    ]
+    if not selected_jobs:
+        raise ValueError("campaign selection produced no jobs")
+    if excluded:
+        print(
+            f"excluded {len(plan['jobs']) - len(selected_jobs)} jobs from families: "
+            + ", ".join(sorted(excluded)),
+            flush=True,
+        )
+
     grouped: dict[str, list[dict]] = {}
-    for job in plan["jobs"]:
+    for job in selected_jobs:
         grouped.setdefault(job["target_id"], []).append(job)
 
     has_firesim = any(
@@ -647,6 +662,11 @@ def main() -> None:
         help="existing cooperative lock honored by every FireSim user; hold it for "
              "the entire campaign (the file is opened read-only and never modified)",
     )
+    running.add_argument(
+        "--exclude-family", action="append", default=[],
+        choices=("stream", "spatter", "xrage", "fp8_gemm"),
+        help="skip a quarantined workload family; may be specified more than once",
+    )
     summary = sub.add_parser("summarize")
     summary.add_argument("--plan", type=Path, required=True)
     summary.add_argument("--out", type=Path, required=True)
@@ -663,7 +683,7 @@ def main() -> None:
             print(f"planned {len(plan['jobs'])} runs under {args.out.resolve()}")
         elif args.command == "run":
             execute(args.plan.resolve(), args.rerun_failed, args.parallel_targets,
-                    args.host_lock)
+                    args.host_lock, set(args.exclude_family))
         else:
             summarize(args.plan.resolve(), args.out.resolve())
     except (ValueError, SafetyAbort) as error:

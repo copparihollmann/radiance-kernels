@@ -120,6 +120,9 @@ class CampaignTest(unittest.TestCase):
             host_lock.write_bytes(b"")
             with self.assertRaisesRegex(SafetyAbort, "require --host-lock"):
                 execute(plan_path, rerun_failed=False)
+            with self.assertRaisesRegex(ValueError, "selection produced no jobs"):
+                execute(plan_path, rerun_failed=False, host_lock=host_lock,
+                        exclude_families={"stream"})
             execute(plan_path, rerun_failed=False, host_lock=host_lock)
             execute(plan_path, rerun_failed=False, host_lock=host_lock)
             report = summarize(plan_path, root / "summary.json")
