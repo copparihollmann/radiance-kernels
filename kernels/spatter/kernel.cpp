@@ -18,6 +18,7 @@ extern __global uint32_t spatter_sparse_gather[];
 extern __global uint32_t spatter_sparse_scatter[];
 extern __global uint32_t spatter_group_offsets[];
 extern __global uint32_t spatter_group_tasks[];
+extern __global uint32_t spatter_gather_scratch[];
 }
 
 #if SPATTER_CHAIN
@@ -92,6 +93,19 @@ static void chain_body(void* arg, uint32_t tid, uint32_t threads_per_block,
 int main() { return nightly_main(chain_body, nullptr); }
 
 #else
+#if SPATTER_KIND == 0 || SPATTER_KIND == 3
+static inline uint32_t gather_source(uint32_t j, uint32_t i) {
+#if SPATTER_KIND == 0
+  return spatter::affine_index(
+      spatter::pattern_index(spatter_pattern, j), SPATTER_DELTA, i);
+#else
+  return spatter::affine_index(
+      spatter::nested_pattern_index(spatter_pattern, spatter_pattern_gather, j),
+      SPATTER_DELTA, i);
+#endif
+}
+#endif
+
 #if SPATTER_KIND == 1 || SPATTER_KIND == 2 || SPATTER_KIND == 4
 static inline void scatter_task(uint32_t task, uint32_t owned_destination) {
   constexpr uint32_t length = SPATTER_PATTERN_LENGTH;
@@ -144,9 +158,37 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
   constexpr uint32_t length = SPATTER_PATTERN_LENGTH;
 
 #if SPATTER_KIND == 0 || SPATTER_KIND == 3
+#if SPATTER_GATHER_ITERATION_PARTITION
+  constexpr uint32_t owners = length * SPATTER_WRAP;
+  const MuPartition iterations = mu_contiguous_partition(
+      SPATTER_COUNT, NIGHTLY_CLUSTERS, block_id, 1u);
+  for (uint32_t owner = tid; owner < owners; owner += threads_per_block) {
+    const uint32_t residue = owner / length;
+    const uint32_t j = owner - residue * length;
+    const uint32_t begin_residue = iterations.begin % SPATTER_WRAP;
+    const uint32_t skip =
+        (residue + SPATTER_WRAP - begin_residue) % SPATTER_WRAP;
+    for (uint32_t i = iterations.begin + skip; i < iterations.end;
+         i += SPATTER_WRAP) {
+      spatter::copy_value(
+          spatter_gather_scratch, block_id * owners + owner,
+          spatter_sparse, gather_source(j, i));
+    }
+    const uint32_t final_iteration = residue +
+        ((SPATTER_COUNT - 1u - residue) / SPATTER_WRAP) * SPATTER_WRAP;
+    if (final_iteration >= iterations.begin && final_iteration < iterations.end) {
+      // The benchmark transfers above all target private per-SM scratch.  The
+      // one extra checked write per owner publishes the deterministic final
+      // gather value without requiring a cross-SM barrier.
+      spatter::copy_value(
+          spatter_dense, owner, spatter_sparse,
+          gather_source(j, final_iteration));
+    }
+  }
+#else
   // A dense output slot has one owner. It processes the iterations that wrap
   // to that slot in order, so the full Spatter gather result is deterministic.
-  const uint32_t owners = length * SPATTER_WRAP;
+  constexpr uint32_t owners = length * SPATTER_WRAP;
   const MuPartition range = mu_contiguous_partition(
       owners, NIGHTLY_CLUSTERS, block_id, 8u);
   for (uint32_t owner = range.begin + tid; owner < range.end;
@@ -165,6 +207,7 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
       spatter::copy_value(spatter_dense, owner, spatter_sparse, src);
     }
   }
+#endif
 #else
 #if SPATTER_ORDERED_COLLISIONS
   // The host groups tasks by destination in their original order. One lane

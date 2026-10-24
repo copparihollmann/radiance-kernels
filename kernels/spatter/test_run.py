@@ -75,6 +75,12 @@ class SpatterMappingTest(unittest.TestCase):
             values = struct.unpack(f"<{final['src_length']}Q", path.read_bytes())
             self.assertEqual(values[4], payload(full["payload_tag"], 13))
 
+    def test_final_iteration_for_each_gather_residue(self):
+        count, wrap = 11, 4
+        finals = [r + ((count - 1 - r) // wrap) * wrap for r in range(wrap)]
+        self.assertEqual(finals, [8, 9, 10, 7])
+        self.assertEqual(sorted(i % wrap for i in finals), list(range(wrap)))
+
     def test_stitch_gather_and_scatter_as_gs(self):
         gather = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
                             "count": 2, "delta": 5, "wrap": 2})

@@ -99,6 +99,8 @@ def prepare(gather: dict, scatter: dict, suites: tuple[Path, Path],
         "#define SPATTER_EXPLORATORY 0",
         "#define SPATTER_EXPLORATORY_PROBE_INDEX 0u",
         "#define SPATTER_EXPECTED_NONZERO_OUTPUTS 0u",
+        "#define SPATTER_GATHER_ITERATION_PARTITION 0",
+        f"#define SPATTER_GATHER_OWNERS {gather['length'] * gather['wrap']}u",
     ]
     (GENERATED / "config.h").write_text("\n".join(config) + "\n")
     asm = [
