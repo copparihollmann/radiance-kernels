@@ -349,6 +349,19 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False)
     for job in plan["jobs"]:
         grouped.setdefault(job["target_id"], []).append(job)
 
+    # Corigine programming disconnects a card and performs a host-wide PCIe
+    # rescan.  A second target must not be programmed while a FireSim driver is
+    # active on an already-programmed card: the rescan can invalidate the live
+    # driver's mappings and destabilize the host.  Keep model-only campaigns
+    # parallel-capable, but make FPGA target groups strictly sequential.
+    if parallel_targets and any(
+            jobs[0]["target"].get("kind") == "firesim"
+            for jobs in grouped.values()):
+        raise ValueError(
+            "parallel FireSim targets are unsafe: Corigine programming performs "
+            "a host-wide PCIe rescan; run target groups sequentially"
+        )
+
     def run_target(jobs: list[dict]) -> None:
         image_loaded = False
         for job in jobs:
@@ -419,7 +432,8 @@ def main() -> None:
     running.add_argument("--plan", type=Path, required=True)
     running.add_argument("--rerun-failed", action="store_true")
     running.add_argument("--parallel-targets", action="store_true",
-                         help="run distinct fixed-BDF targets concurrently")
+                         help="run non-FireSim target groups concurrently; FPGA targets "
+                              "are rejected because programming rescans host PCIe")
     summary = sub.add_parser("summarize")
     summary.add_argument("--plan", type=Path, required=True)
     summary.add_argument("--out", type=Path, required=True)
