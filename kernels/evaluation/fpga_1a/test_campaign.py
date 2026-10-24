@@ -8,10 +8,47 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from campaign import execute, inventory, load_assets, make_plan, sha256, summarize
+from campaign import (descendant_pids, execute, external_firesim_activity,
+                      inventory, is_firesim_hardware_process, load_assets,
+                      make_plan, sha256, summarize)
 
 
 class CampaignTest(unittest.TestCase):
+    def test_external_firesim_activity_excludes_owned_process_tree(self):
+        rows = [
+            {"pid": 10, "ppid": 1, "uid": 1000,
+             "argv": ["python3", "campaign.py", "run"]},
+            {"pid": 11, "ppid": 10, "uid": 1000,
+             "argv": ["bash", "/copy/runtime/run.sh", "-b", "1SM_DRAM",
+                      "--bdf", "1b:00.0"]},
+            {"pid": 12, "ppid": 11, "uid": 0,
+             "argv": ["python3", "/usr/local/bin/firesim-fpga-util.py"]},
+            {"pid": 20, "ppid": 1, "uid": 2000,
+             "argv": ["bash", "/other/firesim-rundir/run.sh", "-b",
+                      "2SM_HBM", "--bdf", "61:00.0"]},
+            {"pid": 21, "ppid": 1, "uid": 2000,
+             "argv": ["rg", "FireSim-corigine|program_fpga"]},
+        ]
+        self.assertEqual(descendant_pids(rows, {10}), {10, 11, 12})
+        activity = external_firesim_activity(rows, {10})
+        self.assertEqual([row["pid"] for row in activity], [20])
+
+    def test_firesim_hardware_process_signatures(self):
+        self.assertTrue(is_firesim_hardware_process(
+            ["./FireSim-corigine_xb10", "+bus=0x1b"]))
+        self.assertTrue(is_firesim_hardware_process(
+            ["vivado", "-source", "/usr/local/bin/program_fpga.tcl"]))
+        self.assertTrue(is_firesim_hardware_process(
+            ["bash", "/other/firesim-rundir/run.sh", "-b", "1SM_DRAM",
+             "/tmp/workload.elf"]))
+        self.assertTrue(is_firesim_hardware_process(
+            ["bash", "/other/firesim-rundir/run.sh", "--fpga", "serial",
+             "/tmp/workload.elf"]))
+        self.assertTrue(is_firesim_hardware_process(
+            ["python3", "/deploy/firesim", "runworkload"]))
+        self.assertFalse(is_firesim_hardware_process(
+            ["rg", "FireSim-corigine|program_fpga.tcl"]))
+
     def test_plan_run_resume_and_summarize(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

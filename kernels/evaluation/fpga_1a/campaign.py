@@ -14,8 +14,10 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import signal
 import statistics
 import subprocess
 import time
@@ -35,6 +37,97 @@ ROLES = {
 }
 PATH_FIELDS = ("bitstream", "driver", "runtime_config", "hwdb_config",
                "model_config", "runner", "parser")
+
+
+class SafetyAbort(RuntimeError):
+    """The run stopped before another FireSim process could rescan host PCIe."""
+
+
+def process_table() -> list[dict]:
+    """Return the live Linux process tree without invoking ps or matching text."""
+    rows = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            status = (entry / "status").read_text().splitlines()
+            fields = {
+                line.split(":", 1)[0]: line.split(":", 1)[1].strip()
+                for line in status if ":" in line
+            }
+            argv = [part.decode(errors="replace") for part in
+                    (entry / "cmdline").read_bytes().split(b"\0") if part]
+            if not argv:
+                continue
+            rows.append({
+                "pid": int(entry.name), "ppid": int(fields["PPid"]),
+                "uid": int(fields["Uid"].split()[0]), "argv": argv,
+            })
+        except (FileNotFoundError, PermissionError, KeyError, ValueError):
+            # Processes can exit while /proc is being sampled.
+            continue
+    return rows
+
+
+def is_firesim_hardware_process(argv: list[str]) -> bool:
+    """Identify runtime/programming commands, excluding unrelated text searches."""
+    basenames = [Path(arg).name for arg in argv]
+    executable = basenames[0]
+    if executable.startswith("FireSim-corigine"):
+        return True
+    if (any(name.startswith("firesim-fpga-util") for name in basenames) or
+            "program_fpga.tcl" in basenames):
+        return True
+    if "run.sh" in basenames and any(
+            arg == "-b" or arg.startswith(("--bitstream", "--bdf", "--fpga"))
+            for arg in argv):
+        return True
+    if "firesim" in basenames and any(
+            arg in ("infrasetup", "runworkload", "kill") for arg in argv[1:]):
+        return True
+    return False
+
+
+def descendant_pids(rows: list[dict], roots: set[int]) -> set[int]:
+    owned = set(roots)
+    changed = True
+    while changed:
+        changed = False
+        for row in rows:
+            if row["ppid"] in owned and row["pid"] not in owned:
+                owned.add(row["pid"])
+                changed = True
+    return owned
+
+
+def external_firesim_activity(rows: list[dict] | None = None,
+                              owned_roots: set[int] | None = None) -> list[dict]:
+    """Return FireSim hardware processes outside this campaign's process tree."""
+    rows = process_table() if rows is None else rows
+    owned = descendant_pids(rows, owned_roots or {os.getpid()})
+    return [row for row in rows
+            if row["pid"] not in owned and is_firesim_hardware_process(row["argv"])]
+
+
+def activity_record(rows: list[dict]) -> list[dict]:
+    return [{"pid": row["pid"], "ppid": row["ppid"], "uid": row["uid"],
+             "argv": row["argv"]} for row in rows]
+
+
+def stop_process_group(process: subprocess.Popen, grace_seconds: float = 10.0) -> None:
+    """Terminate the campaign-owned process group, escalating after a grace period."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + grace_seconds
+    while process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.1)
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def sha256(path: Path) -> str:
@@ -310,11 +403,50 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
     request = {"job": job, "argv": argv, "asset_receipts": receipts,
                "reused_loaded_bitstream": bool(argv_template)}
     write_json(result_dir / "request.json", request)
+    guard_host = target.get("kind") == "firesim" and bool(target.get("bdf"))
+    if guard_host:
+        activity = external_firesim_activity()
+        if activity:
+            record = {
+                "schema": "radiance-fpga-host-safety-abort-v1",
+                "reason": "external-firesim-activity-before-job",
+                "job": job["id"], "activity": activity_record(activity),
+            }
+            write_json(result_dir / "safety-abort.json", record)
+            raise SafetyAbort(
+                f"{job['id']}: refusing to start while external FireSim hardware "
+                f"activity is live (see {result_dir / 'safety-abort.json'})"
+            )
     started = time.time()
     with (result_dir / "stdout.log").open("w") as stdout, \
             (result_dir / "stderr.log").open("w") as stderr:
-        completed = subprocess.run(argv, cwd=asset_root, env=env,
-                                   stdout=stdout, stderr=stderr, check=False)
+        process = subprocess.Popen(
+            argv, cwd=asset_root, env=env, stdout=stdout, stderr=stderr,
+            start_new_session=guard_host,
+        )
+        activity = []
+        while process.poll() is None:
+            time.sleep(0.25)
+            if guard_host:
+                activity = external_firesim_activity(
+                    owned_roots={os.getpid(), process.pid})
+                if activity:
+                    stop_process_group(process)
+                    break
+        returncode = process.wait()
+    if activity:
+        record = {
+            "schema": "radiance-fpga-host-safety-abort-v1",
+            "reason": "external-firesim-activity-during-job",
+            "job": job["id"], "returncode": returncode,
+            "wall_seconds": round(time.time() - started, 6),
+            "activity": activity_record(activity),
+        }
+        write_json(result_dir / "safety-abort.json", record)
+        raise SafetyAbort(
+            f"{job['id']}: stopped because external FireSim hardware activity "
+            f"appeared (see {result_dir / 'safety-abort.json'})"
+        )
     output = (result_dir / "stdout.log").read_text(errors="replace") + "\n" + \
              (result_dir / "stderr.log").read_text(errors="replace")
     cycles = CYCLES.findall(output)
@@ -335,12 +467,12 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
                            row["cycles"] == row["end"] - row["start"]
                            for row in core_cycles))
     passed = (bool(PASS.search(output)) and not FAIL.search(output) and
-              completed.returncode == 0)
+              returncode == 0)
     if target.get("require_per_sm_timing"):
         passed = passed and bool(cycles) and timing_complete
     result = {
         "schema": "radiance-fpga-1a-job-result-v1", "id": job["id"],
-        "status": "passed" if passed else "failed", "returncode": completed.returncode,
+        "status": "passed" if passed else "failed", "returncode": returncode,
         "kernel_cycles": int(cycles[-1]) if cycles else None,
         "core_kernel_cycles": core_cycles,
         "per_sm_timing_complete": timing_complete,
@@ -487,7 +619,7 @@ def main() -> None:
             execute(args.plan.resolve(), args.rerun_failed, args.parallel_targets)
         else:
             summarize(args.plan.resolve(), args.out.resolve())
-    except ValueError as error:
+    except (ValueError, SafetyAbort) as error:
         raise SystemExit(str(error)) from error
 
 

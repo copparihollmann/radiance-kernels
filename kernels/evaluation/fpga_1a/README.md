@@ -45,6 +45,19 @@ physical card (`1b:00.0`). The first pending job for each configuration uses
 `run_argv` and therefore reprograms that card; only later jobs in that same
 process use `reuse_argv` with `--no-program`.
 
+The run command also enforces host-wide quietness. Before each fixed-BDF job it
+scans the live `/proc` process tree for any FireSim runner, FPGA programmer,
+driver, or manager lifecycle command outside its own descendants. It refuses to
+start if one exists. While the job is live it polls again four times per second;
+if another user's FireSim activity appears, it terminates its own process group,
+writes `safety-abort.json`, and stops the campaign as soon as it detects the
+conflict. A safety abort is deliberately not recorded as a kernel failure, so
+the incomplete job is reprogrammed and retried on the next quiet-host run. This
+guard is required even when different BDFs are selected: the rescan is
+host-wide, not card-local. It is a fail-closed backup, not a substitute for an
+exclusive host reservation: a directly invoked programmer can begin its rescan
+before another process has time to observe it.
+
 For Nicolas's launcher, `-b NAME` selects the paired archive and driver from
 the copied registry; the final positional argument is the workload ELF. For
 example, the programming form is `run.sh -b 2SM_HBM --bdf 1b:00.0 ELF`, while
