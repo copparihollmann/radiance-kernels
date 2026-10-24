@@ -30,6 +30,16 @@ every physical SM before releasing reset, and the kernel reports `kernel_cycles`
 from the earliest core start through the latest post-fence completion stamp.
 Use an ELF only with a hardware configuration having at least that many SMs.
 
+`--warps-per-core {1,2,4,8}` exposes the Muon occupancy as an explicit recorded
+tuning parameter; the default remains 4. At the fixed 4,102-element campaign
+size, lower occupancy raises functional 2-to-4 scaling (1.72x at one warp and
+1.56x at two warps versus 1.38x at four) only by making both absolute runtimes
+slower. Generic-DRAM timing similarly favors higher occupancy in absolute
+cycles: eight warps reaches 25,629 cycles at 4 SM versus 25,893 at four warps,
+while its 2-to-4 ratio is approximately 1x because the shared queue saturates.
+Do not select occupancy by speedup ratio alone; retain the fastest absolute
+variant and confirm it on the matching FPGA memory model.
+
 Build cases sequentially because they share `generated/`. Each output has a
 manifest, build log, and fused ELF. The RV64 host checks a complete digest for
 up to 1024 elements and 64 samples for larger arrays; Cyclotron can check the

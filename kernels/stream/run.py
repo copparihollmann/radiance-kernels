@@ -57,11 +57,13 @@ def write_input(path: Path, name: str, elements: int) -> None:
 
 def prepare(kind: str, elements: int, out: Path,
             full_host_check: bool = False, sms: int = 1,
-            loader: str = "logical") -> dict:
+            loader: str = "logical", warps_per_core: int = 4) -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
     if elements * 12 + 0x100000 > 0x70000000:
         raise ValueError("STREAM arrays exceed the GPU DRAM address window")
+    if warps_per_core not in (1, 2, 4, 8):
+        raise ValueError("warps_per_core must be 1, 2, 4, or 8")
     GENERATED.mkdir(exist_ok=True)
     output = OUTPUT[kind]
     for name in "abc":
@@ -78,7 +80,7 @@ def prepare(kind: str, elements: int, out: Path,
         "#pragma once",
         f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
-        "#define NIGHTLY_OCC 4",
+        f"#define NIGHTLY_OCC {warps_per_core}",
         f"#define STREAM_KIND {KINDS[kind]}",
         f"#define STREAM_ELEMENTS {elements}u",
         f"#define STREAM_READBACK_SAMPLES {samples}u",
@@ -121,12 +123,15 @@ def prepare(kind: str, elements: int, out: Path,
             "readback_samples": samples, "destination_overlap": False,
             "collision_policy": "parallel",
             "address_plan": {"read": "dense", "write": "dense", "operation": kind},
-            "suite_sha256": hashlib.sha256(f"stream:{kind}:{elements}".encode()).hexdigest(),
+            "suite_sha256": hashlib.sha256(
+                f"stream:{kind}:{elements}:occ{warps_per_core}".encode()
+            ).hexdigest(),
             "case": KINDS[kind], "kernel_source_sha256": source.hexdigest(),
             "correctness": "sample-checked" if samples else "digest-checked",
             "host_full_readback": full_host_check or not samples,
             "status": "prepared", "simulator": None,
             "element_format": "float32", "output_element_count": elements,
+            "muon_warps_per_core": warps_per_core,
             "checker_word_pairs": elements // 2}
     (GENERATED / "manifest.json").write_text(json.dumps(case, indent=2) + "\n")
     out.mkdir(parents=True, exist_ok=True)
@@ -143,6 +148,8 @@ def main() -> None:
     parser.add_argument("--loader", choices=("logical", "direct-hashed"),
                         default="logical",
                         help="logical GPU loading, or direct loading that bypasses the RTL hash")
+    parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8), default=4,
+                        help="Muon occupancy used to trade latency hiding for queue pressure")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--full-host-check", action="store_true",
@@ -152,7 +159,7 @@ def main() -> None:
     args = parser.parse_args()
     out = args.out.resolve()
     case = prepare(args.kind, args.elements, out, args.full_host_check,
-                   args.sms, args.loader)
+                   args.sms, args.loader, args.warps_per_core)
     case["host_timing_requested"] = args.host_timing
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:
