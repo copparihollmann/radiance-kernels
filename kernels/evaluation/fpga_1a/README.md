@@ -18,16 +18,16 @@ python3 campaign.py inventory --assets "$ROOT/handoff" \
   --out "$ROOT/reports/asset-inventory.json"
 python3 make_single_fpga_assets.py \
   --input "$ROOT/artifacts/nicolas-fpga-assets-v1/assets.json" \
-  --output "$ROOT/runs/campaign-single-1b/assets.json" --bdf 1b:00.0
+  --output "$ROOT/runs/campaign-single-1a/assets.json" --bdf 1a:00.0
 python3 campaign.py plan \
   --build-manifest "$ROOT/runs/source-matrix-v4/manifest.json" \
-  --asset-manifest "$ROOT/runs/campaign-single-1b/assets.json" \
+  --asset-manifest "$ROOT/runs/campaign-single-1a/assets.json" \
   --assets "$ROOT/artifacts/nicolas-fpga-assets-v1" \
-  --out "$ROOT/runs/campaign-single-1b"
-python3 campaign.py run --plan "$ROOT/runs/campaign-single-1b/plan.json" \
+  --out "$ROOT/runs/campaign-single-1a"
+python3 campaign.py run --plan "$ROOT/runs/campaign-single-1a/plan.json" \
   --host-lock /scratch/agustin/share/firesim-host.lock
-python3 campaign.py summarize --plan "$ROOT/runs/campaign-single-1b/plan.json" \
-  --out "$ROOT/reports/campaign-single-1b.json"
+python3 campaign.py summarize --plan "$ROOT/runs/campaign-single-1a/plan.json" \
+  --out "$ROOT/reports/campaign-single-1a.json"
 ```
 
 Planning requires all four STREAM operations, five GPU-STREAM Spatter cases,
@@ -38,13 +38,14 @@ runtime configuration, script, and parser is hashed before execution; changed
 assets invalidate the plan. Copied simulator drivers are first-class hashed assets,
 not untracked command-line inputs. Completed repetitions are resumable.
 
-FireSim targets provide one fixed `bdf` and may provide a `reuse_argv`. FPGA
-target groups must be sequential: Corigine programming disconnects the selected
-card and performs a host-wide PCIe rescan, so `--parallel-targets` is rejected
-for FireSim plans. The recommended manifest maps every configuration to one
-physical card (`1b:00.0`). The first pending job for each configuration uses
-`run_argv` and therefore reprograms that card; only later jobs in that same
-process use `reuse_argv` with `--no-program`.
+FireSim targets provide one fixed `bdf`. FPGA target groups must be sequential:
+Corigine programming disconnects the selected card and performs a host-wide PCIe
+rescan, so `--parallel-targets` is rejected for FireSim plans. The campaign
+manifest maps every configuration to the one reserved physical card
+(`1a:00.0`). Every job uses `run_argv` and fully reprograms that card. Plans and
+commands containing `--no-program` are rejected: repeated image reuse preceded
+the observed XDMA/PCIe loss, while fresh programming restores the complete
+driver lifecycle before each workload.
 
 The run command also enforces host-wide quietness. Before each fixed-BDF job it
 scans the live `/proc` process tree for any FireSim runner, FPGA programmer,
@@ -72,15 +73,14 @@ the process monitor remains a fallback for non-cooperating commands.
 
 Use repeatable `--include-job JOB_ID` arguments to execute an exact subset of
 a hash-verified plan, such as one reduced loader canary before expanding to a
-whole configuration matrix. Unknown IDs fail closed, and the first selected
-job for each target always uses the programming form; image reuse is confined
-to later selected jobs in the same campaign process.
+whole configuration matrix. Unknown IDs fail closed. Every selected job uses
+the complete programming form, including when resuming a partial campaign.
 
 For Nicolas's launcher, `-b NAME` selects the paired archive and driver from
-the copied registry; the final positional argument is the workload ELF. For
-example, the programming form is `run.sh -b 2SM_HBM --bdf 1b:00.0 ELF`, while
-the same-image reuse form adds `--no-program`. Registry-driven plans retain and
-hash the explicit archive/driver paths, and planning rejects a `-b` name whose
+the copied registry; `--bdf 1a:00.0` selects the reserved card; and the final
+positional path is the workload ELF. For example:
+`run.sh -b 2SM_HBM --bdf 1a:00.0 ELF`. Registry-driven plans retain and hash
+the explicit archive/driver paths, and planning rejects a `-b` name whose
 expected filenames do not match those receipts.
 
 The generic parser recognizes `PASS`, FireSim's `*** PASSED ***`, and
