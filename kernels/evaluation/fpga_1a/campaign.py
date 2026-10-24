@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+import fcntl
 import hashlib
 import json
 import os
@@ -41,6 +43,35 @@ PATH_FIELDS = ("bitstream", "driver", "runtime_config", "hwdb_config",
 
 class SafetyAbort(RuntimeError):
     """The run stopped before another FireSim process could rescan host PCIe."""
+
+
+@contextmanager
+def exclusive_host_lock(path: Path | None):
+    """Hold an existing cooperative host lock without changing its contents."""
+    if path is None:
+        yield
+        return
+    path = path.resolve()
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    except OSError as error:
+        raise SafetyAbort(
+            f"cannot open cooperative FireSim host lock {path}: {error}"
+        ) from error
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise SafetyAbort(
+                f"cooperative FireSim host lock is busy: {path}"
+            ) from error
+        print(f"holding cooperative FireSim host lock: {path}", flush=True)
+        yield
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
 
 def process_table() -> list[dict]:
@@ -498,7 +529,8 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
     return True, image_loaded
 
 
-def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False) -> None:
+def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
+            host_lock: Path | None = None) -> None:
     plan = json.loads(plan_path.read_text())
     if plan.get("schema") != "radiance-fpga-1a-campaign-plan-v1":
         raise ValueError("unsupported plan schema")
@@ -516,14 +548,22 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False)
     for job in plan["jobs"]:
         grouped.setdefault(job["target_id"], []).append(job)
 
+    has_firesim = any(
+        jobs[0]["target"].get("kind") == "firesim"
+        for jobs in grouped.values()
+    )
+    if has_firesim and host_lock is None:
+        raise SafetyAbort(
+            "FireSim plans require --host-lock PATH; process polling alone cannot "
+            "prevent a racing host-wide PCIe rescan"
+        )
+
     # Corigine programming disconnects a card and performs a host-wide PCIe
     # rescan.  A second target must not be programmed while a FireSim driver is
     # active on an already-programmed card: the rescan can invalidate the live
     # driver's mappings and destabilize the host.  Keep model-only campaigns
     # parallel-capable, but make FPGA target groups strictly sequential.
-    if parallel_targets and any(
-            jobs[0]["target"].get("kind") == "firesim"
-            for jobs in grouped.values()):
+    if parallel_targets and has_firesim:
         raise ValueError(
             "parallel FireSim targets are unsafe: Corigine programming performs "
             "a host-wide PCIe rescan; run target groups sequentially"
@@ -535,18 +575,19 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False)
             _, image_loaded = execute_job(
                 job, asset_root, plan["asset_receipts"], rerun_failed, image_loaded)
 
-    if parallel_targets and len(grouped) > 1:
-        bdfs = [jobs[0]["target"].get("bdf") for jobs in grouped.values()
-                if jobs[0]["target"].get("kind") == "firesim"]
-        if any(not bdf for bdf in bdfs) or len(bdfs) != len(set(bdfs)):
-            raise ValueError("parallel FireSim targets require distinct nonempty BDFs")
-        with ThreadPoolExecutor(max_workers=len(grouped)) as pool:
-            futures = [pool.submit(run_target, jobs) for jobs in grouped.values()]
-            for future in futures:
-                future.result()
-    else:
-        for jobs in grouped.values():
-            run_target(jobs)
+    with exclusive_host_lock(host_lock):
+        if parallel_targets and len(grouped) > 1:
+            bdfs = [jobs[0]["target"].get("bdf") for jobs in grouped.values()
+                    if jobs[0]["target"].get("kind") == "firesim"]
+            if any(not bdf for bdf in bdfs) or len(bdfs) != len(set(bdfs)):
+                raise ValueError("parallel FireSim targets require distinct nonempty BDFs")
+            with ThreadPoolExecutor(max_workers=len(grouped)) as pool:
+                futures = [pool.submit(run_target, jobs) for jobs in grouped.values()]
+                for future in futures:
+                    future.result()
+        else:
+            for jobs in grouped.values():
+                run_target(jobs)
 
 
 def summarize(plan_path: Path, out: Path) -> dict:
@@ -601,6 +642,11 @@ def main() -> None:
     running.add_argument("--parallel-targets", action="store_true",
                          help="run non-FireSim target groups concurrently; FPGA targets "
                               "are rejected because programming rescans host PCIe")
+    running.add_argument(
+        "--host-lock", type=Path,
+        help="existing cooperative lock honored by every FireSim user; hold it for "
+             "the entire campaign (the file is opened read-only and never modified)",
+    )
     summary = sub.add_parser("summarize")
     summary.add_argument("--plan", type=Path, required=True)
     summary.add_argument("--out", type=Path, required=True)
@@ -616,7 +662,8 @@ def main() -> None:
                              args.allow_incomplete_build)
             print(f"planned {len(plan['jobs'])} runs under {args.out.resolve()}")
         elif args.command == "run":
-            execute(args.plan.resolve(), args.rerun_failed, args.parallel_targets)
+            execute(args.plan.resolve(), args.rerun_failed, args.parallel_targets,
+                    args.host_lock)
         else:
             summarize(args.plan.resolve(), args.out.resolve())
     except (ValueError, SafetyAbort) as error:

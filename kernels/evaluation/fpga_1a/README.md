@@ -58,6 +58,17 @@ host-wide, not card-local. It is a fail-closed backup, not a substitute for an
 exclusive host reservation: a directly invoked programmer can begin its rescan
 before another process has time to observe it.
 
+For a cooperative reservation, pass `--host-lock PATH` to `campaign.py run`.
+This argument is mandatory for every plan containing FireSim hardware targets.
+`PATH` must be an existing neutral lock file that every FireSim launcher and
+manager on the host has agreed to honor for its complete driver lifetime. The
+campaign opens it read-only, takes a nonblocking exclusive `flock`, and holds
+that lock until every target group exits. It fails closed if the file is absent
+or busy and never changes the file contents or timestamps. Do not point this at
+another user's private lock without their agreement. This mechanism prevents
+the programming race only when every hardware entry point uses the same inode;
+the process monitor remains a fallback for non-cooperating commands.
+
 For Nicolas's launcher, `-b NAME` selects the paired archive and driver from
 the copied registry; the final positional argument is the workload ELF. For
 example, the programming form is `run.sh -b 2SM_HBM --bdf 1b:00.0 ELF`, while

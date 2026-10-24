@@ -8,12 +8,33 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from campaign import (descendant_pids, execute, external_firesim_activity,
-                      inventory, is_firesim_hardware_process, load_assets,
-                      make_plan, sha256, summarize)
+from campaign import (SafetyAbort, descendant_pids, exclusive_host_lock,
+                      execute, external_firesim_activity, inventory,
+                      is_firesim_hardware_process, load_assets, make_plan,
+                      sha256, summarize)
 
 
 class CampaignTest(unittest.TestCase):
+    def test_cooperative_host_lock_is_exclusive_and_read_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock = Path(directory) / "firesim-host.lock"
+            lock.write_bytes(b"unchanged")
+            before = lock.stat()
+            with exclusive_host_lock(lock):
+                with self.assertRaises(SafetyAbort):
+                    with exclusive_host_lock(lock):
+                        pass
+            after = lock.stat()
+            self.assertEqual(lock.read_bytes(), b"unchanged")
+            self.assertEqual(after.st_size, before.st_size)
+            self.assertEqual(after.st_mtime_ns, before.st_mtime_ns)
+
+    def test_cooperative_host_lock_must_already_exist(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(SafetyAbort):
+                with exclusive_host_lock(Path(directory) / "missing.lock"):
+                    pass
+
     def test_external_firesim_activity_excludes_owned_process_tree(self):
         rows = [
             {"pid": 10, "ppid": 1, "uid": 1000,
@@ -95,8 +116,12 @@ class CampaignTest(unittest.TestCase):
                              warmups=1, repetitions=3, allow_incomplete=True)
             self.assertEqual(len(plan["jobs"]), 4)
             plan_path = run_root / "plan.json"
-            execute(plan_path, rerun_failed=False)
-            execute(plan_path, rerun_failed=False)
+            host_lock = root / "host.lock"
+            host_lock.write_bytes(b"")
+            with self.assertRaisesRegex(SafetyAbort, "require --host-lock"):
+                execute(plan_path, rerun_failed=False)
+            execute(plan_path, rerun_failed=False, host_lock=host_lock)
+            execute(plan_path, rerun_failed=False, host_lock=host_lock)
             report = summarize(plan_path, root / "summary.json")
             self.assertFalse(report["missing_jobs"])
             self.assertEqual(report["rows"][0]["measure_passes"], 3)
