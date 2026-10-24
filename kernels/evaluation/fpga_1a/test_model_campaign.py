@@ -12,6 +12,12 @@ SPEC.loader.exec_module(MC)
 
 
 class ModelCampaignTests(unittest.TestCase):
+    def test_cluster_cycle_parser(self):
+        line = ("Cyclotron: nightly_cluster_cycles cluster=3 cycles=17 "
+                "start=41 end=58")
+        self.assertEqual(MC.CLUSTER_CYCLES.findall(line),
+                         [("3", "17", "41", "58")])
+
     def test_output_address_rejects_ordinary_elf(self):
         with self.assertRaises(ValueError):
             MC.output_address(Path(__import__("sys").executable))

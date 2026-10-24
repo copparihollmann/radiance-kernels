@@ -25,6 +25,9 @@ import time
 
 FINISHED = re.compile(r"simulation finished after (\d+) cycles")
 KERNEL_CYCLES = re.compile(r"nightly_kernel_cycles=(\d+)")
+CLUSTER_CYCLES = re.compile(
+    r"nightly_cluster_cycles cluster=(\d+) cycles=(\d+) start=(\d+) end=(\d+)"
+)
 GMEM_PASS = re.compile(r"gmem check .*: PASS")
 SMEM_PASS = re.compile(r"smem check .*: PASS")
 RV32_SECTION = re.compile(
@@ -231,10 +234,20 @@ def run(args: argparse.Namespace) -> None:
             (run_dir / "stderr.log").write_text(proc.stderr)
             finished = FINISHED.search(proc.stdout)
             kernel = KERNEL_CYCLES.search(proc.stdout)
+            cluster_cycles = [
+                {
+                    "cluster": int(cluster), "cycles": int(cycles),
+                    "start": int(start), "end": int(end),
+                }
+                for cluster, cycles, start, end in CLUSTER_CYCLES.findall(proc.stdout)
+            ]
             expected_checks = 1 if row["family"] != "fp8_gemm" else 4 * row["sm_count"]
             observed_checks = len(GMEM_PASS.findall(proc.stdout)) + len(SMEM_PASS.findall(proc.stdout))
             passed = (proc.returncode == 0 and finished is not None and kernel is not None
-                      and observed_checks == expected_checks)
+                      and observed_checks == expected_checks
+                      and len(cluster_cycles) == int(row["sm_count"])
+                      and {item["cluster"] for item in cluster_cycles}
+                      == set(range(int(row["sm_count"]))))
             record = {
                 "schema": "radiance-cyclotron-dram-result-v1",
                 "status": "passed" if passed else "failed",
@@ -243,6 +256,7 @@ def run(args: argparse.Namespace) -> None:
                 "memory_model": "generic-dram", "is_hbm": False,
                 "timing": args.timing, "repetition": repetition,
                 "kernel_cycles": int(kernel.group(1)) if kernel else None,
+                "cluster_kernel_cycles": cluster_cycles,
                 "simulation_cycles": int(finished.group(1)) if finished else None,
                 "correctness_checks": observed_checks,
                 "expected_correctness_checks": expected_checks,

@@ -17,7 +17,7 @@ ROOT=/scratch/agustin/radiance-fpga-1a
 python3 campaign.py inventory --assets "$ROOT/handoff" \
   --out "$ROOT/reports/asset-inventory.json"
 python3 campaign.py plan \
-  --build-manifest "$ROOT/runs/source-matrix-v2/manifest.json" \
+  --build-manifest "$ROOT/runs/source-matrix-v3/manifest.json" \
   --asset-manifest "$ROOT/handoff/assets.json" \
   --assets "$ROOT/handoff" --out "$ROOT/runs/campaign-v1"
 python3 campaign.py run --plan "$ROOT/runs/campaign-v1/plan.json"
