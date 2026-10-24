@@ -195,6 +195,16 @@ class SpatterMappingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "between 0 and 63"):
             prepare(case, suite, 0, source_pad_lines=64)
 
+    def test_records_optional_warps_per_core(self):
+        case = normalize({"kernel": "Gather", "pattern": [0, 1], "count": 1})
+        suite = Path(__file__).parent / "smoke.json"
+        result = prepare(case, suite, 0, sms=4, warps_per_core=8)
+        self.assertEqual(result["muon_warps_per_core"], 8)
+        config = GENERATED.joinpath("config.h").read_text()
+        self.assertIn("#define NIGHTLY_OCC 8", config)
+        with self.assertRaisesRegex(ValueError, "warps_per_core"):
+            prepare(case, suite, 0, warps_per_core=3)
+
 
 if __name__ == "__main__":
     unittest.main()

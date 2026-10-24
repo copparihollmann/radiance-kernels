@@ -360,9 +360,11 @@ def write_destination_groups(case: dict) -> None:
 
 def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
             loader: str = "logical", source_pad_lines: int = 0,
-            output_pad_lines: int = 0) -> dict:
+            output_pad_lines: int = 0, warps_per_core: int = 4) -> dict:
     if not 0 <= source_pad_lines < 64 or not 0 <= output_pad_lines < 64:
         raise ValueError("cache padding must be between 0 and 63 lines")
+    if warps_per_core not in (1, 2, 4, 8):
+        raise ValueError("warps_per_core must be 1, 2, 4, or 8")
     GENERATED.mkdir(exist_ok=True)
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
@@ -391,7 +393,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "#pragma once",
         f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
-        "#define NIGHTLY_OCC 4",
+        f"#define NIGHTLY_OCC {warps_per_core}",
         f"#define SPATTER_KIND {KINDS[case['kind']]}",
         "#define SPATTER_CHAIN 0",
         f"#define SPATTER_PATTERN_LENGTH {case['length']}u",
@@ -454,7 +456,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "source_index_base": case.get("source_index_base", 0),
         "source_tag": case["payload_tag"],
         "requested_local_work_size": case["requested_local_work_size"],
-        "muon_warps_per_core": 4,
+        "muon_warps_per_core": warps_per_core,
         "source_pad_cache_lines": source_pad_lines,
         "output_pad_cache_lines": output_pad_lines,
         "layout_padding_bytes": (source_pad_lines + output_pad_lines) * 64,
@@ -521,6 +523,8 @@ def main() -> int:
                         help="0..63 cache lines inserted before the main source array")
     parser.add_argument("--output-pad-lines", type=int, default=0,
                         help="0..63 cache lines inserted before the destination array")
+    parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8), default=4,
+                        help="Muon occupancy; recorded in the result manifest")
     parser.add_argument("--count", type=int,
                         help="replace the suite repetition count for a clearly labeled scaled run")
     parser.add_argument("--iteration-start", type=int, default=0,
@@ -560,13 +564,23 @@ def main() -> int:
             parser.error("--sim-only requires --simv and excludes --prepare-only/--build-only")
         if args.full_host_check or args.host_timing:
             parser.error("--sim-only uses the existing ELF; readback and timing flags require a rebuild")
-        if args.source_pad_lines or args.output_pad_lines:
-            parser.error("--sim-only uses the cache padding already recorded in the existing ELF")
         if not (out / "result.json").exists() or not (out / "kernel.soc.elf").exists():
             parser.error("--sim-only requires result.json and kernel.soc.elf in --out")
         manifest = json.loads((out / "result.json").read_text())
         if manifest["suite"] != str(args.suite.resolve()) or manifest["case"] != args.case:
             parser.error("--suite and --case must match the existing build")
+        selected = (
+            args.sms, args.loader, args.source_pad_lines, args.output_pad_lines,
+            args.warps_per_core,
+        )
+        recorded = (
+            manifest["sm_count"], manifest["loader"],
+            manifest.get("source_pad_cache_lines", 0),
+            manifest.get("output_pad_cache_lines", 0),
+            manifest.get("muon_warps_per_core", 4),
+        )
+        if selected != recorded:
+            parser.error("--sim-only build options must match the existing ELF manifest")
     else:
         suite = json.loads(args.suite.read_text())
         if not isinstance(suite, list) or not 0 <= args.case < len(suite):
@@ -589,7 +603,7 @@ def main() -> int:
         case["source_index_base"] = args.iteration_start * case["delta"]
         manifest = prepare(
             case, args.suite, args.case, args.sms, args.loader,
-            args.source_pad_lines, args.output_pad_lines,
+            args.source_pad_lines, args.output_pad_lines, args.warps_per_core,
         )
         manifest["original_count"] = original_count
         manifest["count_overridden"] = args.count is not None and args.count != original_count

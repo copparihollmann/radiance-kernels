@@ -147,6 +147,11 @@ adjacent to the checked output. These options change memory layout only; they
 must not be treated as an optimization without matching correctness and timing
 evidence.
 
+`--warps-per-core {1,2,4,8}` exposes Muon occupancy as another recorded
+experiment parameter. Four remains the default. Compare absolute cycles and
+correctness at the same dataset and SM count; a larger scaling ratio caused by
+slowing the lower-SM endpoint is not an optimization.
+
 For the newer hashed `RadianceHBMConfig` with direct DRAM loading (`+loadmem`
 or FireSim LoadMem), set `MU_ADDR_HASH=1` when building. The hash parameters
 must match the RTL. Use `MU_ADDR_HASH=0` for the earlier unhashed image or a
