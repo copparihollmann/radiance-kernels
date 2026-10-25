@@ -71,9 +71,10 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
                 f"{sm}SM/{loader} has wrong equation contract")
         require(row.get("partition") == "disjoint-contiguous-64-byte-output-lines",
                 f"{sm}SM/{loader} has wrong multi-SM ownership")
-        require(row.get("max_ulp") == 6 and
-                row.get("correctness") == "complete-output-reference-check",
-                f"{sm}SM/{loader} lacks the original complete six-ULP check")
+        require(row.get("max_ulp") == 6 and row.get("expected_digest") and
+                row.get("correctness") ==
+                "complete-output-six-ulp-reference-digest-poison-and-guards",
+                f"{sm}SM/{loader} lacks the complete anchored six-ULP check")
         require(row.get("robust_end_drain") is True and
                 row.get("robust_serial_fence") is True,
                 f"{sm}SM/{loader} lacks robust completion")

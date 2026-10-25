@@ -132,6 +132,7 @@ def prepare(size: int, out: Path, *, sms: int = 1,
         f"#define STENCIL3D_SIZE {size}u",
         f"#define STENCIL3D_ELEMENTS {elements}u",
         f"#define STENCIL3D_MAX_ULP {max_ulp}u",
+        f"#define STENCIL3D_EXPECTED_DIGEST 0x{expected_digest:016x}ULL",
     ]
     (GENERATED / "config.h").write_text("\n".join(config) + "\n")
     asm = [
@@ -165,7 +166,7 @@ def prepare(size: int, out: Path, *, sms: int = 1,
         "size": size, "output_element_count": elements,
         "expected_digest": f"{expected_digest:016x}",
         "element_format": "float32", "max_ulp": max_ulp,
-        "correctness": "complete-output-reference-check",
+        "correctness": "complete-output-six-ulp-reference-digest-poison-and-guards",
         "reference_repository": "vortexgpgpu/vortex",
         "reference_revision": REFERENCE_REVISION,
         "reference_kernel": REFERENCE_KERNEL,

@@ -173,7 +173,7 @@ class AssembleManifestTests(unittest.TestCase):
                 "reference_repository": "vortexgpgpu/vortex",
                 "reference_revision": "abc", "reference_kernel": "kernel.cpp",
                 "reference_seed": 50,
-                "correctness": "complete-output-reference-check",
+                "correctness": "complete-output-six-ulp-reference-digest-poison-and-guards",
             }
             (build / "result.json").write_text(json.dumps(result))
             row = AM.assemble(root, "stencil3d")["workloads"][0]

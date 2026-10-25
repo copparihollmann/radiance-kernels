@@ -23,8 +23,23 @@ class Stencil3dRunTest(unittest.TestCase):
             self.assertEqual(a["output_element_count"], 64)
             self.assertEqual(a["reference_revision"], run.REFERENCE_REVISION)
             self.assertEqual(a["max_ulp"], 6)
-            self.assertIn("#define NIGHTLY_CLUSTERS 4",
-                          run.GENERATED.joinpath("config.h").read_text())
+            config = run.GENERATED.joinpath("config.h").read_text()
+            self.assertIn("#define NIGHTLY_CLUSTERS 4", config)
+            self.assertIn(
+                f"#define STENCIL3D_EXPECTED_DIGEST 0x{a['expected_digest']}ULL",
+                config,
+            )
+            self.assertEqual(
+                a["correctness"],
+                "complete-output-six-ulp-reference-digest-poison-and-guards",
+            )
+
+    def test_host_poison_and_reference_digest_gates_are_present(self):
+        host = (RUN_PATH.parent / "host.cpp").read_text()
+        self.assertIn("got[i] = 0x7fc00000u", host)
+        self.assertIn("reference_digest == STENCIL3D_EXPECTED_DIGEST", host)
+        self.assertIn("reference_digest_ok &&", host)
+        self.assertIn("poison == 0", host)
 
     def test_boundary_replication_matches_constant_volume(self):
         output = run.reference_output([run.f32(0.25)] * 8, 2)
