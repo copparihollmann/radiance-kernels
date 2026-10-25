@@ -60,6 +60,19 @@ class BTreeRunTest(unittest.TestCase):
                          [(498, 508), (438, 440), (104, 110), (456, 462)])
         self.assertEqual(ranges[-2:], [(354, 368), (390, 396)])
 
+    def test_named_profiles_keep_canary_and_performance_contracts_distinct(self):
+        self.assertEqual(run.profile_parameters("canary"), (256, 32, 16, 8))
+        self.assertEqual(
+            run.profile_parameters("performance"),
+            (1_048_576, 262_144, 131_072, 1_024),
+        )
+        self.assertEqual(run.classify_profile(256, 32, 16, 8),
+                         "official-upstream-size-canary")
+        self.assertEqual(
+            run.classify_profile(1_048_576, 262_144, 131_072, 1_024),
+            "derived-full-size-performance",
+        )
+
     def test_lower_bound_oracle_handles_hits_misses_and_inclusive_ranges(self):
         keys, records = run.fixture_keys(8)
         self.assertEqual(run.point_oracle(keys, records, 6), 100006)
@@ -84,7 +97,8 @@ class BTreeRunTest(unittest.TestCase):
 
     def test_one_two_four_sm_partitions_are_exact_and_line_exclusive(self):
         for sms in (1, 2, 4):
-            for total in (32, 16):
+            for total in (32, 16, run.PERFORMANCE_POINT_QUERIES,
+                          run.PERFORMANCE_RANGE_QUERIES):
                 owners, boundaries = run.ownership(total, sms)
                 self.assertEqual(len(owners), total)
                 self.assertEqual(boundaries[0], 0)
@@ -111,6 +125,9 @@ class BTreeRunTest(unittest.TestCase):
             self.assertTrue(a["partition_cache_line_safe"])
             self.assertEqual(a["partition_overlap"], 0)
             self.assertTrue(a["is_official_default_canary"])
+            self.assertFalse(a["is_full_size_performance_workload"])
+            self.assertEqual(a["workload_profile"],
+                             "official-upstream-size-canary")
             self.assertTrue(a["scalar_only"])
             self.assertTrue(a["no_vpu"])
             self.assertFalse(a["vpu"])
@@ -122,6 +139,45 @@ class BTreeRunTest(unittest.TestCase):
             self.assertIn(".globl btree_guard_middle", assembly)
             self.assertIn(".zero 512", assembly)
             self.assertIn(".zero 256", assembly)
+
+    def test_fullsize_query_stream_and_oracle_are_deterministic(self):
+        points_a, ranges_a = run.fixture_queries(
+            run.PERFORMANCE_KEYS, 64, 32, run.PERFORMANCE_RANGE_SPAN)
+        points_b, ranges_b = run.fixture_queries(
+            run.PERFORMANCE_KEYS, 64, 32, run.PERFORMANCE_RANGE_SPAN)
+        self.assertEqual(points_a, points_b)
+        self.assertEqual(ranges_a, ranges_b)
+        keys, records = run.fixture_keys(run.PERFORMANCE_KEYS)
+        expected_points = [run.point_oracle(keys, records, query)
+                           for query in points_a]
+        expected_ranges = [run.range_oracle(keys, start, end)
+                           for start, end in ranges_a]
+        self.assertTrue(any(value == -1 for value in expected_points))
+        self.assertTrue(any(value != -1 for value in expected_points))
+        for (start, end), (record, length) in zip(ranges_a, expected_ranges):
+            self.assertGreaterEqual(record, 0)
+            self.assertEqual(length, (end - start) // 2 + 1)
+
+    def test_robust_completion_contract_is_validated_and_emitted(self):
+        with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+            run.validate_parameters(256, 32, 16, 8, 1, "logical", 8,
+                                    robust_spin_until_reset=True)
+        with tempfile.TemporaryDirectory() as out:
+            case = run.prepare(
+                256, 32, 16, 8, Path(out), sms=2,
+                loader="direct-hashed", robust_end_drain=True,
+                robust_spin_until_reset=True, robust_serial_fence=True,
+                robust_post_spin=20_000,
+            )
+            self.assertTrue(case["gpu_address_hash"])
+            self.assertTrue(case["robust_end_drain"])
+            self.assertTrue(case["robust_spin_until_reset"])
+            self.assertTrue(case["robust_serial_fence"])
+            config = (ROOT / "generated/config.h").read_text()
+            self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 1", config)
+            self.assertIn("#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET 1", config)
+            self.assertIn("#define NIGHTLY_ROBUST_SERIAL_FENCE 1", config)
+            self.assertIn("#define NIGHTLY_ROBUST_POST_SPIN 20000u", config)
 
     def test_output_record_digests_cover_values_ownership_and_tags(self):
         keys, records = run.fixture_keys(256)

@@ -11,6 +11,32 @@ range span `8`, payload offset `100000`, and one continuous `srand(23)` libc
 query stream reproduce the upstream default fixture. This fixture is a
 correctness canary only; its size is not performance or scaling evidence.
 
+## Deterministic full-size performance workload
+
+The separate `performance` profile is a derived scaling workload, not an
+upstream default:
+
+| Parameter | Value |
+|---|---:|
+| Sorted unique even keys | 1,048,576 |
+| Point queries | 262,144 |
+| Inclusive-range queries | 131,072 |
+| Maximum range span in ranks | 1,024 |
+
+It deliberately keeps the upstream order-16 tree, even-key/odd-miss domain,
+`key + 100000` record payload, point lookup, exact range endpoints, inclusive
+`end - start + 1` length, and one continuous `srand(23)`/`rand()` stream. The
+larger counts are fixed powers of two so every 1/2/4-SM build has equal,
+cache-line-exclusive output ownership. This profile is large enough to move
+the tree and query streams well beyond the private caches while retaining the
+upstream point-to-range query ratio of two to one.
+
+For both profiles, expected point values and range `(start, length)` pairs are
+computed independently with Python `bisect_left`; the oracle never traverses
+the generated tree. Generation additionally traverses the flattened wire tree
+and requires exact agreement with that independent oracle before a build can
+start.
+
 ## Pinned provenance
 
 | Source | Git blob | SHA-256 |
@@ -81,3 +107,26 @@ python3 model_check.py \
 
 Nothing in this directory programs an FPGA, invokes FireSim, rebuilds a
 bitstream, or establishes performance/scaling evidence.
+
+Build and gate the full-size profile without touching an FPGA:
+
+```sh
+python3 build_fullsize.py
+```
+
+That command clean-builds 1/2/4-SM artifacts in three sets under
+`runs/fullsize-performance/`:
+
+- ordinary logical artifacts, each checked in Cyclotron's functional/no-timing
+  model;
+- robust logical artifacts with serialized fences and three cache-capacity
+  drain passes, also checked in the functional model;
+- direct-hashed FPGA-load artifacts with the same robust completion plus the
+  required spin-until-host-reset handshake.
+
+The FPGA-only spin handshake cannot terminate in Cyclotron. Therefore the
+functional gate uses the otherwise equivalent robust logical build with that
+single handshake disabled. The direct-hashed SoC ELFs are independently
+required to contain the exact `.radiance_addr_hash` contract
+`unit=32 slices=4 size=0x80000000 gpu_base=0x100000000`. No command in this
+directory programs hardware, runs FireSim, or rebuilds a bitstream.

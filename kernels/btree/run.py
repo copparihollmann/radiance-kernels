@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and build the pinned Vortex/Rodinia B+Tree correctness canary."""
+"""Generate and build faithful Vortex/Rodinia B+Tree workloads."""
 
 from __future__ import annotations
 
@@ -37,6 +37,10 @@ DEFAULT_KEYS = 256
 DEFAULT_POINT_QUERIES = 32
 DEFAULT_RANGE_QUERIES = 16
 DEFAULT_RANGE_SPAN = 8
+PERFORMANCE_KEYS = 1_048_576
+PERFORMANCE_POINT_QUERIES = 262_144
+PERFORMANCE_RANGE_QUERIES = 131_072
+PERFORMANCE_RANGE_SPAN = 1_024
 OUTPUT_RECORD_BYTES = 16
 CACHE_LINE_BYTES = 64
 OUTPUT_RECORDS_PER_LINE = CACHE_LINE_BYTES // OUTPUT_RECORD_BYTES
@@ -294,7 +298,10 @@ def output_records(point_expected: list[int], range_expected: list[tuple[int, in
 
 def validate_parameters(key_count: int, point_count: int, range_count: int,
                         range_span: int, sms: int, loader: str,
-                        warps_per_core: int) -> None:
+                        warps_per_core: int, robust_end_drain: bool = False,
+                        robust_spin_until_reset: bool = False,
+                        robust_serial_fence: bool = False,
+                        robust_post_spin: int = 500) -> None:
     if key_count < 2 or key_count > 2_000_000:
         raise ValueError("keys must be between 2 and 2000000")
     if 2 * (key_count - 1) > INT32_MAX - PAYLOAD_BASE:
@@ -313,19 +320,60 @@ def validate_parameters(key_count: int, point_count: int, range_count: int,
         raise ValueError("loader must be logical or direct-hashed")
     if warps_per_core not in (1, 2, 4, 8):
         raise ValueError("warps_per_core must be 1, 2, 4, or 8")
+    if robust_spin_until_reset and not robust_end_drain:
+        raise ValueError("robust_spin_until_reset requires robust_end_drain")
+    if robust_serial_fence and not robust_end_drain:
+        raise ValueError("robust_serial_fence requires robust_end_drain")
+    if robust_post_spin < 0:
+        raise ValueError("robust_post_spin must be nonnegative")
+
+
+def profile_parameters(profile: str) -> tuple[int, int, int, int]:
+    if profile == "canary":
+        return (DEFAULT_KEYS, DEFAULT_POINT_QUERIES,
+                DEFAULT_RANGE_QUERIES, DEFAULT_RANGE_SPAN)
+    if profile == "performance":
+        return (PERFORMANCE_KEYS, PERFORMANCE_POINT_QUERIES,
+                PERFORMANCE_RANGE_QUERIES, PERFORMANCE_RANGE_SPAN)
+    raise ValueError(f"unknown workload profile: {profile}")
+
+
+def classify_profile(key_count: int, point_count: int, range_count: int,
+                     range_span: int) -> str:
+    parameters = (key_count, point_count, range_count, range_span)
+    if parameters == profile_parameters("canary"):
+        return "official-upstream-size-canary"
+    if parameters == profile_parameters("performance"):
+        return "derived-full-size-performance"
+    return "custom"
 
 
 def prepare(key_count: int, point_count: int, range_count: int,
             range_span: int, out: Path, *, sms: int = 1,
-            loader: str = "logical", warps_per_core: int = 8) -> dict:
+            loader: str = "logical", warps_per_core: int = 8,
+            robust_end_drain: bool = False,
+            robust_spin_until_reset: bool = False,
+            robust_serial_fence: bool = False,
+            robust_post_spin: int = 500) -> dict:
     validate_parameters(key_count, point_count, range_count, range_span,
-                        sms, loader, warps_per_core)
+                        sms, loader, warps_per_core, robust_end_drain,
+                        robust_spin_until_reset, robust_serial_fence,
+                        robust_post_spin)
     keys, records = fixture_keys(key_count)
     point_queries, range_queries = fixture_queries(
         key_count, point_count, range_count, range_span)
     pool, root = build_tree(keys)
     height = tree_height(pool, root)
     nodes = flatten_tree(pool, root)
+    data_bytes = (
+        len(nodes) * NODE_STRUCT.size + len(records) * 4
+        + point_count * 4 + range_count * 8
+        + point_count * 4 + range_count * 8
+        + point_count * OUTPUT_RECORD_BYTES
+        + range_count * OUTPUT_RECORD_BYTES + 3 * CACHE_LINE_BYTES
+    )
+    if data_bytes + 0x00200000 > 0x70000000:
+        raise ValueError("B+Tree arrays exceed the GPU DRAM address window")
     point_expected = [point_oracle(keys, records, query)
                       for query in point_queries]
     range_expected = [range_oracle(keys, start, end)
@@ -364,6 +412,10 @@ def prepare(key_count: int, point_count: int, range_count: int,
         f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
         f"#define NIGHTLY_OCC {warps_per_core}",
+        f"#define NIGHTLY_ROBUST_GMEM_END {int(robust_end_drain)}",
+        f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
+        f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
+        f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define BTREE_ORDER {ORDER}u",
         f"#define BTREE_HEIGHT {height}u",
         f"#define BTREE_NODE_COUNT {len(nodes)}u",
@@ -424,10 +476,18 @@ def prepare(key_count: int, point_count: int, range_count: int,
         "nodes.bin", "records.bin", "point_queries.bin", "range_queries.bin",
         "point_expected.bin", "range_expected.bin", "config.h",
     )
+    workload_profile = classify_profile(
+        key_count, point_count, range_count, range_span)
+    name_profile = {
+        "official-upstream-size-canary": "vortex-default-canary",
+        "derived-full-size-performance": "fullsize-performance",
+        "custom": f"custom-k{key_count}-p{point_count}-r{range_count}-s{range_span}",
+    }[workload_profile]
     case = {
         "schema": "radiance-btree-build-v1",
-        "name": f"btree--vortex-default--{sms}sm",
+        "name": f"btree--{name_profile}--{sms}sm",
         "family": "btree", "kind": "point-and-range-lookup",
+        "workload_profile": workload_profile,
         "sm_count": sms, "loader": loader,
         "gpu_address_hash": loader == "direct-hashed",
         "keys": key_count, "point_queries": point_count,
@@ -435,6 +495,7 @@ def prepare(key_count: int, point_count: int, range_count: int,
         "order": ORDER, "node_count": len(nodes), "tree_height": height,
         "point_output_records": point_count,
         "range_output_records": range_count,
+        "estimated_data_bytes": data_bytes,
         "output_record_bytes": OUTPUT_RECORD_BYTES,
         "output_words": (point_count + range_count) * 4,
         "point_output_digest": f"{point_digest:016x}",
@@ -450,7 +511,10 @@ def prepare(key_count: int, point_count: int, range_count: int,
         "scalar_only": True, "no_vpu": True, "vpu": False,
         "vector_isa": False, "gemmini": False, "mx": False,
         "muon_warps_per_core": warps_per_core,
-        "robust_end_drain": False,
+        "robust_end_drain": robust_end_drain,
+        "robust_spin_until_reset": robust_spin_until_reset,
+        "robust_serial_fence": robust_serial_fence,
+        "robust_post_spin": robust_post_spin,
         "reference_repository": "vortexgpgpu/vortex",
         "reference_revision": REFERENCE_REVISION,
         "reference_main": REFERENCE_MAIN,
@@ -468,10 +532,23 @@ def prepare(key_count: int, point_count: int, range_count: int,
             "range_queries": DEFAULT_RANGE_QUERIES,
             "range_span": DEFAULT_RANGE_SPAN,
         },
+        "derived_performance_contract": {
+            "keys": PERFORMANCE_KEYS,
+            "point_queries": PERFORMANCE_POINT_QUERIES,
+            "range_queries": PERFORMANCE_RANGE_QUERIES,
+            "range_span": PERFORMANCE_RANGE_SPAN,
+            "status": "derived-not-an-official-upstream-default",
+        },
         "is_official_default_canary": (
             key_count == DEFAULT_KEYS and point_count == DEFAULT_POINT_QUERIES
             and range_count == DEFAULT_RANGE_QUERIES
             and range_span == DEFAULT_RANGE_SPAN
+        ),
+        "is_full_size_performance_workload": (
+            key_count == PERFORMANCE_KEYS
+            and point_count == PERFORMANCE_POINT_QUERIES
+            and range_count == PERFORMANCE_RANGE_QUERIES
+            and range_span == PERFORMANCE_RANGE_SPAN
         ),
         "benchmark_contract": "vortex-rodinia-btree-point-and-inclusive-range",
         "abi_mapping": {
@@ -515,23 +592,41 @@ def build(case: dict, out: Path) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--keys", type=int, default=DEFAULT_KEYS)
-    parser.add_argument("--point-queries", type=int, default=DEFAULT_POINT_QUERIES)
-    parser.add_argument("--range-queries", type=int, default=DEFAULT_RANGE_QUERIES)
-    parser.add_argument("--range-span", type=int, default=DEFAULT_RANGE_SPAN)
+    parser.add_argument("--profile", choices=("canary", "performance"),
+                        default="canary")
+    parser.add_argument("--keys", type=int)
+    parser.add_argument("--point-queries", type=int)
+    parser.add_argument("--range-queries", type=int)
+    parser.add_argument("--range-span", type=int)
     parser.add_argument("--sms", type=int, choices=(1, 2, 4), default=1)
     parser.add_argument("--loader", choices=("logical", "direct-hashed"),
                         default="logical")
     parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8),
                         default=8)
+    parser.add_argument("--robust-end-drain", action="store_true")
+    parser.add_argument("--robust-spin-until-reset", action="store_true")
+    parser.add_argument("--robust-serial-fence", action="store_true")
+    parser.add_argument("--robust-post-spin", type=int, default=500)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()
     out = args.out.resolve()
+    defaults = profile_parameters(args.profile)
+    key_count = args.keys if args.keys is not None else defaults[0]
+    point_count = (args.point_queries if args.point_queries is not None
+                   else defaults[1])
+    range_count = (args.range_queries if args.range_queries is not None
+                   else defaults[2])
+    range_span = (args.range_span if args.range_span is not None
+                  else defaults[3])
     case = prepare(
-        args.keys, args.point_queries, args.range_queries, args.range_span,
+        key_count, point_count, range_count, range_span,
         out, sms=args.sms, loader=args.loader,
         warps_per_core=args.warps_per_core,
+        robust_end_drain=args.robust_end_drain,
+        robust_spin_until_reset=args.robust_spin_until_reset,
+        robust_serial_fence=args.robust_serial_fence,
+        robust_post_spin=args.robust_post_spin,
     )
     if not args.prepare_only:
         case = build(case, out)
