@@ -1,33 +1,37 @@
-PROJECT = gaussian
-
-GAUSSIAN_TIMESTEPS = 0 1 2 3
-
-MU_SRCS = \
-	$(foreach t,$(GAUSSIAN_TIMESTEPS),fan1_t$(t).cpp fan2_t$(t).cpp)
-
+PROJECT = kernel
+MU_SRCS = kernel.cpp
 HOST_SRCS = host.cpp
-
-ifneq ($(strip $(OCCUPANCIES)),)
-define add_fan1_variant
-MU_VARIANTS += fan1_t$(1)_w$(2)
-fan1_t$(1)_w$(2).mu.o: fan1_t$(1).cpp data kernel_impl.hpp
-fan1_t$(1)_w$(2).mu.o: MU_CFLAGS += -DGAUSSIAN_NUM_WARPS=$(2)
-endef
-
-define add_fan2_variant
-MU_VARIANTS += fan2_t$(1)_w$(2)
-fan2_t$(1)_w$(2).mu.o: fan2_t$(1).cpp data kernel_impl.hpp
-fan2_t$(1)_w$(2).mu.o: MU_CFLAGS += -DGAUSSIAN_NUM_WARPS=$(2)
-endef
-
-$(foreach t,$(GAUSSIAN_TIMESTEPS),$(foreach w,$(OCCUPANCIES),$(eval $(call add_fan1_variant,$(t),$(w)))))
-$(foreach t,$(GAUSSIAN_TIMESTEPS),$(foreach w,$(OCCUPANCIES),$(eval $(call add_fan2_variant,$(t),$(w)))))
-endif
+MU_BIN_OBJS = data.mu.o
 
 include ../common.mk
 
-data: gaussian.py kernel_impl.hpp verify_trace.py host.cpp Makefile
-	python3 gaussian.py
+# Deliberately scalar: do not add a VPU, vector, Gemmini, or MX path.
+MU_CFLAGS += -isystem $(LLVM_MUON)/include/c++/v1
+MU_CFLAGS += -fno-vectorize -fno-slp-vectorize
+HOST_CXXFLAGS += -O3
+MU_NM = $(LLVM_MUON)/bin/llvm-nm
 
-$(addsuffix .mu.o,$(basename $(MU_SRCS))): %.mu.o: data %.cpp kernel_impl.hpp
-	$(MU_CXX) $(MU_CFLAGS) -c $*.cpp -o $@
+GAUSSIAN_GENERATED = generated/config.h generated/original_a.bin \
+	generated/original_b.bin generated/expected_a.bin \
+	generated/expected_b.bin generated/expected_m.bin \
+	generated/model_a.bin generated/model_b.bin generated/model_m.bin
+
+data.S $(GAUSSIAN_GENERATED) &: run.py
+	python3 run.py --profile canary --sms 1 --out runs/default --prepare-only
+
+data.mu.o: data.S $(GAUSSIAN_GENERATED)
+	$(MU_CXX) $(MU_CFLAGS) -x assembler-with-cpp -c $< -o $@
+
+kernel.mu.o: generated/config.h
+
+generated/symbols.h: kernel.radiance.elf generated/config.h emit_symbols.py
+	python3 emit_symbols.py $(MU_NM) $< $@
+
+host.host.o: generated/config.h generated/symbols.h
+
+.PHONY: test clean-generated
+test:
+	python3 -m unittest -v test_run.py
+
+clean-generated:
+	rm -rf generated data.S runs
