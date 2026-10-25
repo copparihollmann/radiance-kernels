@@ -143,6 +143,28 @@ class ModelCampaignTests(unittest.TestCase):
         self.assertIn("words = 1048576", gmem[0])
         self.assertIn('expected_fnv64 = "fedcba9876543210"', gmem[0])
 
+    def test_streamcluster_checks_complete_work_and_physical_switch_outputs(self):
+        row = {"name": "streamcluster-pgain--n128-d32--4sm",
+               "family": "streamcluster", "sm_count": 4}
+        result = {"output_work_float_count": 2176,
+                  "work_expected_digest": "work-digest",
+                  "switch_storage_bytes": 256,
+                  "switch_functional_expected_digest": "switch-digest"}
+        original = MC.output_address
+        MC.output_address = lambda _elf: 0x12004140
+        try:
+            gmem, smem = MC.workload_checks(row, result, Path("kernel.elf"))
+        finally:
+            MC.output_address = original
+        self.assertEqual(smem, [])
+        self.assertEqual(len(gmem), 2)
+        self.assertIn("address = 0x12004140", gmem[0])
+        self.assertIn("words = 2176", gmem[0])
+        self.assertIn('expected_fnv64 = "work-digest"', gmem[0])
+        self.assertIn("address = 0x120063c0", gmem[1])
+        self.assertIn("words = 64", gmem[1])
+        self.assertIn('expected_fnv64 = "switch-digest"', gmem[1])
+
     def test_spatter_output_padding_adjusts_check_address(self):
         row = {"name": "spatter--case-4-pad--4sm", "family": "spatter",
                "sm_count": 4}

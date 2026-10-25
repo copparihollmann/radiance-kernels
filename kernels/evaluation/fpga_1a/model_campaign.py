@@ -94,7 +94,21 @@ def workload_checks(row: dict, result: dict, elf: Path) -> tuple[list[str], list
     gmem: list[str] = []
     smem: list[str] = []
     family = row["family"]
-    if family in ("stream", "stream_dot", "spatter", "xrage", "gemv_bf16",
+    if family == "streamcluster":
+        work_address = output_address(elf)
+        work_words = int(result["output_work_float_count"])
+        switch_words = int(result["switch_storage_bytes"]) // 4
+        switch_address = work_address + work_words * 4 + 128
+        gmem.extend((
+            "{ label = %s, address = 0x%08x, words = %d, expected_fnv64 = %s }"
+            % (toml_quote(row["name"] + "-work"), work_address, work_words,
+               toml_quote(result["work_expected_digest"])),
+            "{ label = %s, address = 0x%08x, words = %d, expected_fnv64 = %s }"
+            % (toml_quote(row["name"] + "-switch"), switch_address,
+               switch_words,
+               toml_quote(result["switch_functional_expected_digest"])),
+        ))
+    elif family in ("stream", "stream_dot", "spatter", "xrage", "gemv_bf16",
                   "stencil3d", "nearn", "spmv_jds", "sfilter"):
         address = output_address(elf)
         if family == "spatter":
@@ -339,10 +353,10 @@ def main() -> None:
     parser.add_argument("--families", nargs="+",
                         choices=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
-                                 "spmv_jds", "sfilter"),
+                                 "spmv_jds", "sfilter", "streamcluster"),
                         default=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
-                                 "spmv_jds", "sfilter"))
+                                 "spmv_jds", "sfilter", "streamcluster"))
     parser.add_argument("--match", help="regular expression matched against workload names")
     parser.add_argument("--repetitions", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=2_000_000_000)

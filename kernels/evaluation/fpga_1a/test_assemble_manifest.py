@@ -166,6 +166,36 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(row["output_element_count"], 4)
             self.assertEqual(row["reference_repository"], "UoB-HPC/BabelStream")
 
+    def test_streamcluster_dual_output_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "streamcluster-pgain--n128-d32--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "rodinia-pgain", "num": 128, "dim": 32, "k": 16,
+                "output_work_float_count": 2176,
+                "output_switch_logical_byte_count": 128,
+                "work_expected_digest": "work",
+                "switch_expected_digest": "logical-switch",
+                "switch_functional_expected_digest": "physical-switch",
+                "switch_storage_bytes": 256,
+                "partition_work_cache_line_safe": True,
+                "partition_switch_cache_line_safe": True,
+                "official_default_contract": True,
+                "timing_contract": "fused-memset-plus-pgain-full-sequence",
+                "correctness": "complete-dual-output-check",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "streamcluster")["workloads"][0]
+            self.assertEqual(row["operation"], "rodinia-pgain")
+            self.assertEqual(row["output_work_float_count"], 2176)
+            self.assertEqual(row["switch_storage_bytes"], 256)
+            self.assertTrue(row["partition_switch_cache_line_safe"])
+            self.assertEqual(row["timing_contract"],
+                             "fused-memset-plus-pgain-full-sequence")
+
     def test_nearn_reference_metadata_is_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

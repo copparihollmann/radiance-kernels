@@ -39,7 +39,14 @@ PASSTHROUGH = (
     "vector_isa", "gemmini", "mx", "padding_index_policy", "dataset",
     "dataset_source", "dataset_files", "upstream_gold_validation",
     "generator_model_check", "absolute_tolerance", "relative_tolerance",
-    "oracle", "equation",
+    "oracle", "equation", "timing_contract", "official_default_contract",
+    "derived", "num", "dim", "k", "candidate", "local_size",
+    "output_work_float_count", "output_switch_logical_byte_count",
+    "work_expected_digest", "switch_expected_digest",
+    "switch_functional_expected_digest", "switch_storage_bytes",
+    "partition_work_cache_line_safe", "partition_switch_cache_line_safe",
+    "switch_segment_stride", "point_abi", "coordinate_layout",
+    "initial_assignment", "branch_semantics", "memset_semantics",
 )
 
 
@@ -125,7 +132,8 @@ def main() -> None:
     parser.add_argument("--family", required=True,
                         choices=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d",
-                                 "nearn", "spmv_jds", "sfilter"))
+                                 "nearn", "spmv_jds", "sfilter",
+                                 "streamcluster"))
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     manifest = assemble(args.root.resolve(), args.family)
