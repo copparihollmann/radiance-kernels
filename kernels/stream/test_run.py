@@ -34,6 +34,22 @@ class StreamRunTest(unittest.TestCase):
             self.assertFalse(result["robust_serial_fence"])
             self.assertEqual(result["robust_post_spin"], 500)
             self.assertFalse(result["diagnostic_readback"])
+            self.assertFalse(result["stream_block_cyclic_lines"])
+
+    def test_records_opt_in_cache_line_block_cyclic_partition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            baseline = run.prepare(
+                "copy", 64, Path(directory), full_host_check=True,
+                sms=4,
+            )
+            result = run.prepare(
+                "copy", 64, Path(directory), full_host_check=True,
+                sms=4, block_cyclic_lines=True,
+            )
+            self.assertTrue(result["stream_block_cyclic_lines"])
+            self.assertNotEqual(result["suite_sha256"], baseline["suite_sha256"])
+            self.assertIn("#define STREAM_BLOCK_CYCLIC_LINES 1",
+                          run.GENERATED.joinpath("config.h").read_text())
 
     def test_nonstandard_scalar_is_explicitly_stream_like(self):
         with tempfile.TemporaryDirectory() as directory:
