@@ -186,6 +186,29 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
           gather_source(j, final_iteration));
     }
   }
+#elif SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS
+  // Assign complete, cache-line-aligned output blocks round-robin across SMs.
+  // Larger blocks amortize the block-cyclic scheduling overhead while still
+  // mixing distant sections of an irregular pattern to reduce per-SM skew.
+  constexpr uint32_t owners = length * SPATTER_WRAP;
+  constexpr uint32_t block_elements = SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS;
+  constexpr uint32_t chunks =
+      (owners + block_elements - 1u) / block_elements;
+  for (uint32_t chunk = block_id; chunk < chunks;
+       chunk += NIGHTLY_CLUSTERS) {
+    const uint32_t begin = chunk * block_elements;
+    const uint32_t candidate_end = begin + block_elements;
+    const uint32_t end = candidate_end < owners ? candidate_end : owners;
+    for (uint32_t owner = begin + tid; owner < end;
+         owner += threads_per_block) {
+      const uint32_t r = owner / length;
+      const uint32_t j = owner - r * length;
+      for (uint32_t i = r; i < SPATTER_COUNT; i += SPATTER_WRAP) {
+        spatter::copy_value(spatter_dense, owner, spatter_sparse,
+                            gather_source(j, i));
+      }
+    }
+  }
 #elif SPATTER_GATHER_BLOCK_CYCLIC_16
   // Assign complete 16-element (two cache-line) output chunks round-robin
   // across SMs.  This retains exclusive cache-line ownership while mixing

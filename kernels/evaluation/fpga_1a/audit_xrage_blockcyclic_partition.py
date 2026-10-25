@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit the 16-element block-cyclic owner map for full xRAGE Gather."""
+"""Audit a cache-line-aligned block-cyclic owner map for full xRAGE Gather."""
 
 from __future__ import annotations
 
@@ -25,8 +25,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", required=True, type=Path)
     parser.add_argument("--case", type=int, default=0)
+    parser.add_argument("--block-elements", type=int, default=16)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
+    if args.block_elements < 8 or args.block_elements % 8 != 0:
+        parser.error("--block-elements must be a positive multiple of 8")
 
     raw = json.loads(args.suite.read_text())
     case = normalize(raw[args.case], args.suite.parent)
@@ -35,7 +38,7 @@ def main() -> int:
         "candidate is only for the direct output-owner path")
 
     owners = case["length"] * case["wrap"]
-    block_elements = 16
+    block_elements = args.block_elements
     chunks = (owners + block_elements - 1) // block_elements
     checks = []
     for sms in (1, 2, 4):

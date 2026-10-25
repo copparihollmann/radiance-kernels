@@ -375,6 +375,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
             loader: str = "logical", source_pad_lines: int = 0,
             output_pad_lines: int = 0, warps_per_core: int = 4,
             gather_block_cyclic_16: bool = False,
+            gather_block_cyclic_elements: int = 0,
             robust_end_drain: bool = False,
             robust_spin_until_reset: bool = False,
             robust_serial_fence: bool = False,
@@ -393,6 +394,12 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         raise ValueError("robust_token_fence requires robust_serial_fence")
     if robust_post_spin < 0:
         raise ValueError("robust_post_spin must be nonnegative")
+    if gather_block_cyclic_16 and gather_block_cyclic_elements:
+        raise ValueError("select only one Gather block-cyclic schedule")
+    if (gather_block_cyclic_elements and
+            (gather_block_cyclic_elements < 8 or
+             gather_block_cyclic_elements % 8 != 0)):
+        raise ValueError("Gather block-cyclic elements must be a positive multiple of 8")
     GENERATED.mkdir(exist_ok=True)
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
@@ -419,9 +426,11 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         and case["count"] > case["wrap"]
         and sms >= 4
     )
-    if gather_block_cyclic_16 and case["kind"] not in ("gather", "multigather"):
+    gather_block_cyclic = bool(gather_block_cyclic_16 or
+                               gather_block_cyclic_elements)
+    if gather_block_cyclic and case["kind"] not in ("gather", "multigather"):
         raise ValueError("gather block-cyclic scheduling requires Gather or MultiGather")
-    if gather_block_cyclic_16 and gather_iteration_partition:
+    if gather_block_cyclic and gather_iteration_partition:
         raise ValueError("gather block-cyclic scheduling conflicts with iteration partitioning")
     gather_scratch_elements = gather_owners * sms if gather_iteration_partition else 8
     probe_index = destination(case, 0, 0) if exploratory else 0
@@ -460,6 +469,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define SPATTER_EXPECTED_NONZERO_OUTPUTS {expected_nonzero_outputs}u",
         f"#define SPATTER_EXPLORATORY {int(exploratory)}",
         f"#define SPATTER_GATHER_ITERATION_PARTITION {int(gather_iteration_partition)}",
+        f"#define SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS {gather_block_cyclic_elements}u",
         f"#define SPATTER_GATHER_BLOCK_CYCLIC_16 {int(gather_block_cyclic_16)}",
         f"#define SPATTER_GATHER_OWNERS {gather_owners}u",
     ]
@@ -530,6 +540,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "destination_group_count": destination_group_count,
         "gather_iteration_partition": gather_iteration_partition,
         "gather_block_cyclic_16": gather_block_cyclic_16,
+        "gather_block_cyclic_elements": gather_block_cyclic_elements,
         "gather_scratch_elements": gather_scratch_elements if gather_iteration_partition else 0,
         "pattern_inputs": case.get("_pattern_inputs", []),
         "status": "prepared",
@@ -587,6 +598,8 @@ def main() -> int:
                         help="Muon occupancy; recorded in the result manifest")
     parser.add_argument("--gather-block-cyclic-16", action="store_true",
                         help="assign complete 16-element Gather chunks round-robin to SMs")
+    parser.add_argument("--gather-block-cyclic-elements", type=int, default=0,
+                        help="assign aligned Gather chunks of this many elements round-robin to SMs")
     parser.add_argument("--robust-end-drain", action="store_true",
                         help="settle store queues and capacity-drain L0d/L1 before END")
     parser.add_argument("--robust-spin-until-reset", action="store_true",
@@ -653,6 +666,7 @@ def main() -> int:
             args.sms, args.loader, args.source_pad_lines, args.output_pad_lines,
             args.warps_per_core, args.robust_end_drain,
             args.gather_block_cyclic_16,
+            args.gather_block_cyclic_elements,
             args.robust_spin_until_reset, args.robust_serial_fence,
             args.robust_token_fence,
             args.robust_post_spin,
@@ -665,6 +679,7 @@ def main() -> int:
             manifest.get("muon_warps_per_core", 4),
             manifest.get("robust_end_drain", False),
             manifest.get("gather_block_cyclic_16", False),
+            manifest.get("gather_block_cyclic_elements", 0),
             manifest.get("robust_spin_until_reset", False),
             manifest.get("robust_serial_fence", False),
             manifest.get("robust_token_fence", False),
@@ -697,6 +712,7 @@ def main() -> int:
             case, args.suite, args.case, args.sms, args.loader,
             args.source_pad_lines, args.output_pad_lines, args.warps_per_core,
             args.gather_block_cyclic_16,
+            args.gather_block_cyclic_elements,
             args.robust_end_drain, args.robust_spin_until_reset,
             args.robust_serial_fence,
             args.robust_token_fence,
