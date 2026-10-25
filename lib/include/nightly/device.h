@@ -44,6 +44,9 @@
 #ifndef NIGHTLY_ROBUST_SPLIT_L1_DRAIN
 #define NIGHTLY_ROBUST_SPLIT_L1_DRAIN 0
 #endif
+#ifndef NIGHTLY_ROBUST_DRAIN_PASSES
+#define NIGHTLY_ROBUST_DRAIN_PASSES 3
+#endif
 #if NIGHTLY_ROBUST_SPIN_UNTIL_RESET && !NIGHTLY_ROBUST_GMEM_END
 #error "NIGHTLY_ROBUST_SPIN_UNTIL_RESET requires NIGHTLY_ROBUST_GMEM_END"
 #endif
@@ -61,6 +64,9 @@
 #endif
 #if NIGHTLY_ROBUST_SPLIT_L1_DRAIN && NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
 #error "select only one shared-L1 drain candidate"
+#endif
+#if NIGHTLY_ROBUST_DRAIN_PASSES < 1 || NIGHTLY_ROBUST_DRAIN_PASSES > 3
+#error "NIGHTLY_ROBUST_DRAIN_PASSES must be between 1 and 3"
 #endif
 #if NIGHTLY_ROBUST_GMEM_END
 #include <rad_tapeout.h>
@@ -268,6 +274,7 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
   }
   mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
 
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 2
   if (warp < MU_NUM_CORES && lane == 0u) {
     rad_pause(RAD_EPI_SETTLE);
     nightly_l0d_drain();
@@ -281,7 +288,9 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
     asm volatile("nop");
   }
   mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+#endif
 
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 3
   /* Keep the third pass that full-size xRAGE required in the default path. */
   if (warp < MU_NUM_CORES && lane == 0u) {
     rad_pause(RAD_EPI_SETTLE);
@@ -296,6 +305,7 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
     asm volatile("nop");
   }
   mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+#endif
   if (warp < MU_NUM_CORES && lane == 0u) {
     rad_pause(NIGHTLY_ROBUST_POST_SPIN);
   } else {
@@ -307,9 +317,12 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
     mu_fence();
     nightly_l0d_drain();
     nightly_l1_drain();
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 2
     rad_pause(RAD_EPI_SETTLE);
     nightly_l0d_drain();
     nightly_l1_drain();
+#endif
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 3
     /* A full-size xRAGE Gather exposed one absent, aligned 32-byte L1 line
      * after two passes even though every input and guard was intact.  A third
      * capacity walk is intentionally part of the measured epilogue: it
@@ -319,6 +332,7 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
     rad_pause(RAD_EPI_SETTLE);
     nightly_l0d_drain();
     nightly_l1_drain();
+#endif
     rad_pause(NIGHTLY_ROBUST_POST_SPIN);
   } else {
     asm volatile("nop");

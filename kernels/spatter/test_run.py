@@ -304,14 +304,24 @@ class SpatterMappingTest(unittest.TestCase):
         self.assertFalse(default["robust_spin_until_reset"])
         self.assertFalse(default["robust_serial_fence"])
         self.assertFalse(default["robust_token_fence"])
+        self.assertEqual(default["robust_drain_passes"], 3)
         self.assertEqual(default["robust_post_spin"], 500)
         self.assertFalse(default["diagnostic_readback"])
         self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 0",
                       GENERATED.joinpath("config.h").read_text())
         robust = prepare(case, suite, 0, robust_end_drain=True)
         self.assertTrue(robust["robust_end_drain"])
+        self.assertEqual(robust["robust_drain_passes"], 3)
         self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 1",
                       GENERATED.joinpath("config.h").read_text())
+
+        one_pass = prepare(case, suite, 0, robust_end_drain=True,
+                           robust_drain_passes=1)
+        self.assertEqual(one_pass["robust_drain_passes"], 1)
+        self.assertIn("#define NIGHTLY_ROBUST_DRAIN_PASSES 1",
+                      GENERATED.joinpath("config.h").read_text())
+        with self.assertRaisesRegex(ValueError, "robust_drain_passes"):
+            prepare(case, suite, 0, robust_drain_passes=0)
 
     def test_records_fpga_spin_handshake_and_requires_drain(self):
         case = normalize({"kernel": "Gather", "pattern": [0, 1], "count": 1})

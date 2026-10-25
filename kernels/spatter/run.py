@@ -380,6 +380,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
             robust_spin_until_reset: bool = False,
             robust_serial_fence: bool = False,
             robust_token_fence: bool = False,
+            robust_drain_passes: int = 3,
             robust_post_spin: int = 500,
             diagnostic_readback: bool = False) -> dict:
     if not 0 <= source_pad_lines < 64 or not 0 <= output_pad_lines < 64:
@@ -392,6 +393,8 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         raise ValueError("robust_serial_fence requires robust_end_drain")
     if robust_token_fence and not robust_serial_fence:
         raise ValueError("robust_token_fence requires robust_serial_fence")
+    if robust_drain_passes not in (1, 2, 3):
+        raise ValueError("robust_drain_passes must be 1, 2, or 3")
     if robust_post_spin < 0:
         raise ValueError("robust_post_spin must be nonnegative")
     if gather_block_cyclic_16 and gather_block_cyclic_elements:
@@ -438,6 +441,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
         f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
         f"#define NIGHTLY_ROBUST_TOKEN_FENCE {int(robust_token_fence)}",
+        f"#define NIGHTLY_ROBUST_DRAIN_PASSES {robust_drain_passes}",
         f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define SPATTER_KIND {KINDS[case['kind']]}",
         "#define SPATTER_CHAIN 0",
@@ -510,6 +514,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "robust_spin_until_reset": robust_spin_until_reset,
         "robust_serial_fence": robust_serial_fence,
         "robust_token_fence": robust_token_fence,
+        "robust_drain_passes": robust_drain_passes,
         "robust_post_spin": robust_post_spin,
         "diagnostic_readback": diagnostic_readback,
         "source_pad_cache_lines": source_pad_lines,
@@ -597,6 +602,8 @@ def main() -> int:
                         help="fence each worker warp serially before robust cache drains")
     parser.add_argument("--robust-token-fence", action="store_true",
                         help="serialize worker fences with one token wait per warp")
+    parser.add_argument("--robust-drain-passes", type=int, choices=(1, 2, 3), default=3,
+                        help="capacity-drain passes before END; default keeps xRAGE-qualified three")
     parser.add_argument("--robust-post-spin", type=int, default=500,
                         help="target cycles after the final robust cache drain (measured)")
     parser.add_argument("--diagnostic-readback", action="store_true",
@@ -658,6 +665,7 @@ def main() -> int:
             args.gather_block_cyclic_elements,
             args.robust_spin_until_reset, args.robust_serial_fence,
             args.robust_token_fence,
+            args.robust_drain_passes,
             args.robust_post_spin,
             args.diagnostic_readback,
         )
@@ -672,6 +680,7 @@ def main() -> int:
             manifest.get("robust_spin_until_reset", False),
             manifest.get("robust_serial_fence", False),
             manifest.get("robust_token_fence", False),
+            manifest.get("robust_drain_passes", 3),
             manifest.get("robust_post_spin", 500),
             manifest.get("diagnostic_readback", False),
         )
@@ -705,6 +714,7 @@ def main() -> int:
             args.robust_end_drain, args.robust_spin_until_reset,
             args.robust_serial_fence,
             args.robust_token_fence,
+            args.robust_drain_passes,
             args.robust_post_spin,
             args.diagnostic_readback,
         )
