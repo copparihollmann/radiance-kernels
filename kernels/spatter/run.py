@@ -421,18 +421,10 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
     )
     exploratory = overlap and case["collision_policy"] == "parallel"
     gather_owners = case["length"] * case["wrap"]
-    gather_iteration_partition = (
-        case["kind"] in ("gather", "multigather")
-        and case["count"] > case["wrap"]
-        and sms >= 4
-    )
     gather_block_cyclic = bool(gather_block_cyclic_16 or
                                gather_block_cyclic_elements)
     if gather_block_cyclic and case["kind"] not in ("gather", "multigather"):
         raise ValueError("gather block-cyclic scheduling requires Gather or MultiGather")
-    if gather_block_cyclic and gather_iteration_partition:
-        raise ValueError("gather block-cyclic scheduling conflicts with iteration partitioning")
-    gather_scratch_elements = gather_owners * sms if gather_iteration_partition else 8
     probe_index = destination(case, 0, 0) if exploratory else 0
     expected_nonzero_outputs = written_destination_count(case) if exploratory else 0
     readback_samples = min(64, case["dst_length"]) if case["dst_length"] > 1024 and not exploratory else 0
@@ -468,7 +460,6 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define SPATTER_EXPLORATORY_PROBE_INDEX {probe_index}u",
         f"#define SPATTER_EXPECTED_NONZERO_OUTPUTS {expected_nonzero_outputs}u",
         f"#define SPATTER_EXPLORATORY {int(exploratory)}",
-        f"#define SPATTER_GATHER_ITERATION_PARTITION {int(gather_iteration_partition)}",
         f"#define SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS {gather_block_cyclic_elements}u",
         f"#define SPATTER_GATHER_BLOCK_CYCLIC_16 {int(gather_block_cyclic_16)}",
         f"#define SPATTER_GATHER_OWNERS {gather_owners}u",
@@ -498,8 +489,6 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         '.globl spatter_' + case["output"], 'spatter_' + case["output"] + ':',
         f'.zero {case["dst_length"] * 8}',
         '.globl spatter_guard_after', 'spatter_guard_after:', '.zero 64',
-        '.balign 64', '.globl spatter_gather_scratch',
-        'spatter_gather_scratch:', f'.zero {gather_scratch_elements * 8}',
     ])
     (ROOT / "data.S").write_text("\n".join(asm) + "\n")
     address_plan = case["_plan"].as_dict()
@@ -538,10 +527,10 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "destination_overlap": overlap,
         "collision_policy": case["collision_policy"],
         "destination_group_count": destination_group_count,
-        "gather_iteration_partition": gather_iteration_partition,
+        "gather_iteration_partition": False,
         "gather_block_cyclic_16": gather_block_cyclic_16,
         "gather_block_cyclic_elements": gather_block_cyclic_elements,
-        "gather_scratch_elements": gather_scratch_elements if gather_iteration_partition else 0,
+        "gather_scratch_elements": 0,
         "pattern_inputs": case.get("_pattern_inputs", []),
         "status": "prepared",
     }

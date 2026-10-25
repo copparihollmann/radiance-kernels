@@ -255,8 +255,24 @@ class SpatterMappingTest(unittest.TestCase):
             prepare(scatter, suite, 0, sms=4, gather_block_cyclic_16=True)
         repeated = normalize({"kernel": "Gather", "pattern": [0, 1],
                               "count": 5, "wrap": 1})
-        with self.assertRaisesRegex(ValueError, "conflicts with iteration"):
-            prepare(repeated, suite, 0, sms=4, gather_block_cyclic_16=True)
+        repeated_result = prepare(repeated, suite, 0, sms=4,
+                                  gather_block_cyclic_16=True)
+        self.assertFalse(repeated_result["gather_iteration_partition"])
+        self.assertEqual(repeated_result["gather_scratch_elements"], 0)
+        self.assertNotIn("spatter_gather_scratch",
+                         (run_module.ROOT / "data.S").read_text())
+
+    def test_full_gather_keeps_original_destination_stream(self):
+        case = normalize({"kernel": "Gather", "pattern": list(range(256)),
+                          "count": 1024, "wrap": 1})
+        suite = Path(__file__).parent / "smoke.json"
+        result = prepare(case, suite, 0, sms=4)
+        self.assertFalse(result["gather_iteration_partition"])
+        self.assertEqual(result["gather_scratch_elements"], 0)
+        config = GENERATED.joinpath("config.h").read_text()
+        self.assertNotIn("SPATTER_GATHER_ITERATION_PARTITION", config)
+        self.assertNotIn("spatter_gather_scratch",
+                         (run_module.ROOT / "data.S").read_text())
 
     def test_records_configurable_block_cyclic_gather_schedule(self):
         case = normalize({"kernel": "Gather", "pattern": list(range(73)),

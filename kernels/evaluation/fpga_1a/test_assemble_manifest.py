@@ -118,6 +118,9 @@ class AssembleManifestTests(unittest.TestCase):
             result = {
                 "status": "built", "sm_count": 4, "loader": "logical",
                 "kind": "gather", "gather_block_cyclic_16": True,
+                "gather_block_cyclic_elements": 1024,
+                "gather_iteration_partition": False,
+                "gather_scratch_elements": 0,
                 "pattern_length": 8368968, "host_full_readback": True,
                 "expected_pattern_digest": "pattern",
                 "expected_source_digest": "source",
@@ -127,6 +130,9 @@ class AssembleManifestTests(unittest.TestCase):
             row = AM.assemble(root, "xrage")["workloads"][0]
             self.assertEqual(row["operation"], "gather")
             self.assertTrue(row["gather_block_cyclic_16"])
+            self.assertEqual(row["gather_block_cyclic_elements"], 1024)
+            self.assertFalse(row["gather_iteration_partition"])
+            self.assertEqual(row["gather_scratch_elements"], 0)
             self.assertEqual(row["pattern_length"], 8368968)
             self.assertTrue(row["host_full_readback"])
             self.assertEqual(row["expected_pattern_digest"], "pattern")

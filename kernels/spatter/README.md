@@ -123,14 +123,14 @@ This avoids the former cross-SM lane interleaving. The host tags every physical
 SM before reset release and reports the compute-only `kernel_cycles` interval
 after all cores have fenced their output.
 
-Repeated Gather and MultiGather have fewer unique output owners than transfer
-tasks.  On the 4-SM build, `run.py` therefore partitions iteration ranges
-instead of stopping at owner parallelism.  Each SM sends overwritten values to
-its own scratch buffer and the SM holding an owner's final iteration publishes
-one checked value to the dense output.  This preserves every benchmark load and
-store, removes cross-SM output races, and avoids a host-mediated phase.  The
-1-SM and 2-SM builds retain the faster direct owner path; the selected strategy
-and scratch size are recorded in `result.json`.
+Repeated Gather and MultiGather always retain the original destination stream:
+one SM owns each dense output cache line and performs that owner's iterations
+in source order. This preserves every benchmark load and store at its original
+address, while host-tagged physical cluster IDs prevent SMs 2 and 3 from
+duplicating SMs 0 and 1 on the four-SM image. The selected strategy is recorded
+as `gather_iteration_partition=false` and `gather_scratch_elements=0`; FPGA
+preflight rejects artifacts that redirect benchmark stores through private
+scratch even if their final digest happens to match.
 
 For single-iteration Gather traces whose irregular addresses are uneven across
 large contiguous pattern regions, `--gather-block-cyclic-elements N` assigns
@@ -138,9 +138,8 @@ successive cache-line-aligned output blocks round-robin across physical SMs.
 `N` must be a positive multiple of eight; the legacy
 `--gather-block-cyclic-16` spelling selects 16 elements. Every output cache line
 still has exactly one owner and every original transfer is retained. These
-options are rejected for Scatter and for the repeated-Gather iteration-partition
-path, are mutually exclusive, and are recorded in both the build result and
-assembled manifest.
+options are rejected for Scatter, are mutually exclusive, and are recorded in
+both the build result and assembled manifest.
 
 The original-size xRAGE5 Gather selects 1,024 elements per block. Complete
 FPGA-1A output checks pass at 183,653,399 / 94,143,239 / 50,377,247 cycles for

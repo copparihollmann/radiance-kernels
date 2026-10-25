@@ -56,52 +56,27 @@ def audit_case(case_id: int, case: dict, sms: int) -> dict:
 
     if case["kind"] in ("gather", "multigather"):
         owners = length * case["wrap"]
-        if sms >= 4 and count > case["wrap"]:
-            ranges = prove_ranges(count, sms, 1)
-            transfer_counts = [(end - begin) * length for begin, end in ranges]
-            assert sum(transfer_counts) == total_transfers
-
-            # Every benchmark transfer is identified by (iteration, lane).
-            assigned = {
-                (iteration, lane)
-                for begin, end in ranges
-                for iteration in range(begin, end)
-                for lane in range(length)
-            }
-            assert len(assigned) == total_transfers
-
-            # Each SM writes only its own cache-line-aligned scratch block.
-            scratch_ranges = [(sm * owners, (sm + 1) * owners) for sm in range(sms)]
-            assert all(begin % 8 == 0 and end % 8 == 0 for begin, end in scratch_ranges)
-            assert all(left[1] == right[0] for left, right in zip(scratch_ranges, scratch_ranges[1:]))
-
-            publishers = [0] * sms
-            for owner in range(owners):
+        ranges = prove_ranges(owners, sms, 8)
+        owner_counts = [end - begin for begin, end in ranges]
+        transfer_counts = []
+        for begin, end in ranges:
+            transfers = 0
+            for owner in range(begin, end):
                 residue = owner // length
-                final_iteration = residue + ((count - 1 - residue) // case["wrap"]) * case["wrap"]
-                matching = [sm for sm, (begin, end) in enumerate(ranges)
-                            if begin <= final_iteration < end]
-                assert len(matching) == 1
-                publishers[matching[0]] += 1
-            assert sum(publishers) == owners
-            result.update({
-                "schedule": "iteration-private-scratch",
-                "partition_granule": 1,
-                "ranges": ranges,
-                "transfers_per_sm": transfer_counts,
-                "scratch_elements_per_sm": owners,
-                "scratch_bytes_per_sm": owners * 8,
-                "published_owners_per_sm": publishers,
-            })
-        else:
-            ranges = prove_ranges(owners, sms, 8)
-            assert sum(end - begin for begin, end in ranges) == owners
-            result.update({
-                "schedule": "dense-output-owner",
-                "partition_granule": 8,
-                "ranges": ranges,
-                "owners_per_sm": [end - begin for begin, end in ranges],
-            })
+                if residue < count:
+                    transfers += 1 + (count - 1 - residue) // case["wrap"]
+            transfer_counts.append(transfers)
+        assert sum(owner_counts) == owners
+        assert sum(transfer_counts) == total_transfers
+        result.update({
+            "schedule": "dense-output-owner",
+            "partition_granule": 8,
+            "ranges": ranges,
+            "owners_per_sm": owner_counts,
+            "transfers_per_sm": transfer_counts,
+            "writes_original_destinations": True,
+            "scratch_elements_per_sm": 0,
+        })
     else:
         if case["collision_policy"] == "ordered":
             destinations = {

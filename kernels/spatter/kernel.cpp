@@ -19,7 +19,6 @@ extern __global uint32_t spatter_sparse_scatter[];
 extern __global uint32_t spatter_group_destinations[];
 extern __global uint32_t spatter_group_offsets[];
 extern __global uint32_t spatter_group_tasks[];
-extern __global uint32_t spatter_gather_scratch[];
 }
 
 #if SPATTER_CHAIN
@@ -159,34 +158,7 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
   constexpr uint32_t length = SPATTER_PATTERN_LENGTH;
 
 #if SPATTER_KIND == 0 || SPATTER_KIND == 3
-#if SPATTER_GATHER_ITERATION_PARTITION
-  constexpr uint32_t owners = length * SPATTER_WRAP;
-  const MuPartition iterations = mu_contiguous_partition(
-      SPATTER_COUNT, NIGHTLY_CLUSTERS, block_id, 1u);
-  for (uint32_t owner = tid; owner < owners; owner += threads_per_block) {
-    const uint32_t residue = owner / length;
-    const uint32_t j = owner - residue * length;
-    const uint32_t begin_residue = iterations.begin % SPATTER_WRAP;
-    const uint32_t skip =
-        (residue + SPATTER_WRAP - begin_residue) % SPATTER_WRAP;
-    for (uint32_t i = iterations.begin + skip; i < iterations.end;
-         i += SPATTER_WRAP) {
-      spatter::copy_value(
-          spatter_gather_scratch, block_id * owners + owner,
-          spatter_sparse, gather_source(j, i));
-    }
-    const uint32_t final_iteration = residue +
-        ((SPATTER_COUNT - 1u - residue) / SPATTER_WRAP) * SPATTER_WRAP;
-    if (final_iteration >= iterations.begin && final_iteration < iterations.end) {
-      // The benchmark transfers above all target private per-SM scratch.  The
-      // one extra checked write per owner publishes the deterministic final
-      // gather value without requiring a cross-SM barrier.
-      spatter::copy_value(
-          spatter_dense, owner, spatter_sparse,
-          gather_source(j, final_iteration));
-    }
-  }
-#elif SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS
+#if SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS
   // Assign complete, cache-line-aligned output blocks round-robin across SMs.
   // Larger blocks amortize the block-cyclic scheduling overhead while still
   // mixing distant sections of an irregular pattern to reduce per-SM skew.
