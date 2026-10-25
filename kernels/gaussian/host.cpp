@@ -96,9 +96,40 @@ static void hold_gpu_in_reset() {
     asm volatile("nop");
 }
 
+static uint64_t accumulate_stage_cycles(
+    uint64_t per_core[NIGHTLY_CLUSTERS][NIGHTLY_CORES_PER_CLUSTER]) {
+  uint32_t first = 0xffffffffu;
+  uint32_t last = 0u;
+  for (uint32_t cl = 0u; cl < NIGHTLY_CLUSTERS; ++cl) {
+    for (uint32_t core = 0u; core < NIGHTLY_CORES_PER_CLUSTER; ++core) {
+      const uint32_t start = nightly_pb_read(cl, NIGHTLY_PB_START + core);
+      const uint32_t end = nightly_pb_read(cl, NIGHTLY_PB_END + core);
+      per_core[cl][core] += static_cast<uint32_t>(end - start);
+      if (start < first) first = start;
+      if (end > last) last = end;
+    }
+  }
+  return static_cast<uint32_t>(last - first);
+}
+
+static void report_aggregate_cycles(
+    const uint64_t per_core[NIGHTLY_CLUSTERS][NIGHTLY_CORES_PER_CLUSTER],
+    uint64_t total) {
+  for (uint32_t cl = 0u; cl < NIGHTLY_CLUSTERS; ++cl) {
+    for (uint32_t core = 0u; core < NIGHTLY_CORES_PER_CLUSTER; ++core) {
+      nh_puts("cluster "); nh_putu(cl); nh_puts(" core "); nh_putu(core);
+      nh_puts(": start=0 end="); nh_putu(per_core[cl][core]);
+      nh_puts(" cycles="); nh_putu(per_core[cl][core]); nh_puts("\n");
+    }
+  }
+  nh_puts("kernel_cycles="); nh_putu(total); nh_puts("\n");
+  nh_flush();
+}
+
 int main() {
   int completed = 1;
   uint64_t total_cycles = 0u;
+  uint64_t per_core_cycles[NIGHTLY_CLUSTERS][NIGHTLY_CORES_PER_CLUSTER] = {};
   // Host waits are the explicit device-wide edges Fan1(t)->Fan2(t) and
   // Fan2(t)->Fan1(t+1). DRAM state survives each inter-stage soft reset.
   for (uint32_t stage = 0u; stage < GAUSSIAN_STAGES; ++stage) {
@@ -107,7 +138,7 @@ int main() {
 #endif
     nightly_host_launch(NIGHTLY_CLUSTERS, stage);
     completed &= nightly_host_wait(NIGHTLY_CLUSTERS);
-    total_cycles += nightly_host_report(NIGHTLY_CLUSTERS);
+    total_cycles += accumulate_stage_cycles(per_core_cycles);
 #if NIGHTLY_ROBUST_SPIN_UNTIL_RESET
     // Every robust stage publishes END and then waits for this reset.  Reset
     // the final stage too, before the host reads A, b, m, owners, and guards.
@@ -115,6 +146,7 @@ int main() {
 #endif
     if (!completed) break;
   }
+  report_aggregate_cycles(per_core_cycles, total_cycles);
   asm volatile("fence rw, rw" ::: "memory");
 
   const Check a = check_floats(

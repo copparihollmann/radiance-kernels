@@ -58,6 +58,36 @@ static void hold_gpu_in_reset() {
     asm volatile("nop");
 }
 
+static uint64_t accumulate_stage_cycles(
+    uint64_t per_core[NIGHTLY_CLUSTERS][NIGHTLY_CORES_PER_CLUSTER]) {
+  uint32_t first = 0xffffffffu;
+  uint32_t last = 0u;
+  for (uint32_t cl = 0u; cl < NIGHTLY_CLUSTERS; ++cl) {
+    for (uint32_t core = 0u; core < NIGHTLY_CORES_PER_CLUSTER; ++core) {
+      const uint32_t start = nightly_pb_read(cl, NIGHTLY_PB_START + core);
+      const uint32_t end = nightly_pb_read(cl, NIGHTLY_PB_END + core);
+      per_core[cl][core] += static_cast<uint32_t>(end - start);
+      if (start < first) first = start;
+      if (end > last) last = end;
+    }
+  }
+  return static_cast<uint32_t>(last - first);
+}
+
+static void report_aggregate_cycles(
+    const uint64_t per_core[NIGHTLY_CLUSTERS][NIGHTLY_CORES_PER_CLUSTER],
+    uint64_t total) {
+  for (uint32_t cl = 0u; cl < NIGHTLY_CLUSTERS; ++cl) {
+    for (uint32_t core = 0u; core < NIGHTLY_CORES_PER_CLUSTER; ++core) {
+      nh_puts("cluster "); nh_putu(cl); nh_puts(" core "); nh_putu(core);
+      nh_puts(": start=0 end="); nh_putu(per_core[cl][core]);
+      nh_puts(" cycles="); nh_putu(per_core[cl][core]); nh_puts("\n");
+    }
+  }
+  nh_puts("kernel_cycles="); nh_putu(total); nh_puts("\n");
+  nh_flush();
+}
+
 int main() {
   fill_guard(HOTSPOT3D_GUARD_BEFORE_ADDR, HOTSPOT3D_GUARD_BEFORE_PATTERN);
   fill_guard(HOTSPOT3D_GUARD_MIDDLE_A_ADDR,
@@ -77,6 +107,7 @@ int main() {
 
   int completed = 1;
   uint64_t total_cycles = 0u;
+  uint64_t per_core_cycles[NIGHTLY_CLUSTERS][NIGHTLY_CORES_PER_CLUSTER] = {};
   for (uint32_t iteration = 0u; iteration < HOTSPOT3D_ITERATIONS;
        ++iteration) {
 #if !NIGHTLY_ROBUST_SPIN_UNTIL_RESET
@@ -84,7 +115,7 @@ int main() {
 #endif
     nightly_host_launch(NIGHTLY_CLUSTERS, iteration);
     completed &= nightly_host_wait(NIGHTLY_CLUSTERS);
-    total_cycles += nightly_host_report(NIGHTLY_CLUSTERS);
+    total_cycles += accumulate_stage_cycles(per_core_cycles);
 #if NIGHTLY_ROBUST_SPIN_UNTIL_RESET
     // Robust kernels deliberately keep `finished` low after publishing END.
     // Reset immediately after every completed launch, including the final
@@ -93,6 +124,7 @@ int main() {
 #endif
     if (!completed) break;
   }
+  report_aggregate_cycles(per_core_cycles, total_cycles);
   asm volatile("fence rw, rw" ::: "memory");
 
   volatile uint32_t* expected = nightly_gpu_ptr<uint32_t>(

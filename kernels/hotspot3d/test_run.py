@@ -131,6 +131,14 @@ class Hotspot3dRunTest(unittest.TestCase):
         for forbidden in ("gemmini", "mxgemm", "vpu", "riscv_vector.h"):
             self.assertNotIn(forbidden, kernel)
 
+    def test_multilaunch_host_emits_one_aggregate_timing_record(self):
+        host = (ROOT / "host.cpp").read_text()
+        self.assertNotIn("nightly_host_report(", host)
+        self.assertEqual(host.count('nh_puts("kernel_cycles=")'), 1)
+        self.assertIn("accumulate_stage_cycles(per_core_cycles)", host)
+        self.assertIn("report_aggregate_cycles(per_core_cycles, total_cycles)",
+                      host)
+
     def test_private_toolchain_fallback_is_resolved(self):
         environment = run.build_environment()
         selected = environment.get("RISCV64_TOOLCHAIN_PATH",
