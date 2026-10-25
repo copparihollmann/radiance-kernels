@@ -13,6 +13,43 @@ SPEC.loader.exec_module(AM)
 
 
 class AssembleManifestTests(unittest.TestCase):
+    def test_btree_fullsize_contract_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "btree-fullsize--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4,
+                "loader": "direct-hashed", "kind": "point-and-range-lookup",
+                "workload_profile": "derived-full-size-performance",
+                "keys": 1_048_576, "point_queries": 262_144,
+                "range_queries": 131_072, "range_span": 1_024,
+                "point_output_records": 262_144,
+                "range_output_records": 131_072,
+                "point_output_digest": "point",
+                "range_output_digest": "range",
+                "partition_complete": True, "partition_overlap": 0,
+                "partition_cache_line_safe": True,
+                "is_full_size_performance_workload": True,
+                "robust_end_drain": True,
+                "robust_spin_until_reset": True,
+                "robust_serial_fence": True,
+                "robust_post_spin": 20_000,
+                "scalar_only": True, "no_vpu": True, "vpu": False,
+                "vector_isa": False, "gemmini": False, "mx": False,
+                "correctness": "complete-exact-point-and-range-output-check",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "btree")["workloads"][0]
+            self.assertEqual(row["operation"], "point-and-range-lookup")
+            self.assertEqual(row["keys"], 1_048_576)
+            self.assertEqual(row["point_queries"], 262_144)
+            self.assertEqual(row["range_queries"], 131_072)
+            self.assertTrue(row["is_full_size_performance_workload"])
+            self.assertTrue(row["partition_cache_line_safe"])
+            self.assertTrue(row["robust_spin_until_reset"])
+
     def test_hashes_and_records_existing_build(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
