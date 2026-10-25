@@ -10,6 +10,11 @@ RUN_SPEC = importlib.util.spec_from_file_location("stencil3d_run", RUN_PATH)
 assert RUN_SPEC is not None and RUN_SPEC.loader is not None
 run = importlib.util.module_from_spec(RUN_SPEC)
 RUN_SPEC.loader.exec_module(run)
+AUDIT_PATH = RUN_PATH.parents[1] / "evaluation/fpga_1a/audit_stencil3d_artifact.py"
+AUDIT_SPEC = importlib.util.spec_from_file_location("stencil3d_audit", AUDIT_PATH)
+assert AUDIT_SPEC is not None and AUDIT_SPEC.loader is not None
+audit = importlib.util.module_from_spec(AUDIT_SPEC)
+AUDIT_SPEC.loader.exec_module(audit)
 
 
 class Stencil3dRunTest(unittest.TestCase):
@@ -32,6 +37,10 @@ class Stencil3dRunTest(unittest.TestCase):
             self.assertEqual(
                 a["correctness"],
                 "complete-output-six-ulp-reference-digest-poison-and-guards",
+            )
+            self.assertEqual(
+                a["kernel_source_sha256"],
+                audit.current_source_sha256(RUN_PATH.parents[2]),
             )
 
     def test_host_poison_and_reference_digest_gates_are_present(self):

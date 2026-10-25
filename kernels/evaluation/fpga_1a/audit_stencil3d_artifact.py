@@ -27,6 +27,26 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def current_source_sha256(repo: Path) -> str:
+    paths = (
+        repo / "kernels/addr_hash_stamp.mk",
+        repo / "lib/include/mu_partition.h",
+        repo / "lib/include/nightly/device.h",
+        repo / "lib/include/nightly/host.h",
+        repo / "kernels/stencil3d/run.py",
+        repo / "kernels/stencil3d/Makefile",
+        repo / "kernels/stencil3d/kernel.cpp",
+        repo / "kernels/stencil3d/host.cpp",
+        repo / "kernels/stencil3d/emit_symbols.py",
+    )
+    digest = hashlib.sha256()
+    for path in paths:
+        require(path.is_file(), f"missing Stencil3D source input: {path}")
+        digest.update(path.relative_to(repo).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 def read_arch(readelf: Path, elf: Path) -> str:
     output = subprocess.check_output([str(readelf), "-A", str(elf)], text=True)
     match = re.search(r'(?:Value:|Tag_RISCV_arch:)\s*"?(rv(?:32|64)[^"\s]+)', output)
@@ -54,6 +74,7 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
     require(len(rows) == 6, f"expected six logical/direct stencil rows, found {len(rows)}")
     device_readelf = repo / "llvm/llvm-muon/bin/llvm-readelf"
     device_objdump = repo / "llvm/llvm-muon/bin/llvm-objdump"
+    source_sha256 = current_source_sha256(repo)
     paired: dict[int, list[str]] = {}
     audited = []
     for row in rows:
@@ -66,6 +87,8 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
                 f"{sm}SM/{loader} has wrong volume")
         require(row.get("reference_revision") == REFERENCE_REVISION,
                 f"{sm}SM/{loader} has wrong Vortex reference")
+        require(row.get("kernel_source_sha256") == source_sha256,
+                f"{sm}SM/{loader} artifact does not match current source")
         require(row.get("benchmark_contract") ==
                 "vortex-stencil3d-27-point-boundary-replication",
                 f"{sm}SM/{loader} has wrong equation contract")
@@ -127,6 +150,7 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
         "logical_manifest_sha256": sha256(logical_path),
         "direct_manifest": str(direct_path.resolve()),
         "direct_manifest_sha256": sha256(direct_path),
+        "current_source_sha256": source_sha256,
         "volume": [64, 64, 64], "max_ulp": 6,
         "partition": "disjoint-contiguous-64-byte-output-lines",
         "artifacts": sorted(audited, key=lambda row: (row["sm_count"], row["loader"])),
