@@ -95,13 +95,13 @@ def workload_checks(row: dict, result: dict, elf: Path) -> tuple[list[str], list
     smem: list[str] = []
     family = row["family"]
     if family in ("stream", "stream_dot", "spatter", "xrage", "gemv_bf16",
-                  "stencil3d", "nearn", "spmv_jds"):
+                  "stencil3d", "nearn", "spmv_jds", "sfilter"):
         address = output_address(elf)
         if family == "spatter":
             address += int(result.get("output_pad_cache_lines", 0)) * 64
         if family in ("stream", "stream_dot"):
             words = int(result.get("output_element_count", result["stream_elements"]))
-        elif family in ("stencil3d", "nearn", "spmv_jds"):
+        elif family in ("stencil3d", "nearn", "spmv_jds", "sfilter"):
             words = int(result["output_element_count"])
         elif family == "gemv_bf16":
             words = int(result["output_words"])
@@ -339,10 +339,10 @@ def main() -> None:
     parser.add_argument("--families", nargs="+",
                         choices=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
-                                 "spmv_jds"),
+                                 "spmv_jds", "sfilter"),
                         default=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
-                                 "spmv_jds"))
+                                 "spmv_jds", "sfilter"))
     parser.add_argument("--match", help="regular expression matched against workload names")
     parser.add_argument("--repetitions", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=2_000_000_000)

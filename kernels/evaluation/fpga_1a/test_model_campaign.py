@@ -127,6 +127,22 @@ class ModelCampaignTests(unittest.TestCase):
         self.assertIn("words = 146689", gmem[0])
         self.assertIn('expected_fnv64 = "0123456789abcdef"', gmem[0])
 
+    def test_sfilter_checks_every_output_word(self):
+        row = {"name": "sfilter--size-1024--4sm", "family": "sfilter",
+               "sm_count": 4}
+        result = {"output_element_count": 1024 * 1024,
+                  "expected_digest": "fedcba9876543210"}
+        original = MC.output_address
+        MC.output_address = lambda _elf: 0x10C04140
+        try:
+            gmem, smem = MC.workload_checks(row, result, Path("kernel.elf"))
+        finally:
+            MC.output_address = original
+        self.assertEqual(smem, [])
+        self.assertIn("address = 0x10c04140", gmem[0])
+        self.assertIn("words = 1048576", gmem[0])
+        self.assertIn('expected_fnv64 = "fedcba9876543210"', gmem[0])
+
     def test_spatter_output_padding_adjusts_check_address(self):
         row = {"name": "spatter--case-4-pad--4sm", "family": "spatter",
                "sm_count": 4}

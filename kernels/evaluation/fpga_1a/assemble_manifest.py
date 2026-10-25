@@ -15,7 +15,8 @@ PASSTHROUGH = (
     "case", "collision_policy", "destination_group_count",
     "muon_warps_per_core", "robust_end_drain", "robust_spin_until_reset",
     "robust_serial_fence", "robust_token_fence", "robust_post_spin",
-    "gather_block_cyclic_16",
+    "gather_block_cyclic_16", "pattern_length", "host_full_readback",
+    "expected_pattern_digest", "expected_source_digest",
     "diagnostic_readback",
     "source_pad_cache_lines", "output_pad_cache_lines",
     "rows", "cols", "ilp", "unroll", "output_words", "element_format",
@@ -32,6 +33,9 @@ PASSTHROUGH = (
     "jds_padding_entries", "jds_depth", "jds_warp_size", "jds_padded_rows",
     "partition_boundaries", "partition_nnz", "partition_complete",
     "partition_overlap", "accumulation_order", "scalar_only", "vpu",
+    "partition_row_boundaries", "partition_ownership",
+    "partition_ownership_sha256", "partition_cache_line_safe",
+    "cache_line_bytes", "dataset_contract", "dataset_contract_preserved",
     "vector_isa", "gemmini", "mx", "padding_index_policy", "dataset",
     "dataset_source", "dataset_files", "upstream_gold_validation",
     "generator_model_check", "absolute_tolerance", "relative_tolerance",
@@ -121,7 +125,7 @@ def main() -> None:
     parser.add_argument("--family", required=True,
                         choices=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d",
-                                 "nearn", "spmv_jds"))
+                                 "nearn", "spmv_jds", "sfilter"))
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     manifest = assemble(args.root.resolve(), args.family)

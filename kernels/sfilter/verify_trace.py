@@ -23,8 +23,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--symbol",
-        default="dst_raw",
-        help="Output symbol to resolve with llvm-nm (default: dst_raw)",
+        default="sfilter_output",
+        help="Output symbol to resolve with llvm-nm (default: sfilter_output)",
+    )
+    parser.add_argument(
+        "--max-ulp",
+        type=int,
+        default=4,
+        help="Maximum allowed ULP distance per word (default: upstream 4)",
     )
     return parser.parse_args()
 
@@ -110,6 +116,23 @@ def bits_to_float(bits: int) -> float:
     return struct.unpack("<f", struct.pack("<I", bits))[0]
 
 
+def ordered_float(bits: int) -> int:
+    return ~bits & 0xFFFFFFFF if bits & 0x80000000 else bits | 0x80000000
+
+
+def ulp_distance(lhs: int, rhs: int) -> int:
+    a = ordered_float(lhs)
+    b = ordered_float(rhs)
+    return abs(a - b)
+
+
+def digest(words: list[int]) -> int:
+    value = 0xCBF29CE484222325
+    for word in words:
+        value = ((value ^ word) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return value
+
+
 def main() -> int:
     args = parse_args()
     if not args.trace_db.exists():
@@ -124,20 +147,29 @@ def main() -> int:
     actual_words = reconstruct_actual_words(args.trace_db, output_addr, len(expected_words))
 
     mismatches = []
+    max_ulp = 0
     for index, (expected, actual) in enumerate(zip(expected_words, actual_words)):
-        if expected != actual:
-            mismatches.append((index, expected, actual))
+        ulp = ulp_distance(expected, actual)
+        max_ulp = max(max_ulp, ulp)
+        nonfinite = ((actual >> 23) & 0xFF) == 0xFF
+        if nonfinite or ulp > args.max_ulp:
+            mismatches.append((index, expected, actual, ulp))
 
-    print(f"symbol={args.symbol} address=0x{output_addr:08x} elements={len(expected_words)}")
+    print(
+        f"symbol={args.symbol} address=0x{output_addr:08x} "
+        f"elements={len(expected_words)} max_ulp={max_ulp} "
+        f"actual_digest={digest(actual_words):016x} "
+        f"expected_digest={digest(expected_words):016x}"
+    )
     if not mismatches:
         print("PASS")
         return 0
 
     print(f"FAIL mismatches={len(mismatches)}")
-    for index, expected, actual in mismatches[:16]:
+    for index, expected, actual, ulp in mismatches[:16]:
         print(
             f"[{index}] expected=0x{expected:08x} ({bits_to_float(expected):.8g}) "
-            f"actual=0x{actual:08x} ({bits_to_float(actual):.8g})"
+            f"actual=0x{actual:08x} ({bits_to_float(actual):.8g}) ulp={ulp}"
         )
     return 1
 

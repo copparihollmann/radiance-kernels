@@ -60,12 +60,19 @@ class AssembleManifestTests(unittest.TestCase):
             result = {
                 "status": "built", "sm_count": 4, "loader": "logical",
                 "kind": "gather", "gather_block_cyclic_16": True,
+                "pattern_length": 8368968, "host_full_readback": True,
+                "expected_pattern_digest": "pattern",
+                "expected_source_digest": "source",
                 "correctness": "digest-checked",
             }
             (build / "result.json").write_text(json.dumps(result))
             row = AM.assemble(root, "xrage")["workloads"][0]
             self.assertEqual(row["operation"], "gather")
             self.assertTrue(row["gather_block_cyclic_16"])
+            self.assertEqual(row["pattern_length"], 8368968)
+            self.assertTrue(row["host_full_readback"])
+            self.assertEqual(row["expected_pattern_digest"], "pattern")
+            self.assertEqual(row["expected_source_digest"], "source")
 
     def test_gemv_metadata_is_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -108,6 +115,35 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(row["output_element_count"], 64 ** 3)
             self.assertEqual(row["max_ulp"], 6)
             self.assertEqual(row["reference_seed"], 50)
+
+    def test_sfilter_partition_and_dataset_metadata_are_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "sfilter--size-1024--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "2d-3x3-spatial-filter", "size": 1024,
+                "output_element_count": 1024 * 1024,
+                "expected_digest": "abcd", "max_ulp": 4,
+                "partition_row_boundaries": [1, 257, 513, 768, 1023],
+                "partition_ownership": [{"physical_threadblock_id": 0}],
+                "partition_ownership_sha256": "ownership",
+                "partition_complete": True, "partition_overlap": False,
+                "partition_cache_line_safe": True, "cache_line_bytes": 64,
+                "dataset_contract": "derived-1024x1024",
+                "dataset_contract_preserved": False,
+                "benchmark_contract": "radiance-scaled-sfilter-vortex-equation-derived-input",
+                "correctness": "complete-output-four-ulp-zero-boundaries-guards-and-digest",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "sfilter")["workloads"][0]
+            self.assertEqual(row["partition_row_boundaries"],
+                             [1, 257, 513, 768, 1023])
+            self.assertTrue(row["partition_cache_line_safe"])
+            self.assertFalse(row["dataset_contract_preserved"])
+            self.assertEqual(row["max_ulp"], 4)
 
     def test_stream_dot_metadata_is_preserved(self):
         with tempfile.TemporaryDirectory() as directory:

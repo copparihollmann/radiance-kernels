@@ -1,89 +1,55 @@
-#include <mu_intrinsics.h>
-#include <mu_schedule.h>
-#include <shared_mem.h>
+#pragma once
 
 #include <stdint.h>
 
-#ifndef SFILTER_NUM_WARPS
-#define SFILTER_NUM_WARPS 4
-#endif
-
-extern "C" uint32_t __mu_num_warps = SFILTER_NUM_WARPS;
+#include "generated/config.h"
 
 struct SFilterArgs {
-  __global float* src;
+  __global const float* src;
   __global float* dst;
   uint32_t ldc;
-  float m0;
-  float m1;
-  float m2;
-  float m3;
-  float m4;
-  float m5;
-  float m6;
-  float m7;
-  float m8;
+  float mask[9];
 };
 
+static constexpr uint32_t kSFilterRowBoundaries[HPC_SM_COUNT + 1u] =
+    SFILTER_SM_ROW_BOUNDARIES;
+
+static_assert(SFILTER_SIZE >= 3u, "sfilter requires an interior");
+static_assert(SFILTER_SIZE % SFILTER_FLOATS_PER_CACHE_LINE == 0u,
+              "each output row must start on a cache-line boundary");
+static_assert(SFILTER_FLOATS_PER_CACHE_LINE == 16u,
+              "the ownership contract assumes 64-byte cache lines");
+
+// Preserve the pinned Vortex expression: nine scalar FP32 multiplies followed
+// by the same left-to-right FP32 additions. In particular, do not contract a
+// multiply and add into an FMA.
+#pragma clang fp contract(off)
 static inline void sfilter(
-  void* arg,
-  uint32_t tid_in_threadblock,
-  uint32_t threads_per_threadblock,
-  uint32_t threadblock_id
-) {
-  auto* args = reinterpret_cast<SFilterArgs*>(arg);
-  (void)threadblock_id;
+    void* opaque, uint32_t tid_in_threadblock,
+    uint32_t threads_per_threadblock, uint32_t threadblock_id) {
+  auto* args = reinterpret_cast<SFilterArgs*>(opaque);
+  const uint32_t row_begin = kSFilterRowBoundaries[threadblock_id];
+  const uint32_t row_end = kSFilterRowBoundaries[threadblock_id + 1u];
+  const uint32_t interior_width = args->ldc - 2u;
+  const uint32_t owned_pixels = (row_end - row_begin) * interior_width;
 
-  uint32_t interior = (args->ldc - 2) * (args->ldc - 2);
-  for (uint32_t idx = tid_in_threadblock; idx < interior; idx += threads_per_threadblock) {
-    uint32_t x = 1 + (idx % (args->ldc - 2));
-    uint32_t y = 1 + (idx / (args->ldc - 2));
-    uint32_t addr = x + y * args->ldc;
+  for (uint32_t local = tid_in_threadblock; local < owned_pixels;
+       local += threads_per_threadblock) {
+    const uint32_t x = 1u + local % interior_width;
+    const uint32_t y = row_begin + local / interior_width;
+    const uint32_t addr = x + y * args->ldc;
 
-    float i0 = args->src[addr - 1 - args->ldc] * args->m0;
-    float i1 = args->src[addr - args->ldc] * args->m1;
-    float i2 = args->src[addr + 1 - args->ldc] * args->m2;
-    float i3 = args->src[addr - 1] * args->m3;
-    float i4 = args->src[addr] * args->m4;
-    float i5 = args->src[addr + 1] * args->m5;
-    float i6 = args->src[addr - 1 + args->ldc] * args->m6;
-    float i7 = args->src[addr + args->ldc] * args->m7;
-    float i8 = args->src[addr + 1 + args->ldc] * args->m8;
+    const float i0 = args->src[addr - 1u - args->ldc] * args->mask[0];
+    const float i1 = args->src[addr - args->ldc] * args->mask[1];
+    const float i2 = args->src[addr + 1u - args->ldc] * args->mask[2];
+    const float i3 = args->src[addr - 1u] * args->mask[3];
+    const float i4 = args->src[addr] * args->mask[4];
+    const float i5 = args->src[addr + 1u] * args->mask[5];
+    const float i6 = args->src[addr - 1u + args->ldc] * args->mask[6];
+    const float i7 = args->src[addr + args->ldc] * args->mask[7];
+    const float i8 = args->src[addr + 1u + args->ldc] * args->mask[8];
 
-    args->dst[addr] = i0 + i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8;
+    args->dst[addr] =
+        i0 + i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8;
   }
-}
-
-SFilterArgs sfilter_args = {
-  .src = nullptr,
-  .dst = nullptr,
-  .ldc = 0,
-  .m0 = 0.0f,
-  .m1 = 0.0f,
-  .m2 = 0.0f,
-  .m3 = 0.0f,
-  .m4 = 0.0f,
-  .m5 = 0.0f,
-  .m6 = 0.0f,
-  .m7 = 0.0f,
-  .m8 = 0.0f,
-};
-
-#include "data"
-
-int main() {
-  sfilter_args.src = reinterpret_cast<__global float*>(src_raw);
-  sfilter_args.dst = reinterpret_cast<__global float*>(dst_raw);
-  sfilter_args.ldc = ldc;
-  sfilter_args.m0 = __builtin_bit_cast(float, m0_raw);
-  sfilter_args.m1 = __builtin_bit_cast(float, m1_raw);
-  sfilter_args.m2 = __builtin_bit_cast(float, m2_raw);
-  sfilter_args.m3 = __builtin_bit_cast(float, m3_raw);
-  sfilter_args.m4 = __builtin_bit_cast(float, m4_raw);
-  sfilter_args.m5 = __builtin_bit_cast(float, m5_raw);
-  sfilter_args.m6 = __builtin_bit_cast(float, m6_raw);
-  sfilter_args.m7 = __builtin_bit_cast(float, m7_raw);
-  sfilter_args.m8 = __builtin_bit_cast(float, m8_raw);
-  mu_schedule(sfilter, &sfilter_args, SFILTER_NUM_WARPS);
-  return 0;
 }
