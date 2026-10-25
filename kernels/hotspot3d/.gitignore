@@ -1,0 +1,7 @@
+*.o
+*.elf
+*.dump
+data.S
+generated/
+runs/
+__pycache__/
