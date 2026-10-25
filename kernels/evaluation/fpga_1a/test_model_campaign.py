@@ -214,6 +214,13 @@ class ModelCampaignTests(unittest.TestCase):
         self.assertEqual(MC.expected_correctness_checks(
             {"family": "lbm", "sm_count": 4}), 1)
 
+    def test_functional_and_timing_modes_have_honest_labels(self):
+        self.assertEqual(MC.model_identity(False),
+                         ("radiance-cyclotron-functional",
+                          "functional-no-timing"))
+        self.assertEqual(MC.model_identity(True),
+                         ("radiance-cyclotron-dram", "generic-dram"))
+
     def test_spatter_output_padding_adjusts_check_address(self):
         row = {"name": "spatter--case-4-pad--4sm", "family": "spatter",
                "sm_count": 4}

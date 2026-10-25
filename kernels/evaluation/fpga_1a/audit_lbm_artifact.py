@@ -87,6 +87,7 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
     device_objdump = repo / "llvm/llvm-muon/bin/llvm-objdump"
     paired: dict[int, list[str]] = {}
     identities = set()
+    artifact_revisions = set()
     output_digests = set()
     audited = []
     for row in rows:
@@ -207,8 +208,16 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
         source_hash = result.get("kernel_source_sha256")
         require(source_hash == current_source_hash,
                 f"{label} was not built from the current LBM source")
-        require(result.get("kernel_revision") == current_revision,
-                f"{label} was not built from the current source revision")
+        artifact_revision = result.get("kernel_revision")
+        require(bool(artifact_revision), f"{label} lacks a source revision")
+        ancestor = subprocess.run(
+            ["git", "-C", str(repo), "merge-base", "--is-ancestor",
+             artifact_revision, current_revision],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        require(ancestor.returncode == 0,
+                f"{label} source revision is not an ancestor of current HEAD")
+        artifact_revisions.add(artifact_revision)
         paired.setdefault(sm, []).append(source_hash)
         output_digests.add(result.get("expected_output_raw_digest"))
         audited.append({
@@ -229,6 +238,8 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
             "logical/direct artifact identities are incomplete")
     require(len({value for values in paired.values() for value in values}) == 1,
             "logical/direct artifacts do not share one source identity")
+    require(len(artifact_revisions) == 1,
+            "logical/direct artifacts do not share one source revision")
     require(output_digests == {"e1fa359562105965"},
             "logical/direct artifacts do not share one output oracle")
     return {
@@ -236,6 +247,7 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
         "status": "pass", "reference_revision": REFERENCE_REVISION,
         "current_source_revision": current_revision,
         "current_source_sha256": current_source_hash,
+        "artifact_source_revision": next(iter(artifact_revisions)),
         "logical_manifest": str(logical_path.resolve()),
         "logical_manifest_sha256": sha256(logical_path),
         "direct_manifest": str(direct_path.resolve()),

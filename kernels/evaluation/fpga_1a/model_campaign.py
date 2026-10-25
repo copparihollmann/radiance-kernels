@@ -195,6 +195,12 @@ def expected_correctness_checks(row: dict) -> int:
     return 1
 
 
+def model_identity(timing: bool) -> tuple[str, str]:
+    if timing:
+        return "radiance-cyclotron-dram", "generic-dram"
+    return "radiance-cyclotron-functional", "functional-no-timing"
+
+
 def make_config(row: dict, result: dict, elf: Path, timing_dir: Path,
                 timeout: int, timing: bool) -> str:
     sms = int(row["sm_count"])
@@ -257,9 +263,10 @@ def run(args: argparse.Namespace) -> None:
         if args.timing and not (args.timing_dir / name).is_file():
             raise ValueError(f"missing timing component: {args.timing_dir / name}")
 
+    schema_prefix, memory_model = model_identity(args.timing)
     campaign = {
-        "schema": "radiance-cyclotron-dram-campaign-v1",
-        "memory_model": "generic-dram", "is_hbm": False,
+        "schema": schema_prefix + "-campaign-v1",
+        "memory_model": memory_model, "is_hbm": False,
         "timing": args.timing, "build_manifest": str(manifest_path),
         "build_manifest_sha256": sha256(manifest_path),
         "cyclotron": str(args.cyclotron.resolve()),
@@ -315,11 +322,11 @@ def run(args: argparse.Namespace) -> None:
                       and {item["cluster"] for item in cluster_cycles}
                       == set(range(int(row["sm_count"]))))
             record = {
-                "schema": "radiance-cyclotron-dram-result-v1",
+                "schema": schema_prefix + "-result-v1",
                 "status": "passed" if passed else "failed",
                 "name": row["name"], "family": row["family"],
                 "sm_count": row["sm_count"], "loader": row["loader"],
-                "memory_model": "generic-dram", "is_hbm": False,
+                "memory_model": memory_model, "is_hbm": False,
                 "timing": args.timing, "repetition": repetition,
                 "kernel_cycles": int(kernel.group(1)) if kernel else None,
                 "cluster_kernel_cycles": cluster_cycles,
@@ -362,9 +369,17 @@ def summarize(root: Path) -> None:
             "speedup_1_to_2": (medians[1] / medians[2]) if 1 in medians and 2 in medians else None,
             "speedup_2_to_4": (medians[2] / medians[4]) if 2 in medians and 4 in medians else None,
         })
+    memory_models = {row.get("memory_model") for row in records
+                     if row.get("memory_model")}
+    if len(memory_models) > 1:
+        raise ValueError(f"mixed memory models in one output: {memory_models}")
+    memory_model = next(iter(memory_models), "unspecified")
+    schema_prefix = ("radiance-cyclotron-functional"
+                     if memory_model == "functional-no-timing"
+                     else "radiance-cyclotron-dram")
     summary = {
-        "schema": "radiance-cyclotron-dram-summary-v1",
-        "memory_model": "generic-dram", "is_hbm": False,
+        "schema": schema_prefix + "-summary-v1",
+        "memory_model": memory_model, "is_hbm": False,
         "result_count": len(records), "passed": len(passed),
         "failed": len(records) - len(passed), "workloads": rows,
     }
