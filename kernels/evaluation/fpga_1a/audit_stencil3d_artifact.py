@@ -75,6 +75,9 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
     device_readelf = repo / "llvm/llvm-muon/bin/llvm-readelf"
     device_objdump = repo / "llvm/llvm-muon/bin/llvm-objdump"
     source_sha256 = current_source_sha256(repo)
+    require(all(manifest.get("artifact_source_hashes") == [source_sha256]
+                for manifest in manifests),
+            "Stencil3D manifests do not match current source")
     paired: dict[int, list[str]] = {}
     audited = []
     for row in rows:
@@ -87,8 +90,6 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
                 f"{sm}SM/{loader} has wrong volume")
         require(row.get("reference_revision") == REFERENCE_REVISION,
                 f"{sm}SM/{loader} has wrong Vortex reference")
-        require(row.get("kernel_source_sha256") == source_sha256,
-                f"{sm}SM/{loader} artifact does not match current source")
         require(row.get("benchmark_contract") ==
                 "vortex-stencil3d-27-point-boundary-replication",
                 f"{sm}SM/{loader} has wrong equation contract")
@@ -107,6 +108,8 @@ def audit(repo: Path, logical_path: Path, direct_path: Path) -> dict:
         fused = Path(row["elf"]).resolve()
         device = fused.parent / "kernel.radiance.elf"
         result = json.loads((fused.parent / "result.json").read_text())
+        require(result.get("kernel_source_sha256") == source_sha256,
+                f"{sm}SM/{loader} artifact does not match current source")
         require(fused.is_file() and device.is_file(), f"missing artifact for {sm}SM/{loader}")
         require(sha256(fused) == row.get("elf_sha256") == result.get("elf_sha256"),
                 f"fused ELF hash mismatch for {sm}SM/{loader}")
