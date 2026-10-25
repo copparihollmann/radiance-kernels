@@ -177,6 +177,8 @@ def prepare(kind: str, elements: int, out: Path,
             "host_full_readback": full_host_check or not samples,
             "status": "prepared", "simulator": None,
             "element_format": "float32", "output_element_count": elements,
+            "scalar_only": True, "no_vpu": True, "vpu": False,
+            "vector_isa": False, "gemmini": False, "mx": False,
             "muon_warps_per_core": warps_per_core,
             "robust_end_drain": robust_end_drain,
             "robust_spin_until_reset": robust_spin_until_reset,
@@ -274,6 +276,9 @@ def main() -> None:
         subprocess.run(["make", "kernel.soc.elf"], cwd=ROOT, stdout=log,
                        stderr=subprocess.STDOUT, check=True, env=build_env)
     shutil.copy2(ROOT / "kernel.soc.elf", out / "kernel.soc.elf")
+    device_elf = out / "kernel.radiance.elf"
+    shutil.copy2(ROOT / "kernel.radiance.elf", device_elf)
+    case["device_elf_sha256"] = hashlib.sha256(device_elf.read_bytes()).hexdigest()
     case["status"] = "built"
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     print(json.dumps(case, indent=2))
