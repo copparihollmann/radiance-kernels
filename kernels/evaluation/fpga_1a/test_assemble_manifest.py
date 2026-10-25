@@ -99,11 +99,13 @@ class AssembleManifestTests(unittest.TestCase):
                 "kind": "stream-copy", "correctness": "digest-checked",
                 "robust_end_drain": True,
                 "robust_cluster_l1_manager": True,
+                "robust_split_l1_drain": False,
                 "robust_completion_mode": "cluster-l1-manager-candidate",
             }
             (build / "result.json").write_text(json.dumps(result))
             row = AM.assemble(root, "stream")["workloads"][0]
             self.assertTrue(row["robust_cluster_l1_manager"])
+            self.assertFalse(row["robust_split_l1_drain"])
             self.assertEqual(
                 row["robust_completion_mode"],
                 "cluster-l1-manager-candidate",

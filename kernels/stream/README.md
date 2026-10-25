@@ -90,6 +90,13 @@ exactly. This option also requires `--robust-end-drain`; it has no FPGA
 correctness claim until it passes the same complete-output hardware gates.
 The opt-in protocol reserves reusable barrier ID 13; the STREAM kernel itself
 does not issue barriers and therefore does not conflict with that reservation.
+`--robust-split-l1-drain` is a separate candidate motivated by those barrier
+costs. It keeps the established three L0d/L1 passes and per-core execution,
+but each of the two cores walks half of the four-L1-capacity shared eviction
+window. Together they still touch four complete L1 capacities per cluster per
+pass, through disjoint addresses, without adding inter-core barriers. It is
+mutually exclusive with the manager mode, changes no STREAM operation, and
+must pass complete-output gates on every FPGA image before promotion.
 Use `--diagnostic-readback` to print the actual
 digest and all guard words on failure; that flag changes only the RV64 host
 checker. Neither option reduces the array length or changes an elemental

@@ -66,7 +66,8 @@ def prepare(kind: str, elements: int, out: Path,
             robust_post_spin: int = 500,
             block_cyclic_lines: bool = False,
             block_cyclic_chunk_lines: int = 0,
-            robust_cluster_l1_manager: bool = False) -> dict:
+            robust_cluster_l1_manager: bool = False,
+            robust_split_l1_drain: bool = False) -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
     if elements * 12 + 0x100000 > 0x70000000:
@@ -81,6 +82,10 @@ def prepare(kind: str, elements: int, out: Path,
         raise ValueError("robust_serial_fence requires robust_end_drain")
     if robust_cluster_l1_manager and not robust_end_drain:
         raise ValueError("robust_cluster_l1_manager requires robust_end_drain")
+    if robust_split_l1_drain and not robust_end_drain:
+        raise ValueError("robust_split_l1_drain requires robust_end_drain")
+    if robust_split_l1_drain and robust_cluster_l1_manager:
+        raise ValueError("select only one shared-L1 drain candidate")
     if robust_post_spin < 0:
         raise ValueError("robust_post_spin must be nonnegative")
     if block_cyclic_lines and block_cyclic_chunk_lines:
@@ -108,6 +113,7 @@ def prepare(kind: str, elements: int, out: Path,
         f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
         f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
         f"#define NIGHTLY_ROBUST_CLUSTER_L1_MANAGER {int(robust_cluster_l1_manager)}",
+        f"#define NIGHTLY_ROBUST_SPLIT_L1_DRAIN {int(robust_split_l1_drain)}",
         f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define STREAM_KIND {KINDS[kind]}",
         f"#define STREAM_ELEMENTS {elements}u",
@@ -162,6 +168,7 @@ def prepare(kind: str, elements: int, out: Path,
                 f"robust{int(robust_end_drain)}:spin{int(robust_spin_until_reset)}:"
                 f"serial{int(robust_serial_fence)}:"
                 f"l1manager{int(robust_cluster_l1_manager)}:"
+                f"splitl1{int(robust_split_l1_drain)}:"
                 f"post{robust_post_spin}:blockcyclic{int(block_cyclic_lines)}:"
                 f"chunklines{block_cyclic_chunk_lines}".encode()
             ).hexdigest(),
@@ -175,8 +182,10 @@ def prepare(kind: str, elements: int, out: Path,
             "robust_spin_until_reset": robust_spin_until_reset,
             "robust_serial_fence": robust_serial_fence,
             "robust_cluster_l1_manager": robust_cluster_l1_manager,
+            "robust_split_l1_drain": robust_split_l1_drain,
             "robust_completion_mode": (
                 "cluster-l1-manager-candidate" if robust_cluster_l1_manager
+                else "split-per-core-l1-candidate" if robust_split_l1_drain
                 else "per-core-l1" if robust_end_drain else "disabled"
             ),
             "robust_post_spin": robust_post_spin,
@@ -211,6 +220,8 @@ def main() -> None:
                         help="fence each worker warp serially before robust cache drains")
     parser.add_argument("--robust-cluster-l1-manager", action="store_true",
                         help="candidate: one core per cluster drains shared L1 after synchronized private L0 drains")
+    parser.add_argument("--robust-split-l1-drain", action="store_true",
+                        help="candidate: split each shared-L1 capacity walk across cluster cores")
     parser.add_argument("--robust-post-spin", type=int, default=500,
                         help="target cycles after the final robust cache drain (measured)")
     parser.add_argument("--diagnostic-readback", action="store_true",
@@ -232,6 +243,10 @@ def main() -> None:
         parser.error("--robust-serial-fence requires --robust-end-drain")
     if args.robust_cluster_l1_manager and not args.robust_end_drain:
         parser.error("--robust-cluster-l1-manager requires --robust-end-drain")
+    if args.robust_split_l1_drain and not args.robust_end_drain:
+        parser.error("--robust-split-l1-drain requires --robust-end-drain")
+    if args.robust_split_l1_drain and args.robust_cluster_l1_manager:
+        parser.error("select only one shared-L1 drain candidate")
     out = args.out.resolve()
     case = prepare(args.kind, args.elements, out, args.full_host_check,
                    args.sms, args.loader, args.warps_per_core, args.scalar,
@@ -239,7 +254,8 @@ def main() -> None:
                    args.robust_spin_until_reset, args.robust_serial_fence,
                    args.robust_post_spin, args.block_cyclic_lines,
                    args.block_cyclic_chunk_lines,
-                   args.robust_cluster_l1_manager)
+                   args.robust_cluster_l1_manager,
+                   args.robust_split_l1_drain)
     case["host_timing_requested"] = args.host_timing
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:

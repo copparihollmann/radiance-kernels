@@ -34,10 +34,13 @@ class StreamRunTest(unittest.TestCase):
                           run.GENERATED.joinpath("config.h").read_text())
             self.assertIn("#define NIGHTLY_ROBUST_CLUSTER_L1_MANAGER 0",
                           run.GENERATED.joinpath("config.h").read_text())
+            self.assertIn("#define NIGHTLY_ROBUST_SPLIT_L1_DRAIN 0",
+                          run.GENERATED.joinpath("config.h").read_text())
             self.assertFalse(result["robust_end_drain"])
             self.assertFalse(result["robust_spin_until_reset"])
             self.assertFalse(result["robust_serial_fence"])
             self.assertFalse(result["robust_cluster_l1_manager"])
+            self.assertFalse(result["robust_split_l1_drain"])
             self.assertEqual(result["robust_completion_mode"], "disabled")
             self.assertEqual(result["robust_post_spin"], 500)
             self.assertFalse(result["diagnostic_readback"])
@@ -162,6 +165,57 @@ class StreamRunTest(unittest.TestCase):
                     "copy", 32, Path(directory),
                     robust_cluster_l1_manager=True,
                 )
+
+    def test_records_split_per_core_l1_completion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            baseline = run.prepare(
+                "copy", 32, Path(directory), robust_end_drain=True,
+            )
+            result = run.prepare(
+                "copy", 32, Path(directory), robust_end_drain=True,
+                robust_spin_until_reset=True,
+                robust_split_l1_drain=True,
+            )
+            self.assertTrue(result["robust_split_l1_drain"])
+            self.assertFalse(result["robust_cluster_l1_manager"])
+            self.assertEqual(
+                result["robust_completion_mode"],
+                "split-per-core-l1-candidate",
+            )
+            self.assertNotEqual(result["suite_sha256"], baseline["suite_sha256"])
+            config = run.GENERATED.joinpath("config.h").read_text()
+            self.assertIn("#define NIGHTLY_ROBUST_SPLIT_L1_DRAIN 1", config)
+
+    def test_split_l1_requires_drain_and_excludes_manager(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                    ValueError,
+                    "robust_split_l1_drain requires robust_end_drain"):
+                run.prepare(
+                    "copy", 32, Path(directory),
+                    robust_split_l1_drain=True,
+                )
+            with self.assertRaisesRegex(ValueError, "only one"):
+                run.prepare(
+                    "copy", 32, Path(directory), robust_end_drain=True,
+                    robust_split_l1_drain=True,
+                    robust_cluster_l1_manager=True,
+                )
+
+    def test_split_l1_preserves_three_passes_without_manager_barriers(self):
+        device = RUN_PATH.parents[2] / "lib/include/nightly/device.h"
+        source = device.read_text()
+        split = source.split("#if NIGHTLY_ROBUST_SPLIT_L1_DRAIN\n", 1)[1].split(
+            "#else\n  const uint32_t global_core", 1)[0]
+        self.assertIn("RAD_L1_DRAIN_MULT / MU_NUM_CORES", split)
+        self.assertIn("nightly_cluster_id()", split)
+        self.assertIn("vx_core_id()", split)
+        default_epilogue = source.split(
+            "#else\n  if (warp < MU_NUM_CORES && lane == 0u) {\n"
+            "    rad_pause(RAD_EPI_QUEUE_SPIN);", 1)[1].split(
+                "#endif\n  mu_barrier(NIGHTLY_BAR_END - 1u, warps);", 1)[0]
+        self.assertEqual(default_epilogue.count("nightly_l1_drain();"), 3)
+        self.assertNotIn("NIGHTLY_BAR_ROBUST_DRAIN", default_epilogue)
 
     def test_cluster_l1_manager_barriers_are_uniform_and_three_passes_remain(self):
         device = RUN_PATH.parents[2] / "lib/include/nightly/device.h"

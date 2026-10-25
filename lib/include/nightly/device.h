@@ -41,6 +41,9 @@
 #ifndef NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
 #define NIGHTLY_ROBUST_CLUSTER_L1_MANAGER 0
 #endif
+#ifndef NIGHTLY_ROBUST_SPLIT_L1_DRAIN
+#define NIGHTLY_ROBUST_SPLIT_L1_DRAIN 0
+#endif
 #if NIGHTLY_ROBUST_SPIN_UNTIL_RESET && !NIGHTLY_ROBUST_GMEM_END
 #error "NIGHTLY_ROBUST_SPIN_UNTIL_RESET requires NIGHTLY_ROBUST_GMEM_END"
 #endif
@@ -52,6 +55,12 @@
 #endif
 #if NIGHTLY_ROBUST_CLUSTER_L1_MANAGER && !NIGHTLY_ROBUST_GMEM_END
 #error "NIGHTLY_ROBUST_CLUSTER_L1_MANAGER requires NIGHTLY_ROBUST_GMEM_END"
+#endif
+#if NIGHTLY_ROBUST_SPLIT_L1_DRAIN && !NIGHTLY_ROBUST_GMEM_END
+#error "NIGHTLY_ROBUST_SPLIT_L1_DRAIN requires NIGHTLY_ROBUST_GMEM_END"
+#endif
+#if NIGHTLY_ROBUST_SPLIT_L1_DRAIN && NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
+#error "select only one shared-L1 drain candidate"
 #endif
 #if NIGHTLY_ROBUST_GMEM_END
 #include <rad_tapeout.h>
@@ -147,12 +156,25 @@ static inline void nightly_l0d_drain(void) {
 }
 
 static inline void nightly_l1_drain(void) {
+#if NIGHTLY_ROBUST_SPLIT_L1_DRAIN
+  static_assert(RAD_L1_DRAIN_MULT % MU_NUM_CORES == 0,
+                "L1 drain multiplicity must divide across cores");
+  constexpr uint32_t per_core_mult = RAD_L1_DRAIN_MULT / MU_NUM_CORES;
+  const uint32_t cluster_base = nightly_cluster_id() *
+      (RAD_L1_DRAIN_MULT * RAD_L1_BYTES);
+  const uint32_t core_base = cluster_base +
+      (uint32_t)vx_core_id() * (per_core_mult * RAD_L1_BYTES);
+  volatile uint32_t *p = (volatile uint32_t *)(
+      RAD_DRAIN_SCRATCH + 0x00100000u + core_base);
+  const uint32_t n = (per_core_mult * RAD_L1_BYTES) / RAD_L1_LINE_BYTES;
+#else
   const uint32_t global_core =
       nightly_cluster_id() * MU_NUM_CORES + (uint32_t)vx_core_id();
   volatile uint32_t *p = (volatile uint32_t *)(
       RAD_DRAIN_SCRATCH + 0x00100000u +
       global_core * (RAD_L1_DRAIN_MULT * RAD_L1_BYTES));
   const uint32_t n = (RAD_L1_DRAIN_MULT * RAD_L1_BYTES) / RAD_L1_LINE_BYTES;
+#endif
   for (uint32_t i = 0; i < n; ++i)
     p[i * (RAD_L1_LINE_BYTES / 4u)] = i + 1u;
   mu_fence();
