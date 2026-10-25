@@ -4,6 +4,7 @@ HOST_SRCS = host.cpp
 MU_BIN_OBJS = data.mu.o
 
 include ../common.mk
+include ../addr_hash_stamp.mk
 
 # Deliberately scalar: do not add a VPU, vector, Gemmini, or MX path.
 MU_CFLAGS += -isystem $(LLVM_MUON)/include/c++/v1

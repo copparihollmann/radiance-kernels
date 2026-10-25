@@ -270,6 +270,7 @@ def validate_ownership(size: int, sms: int) -> dict:
 def source_digest() -> str:
     digest = hashlib.sha256()
     paths = (
+        ROOT.parent / "addr_hash_stamp.mk",
         ROOT.parents[1] / "lib/include/nightly/device.h",
         ROOT.parents[1] / "lib/include/nightly/host.h",
         ROOT / "Makefile", ROOT / "README.md", ROOT / "emit_symbols.py",
@@ -293,13 +294,25 @@ def build_environment() -> dict[str, str]:
 
 
 def prepare(profile: str, sms: int, out: Path,
-            *, warps_per_core: int = 8) -> dict:
+            *, loader: str = "logical", warps_per_core: int = 8,
+            robust_end_drain: bool = False,
+            robust_spin_until_reset: bool = False,
+            robust_serial_fence: bool = False,
+            robust_post_spin: int = 500) -> dict:
     if profile not in PROFILES:
         raise ValueError(f"unknown profile: {profile}")
     if sms not in (1, 2, 4):
         raise ValueError("sms must be 1, 2, or 4")
+    if loader not in ("logical", "direct-hashed"):
+        raise ValueError("loader must be logical or direct-hashed")
     if warps_per_core not in (1, 2, 4, 8):
         raise ValueError("warps_per_core must be 1, 2, 4, or 8")
+    if robust_spin_until_reset and not robust_end_drain:
+        raise ValueError("robust_spin_until_reset requires robust_end_drain")
+    if robust_serial_fence and not robust_end_drain:
+        raise ValueError("robust_serial_fence requires robust_end_drain")
+    if robust_post_spin < 0:
+        raise ValueError("robust_post_spin must be nonnegative")
     references = reference_objects()
     size = PROFILES[profile]
     original_a, original_b = fixture(profile)
@@ -335,6 +348,10 @@ def prepare(profile: str, sms: int, out: Path,
         "#pragma once", f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
         f"#define NIGHTLY_OCC {warps_per_core}",
+        f"#define NIGHTLY_ROBUST_GMEM_END {int(robust_end_drain)}",
+        f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
+        f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
+        f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define GAUSSIAN_SIZE {size}u",
         f"#define GAUSSIAN_MATRIX_WORDS {matrix_words}u",
         f"#define GAUSSIAN_STAGES {stages}u",
@@ -388,7 +405,8 @@ def prepare(profile: str, sms: int, out: Path,
         "schema": "radiance-gaussian-build-result-v1",
         "name": f"gaussian--{profile}--{size}--{sms}sm",
         "family": "gaussian", "profile": profile, "size": size,
-        "sm_count": sms, "loader": "logical", "stages": stages,
+        "sm_count": sms, "loader": loader,
+        "gpu_address_hash": loader == "direct-hashed", "stages": stages,
         "fan1_stages": size - 1, "fan2_stages": size - 1,
         "useful_scalar_updates": updates,
         "upstream_generated_default_size": UPSTREAM_GENERATED_SIZE,
@@ -408,6 +426,10 @@ def prepare(profile: str, sms: int, out: Path,
         "max_ulp": MAX_ULP, "scalar_only": True, "no_vpu": True,
         "vector_isa": False, "gemmini": False, "mx": False,
         "muon_warps_per_core": warps_per_core,
+        "robust_end_drain": robust_end_drain,
+        "robust_spin_until_reset": robust_spin_until_reset,
+        "robust_serial_fence": robust_serial_fence,
+        "robust_post_spin": robust_post_spin,
         "reference_repository": "vortexgpgpu/vortex",
         "reference_checkout": str(REFERENCE_REPOSITORY.resolve()),
         "reference_revision": REFERENCE_REVISION,
@@ -433,17 +455,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=tuple(PROFILES), default="meaningful")
     parser.add_argument("--sms", type=int, choices=(1, 2, 4), default=1)
+    parser.add_argument("--loader", choices=("logical", "direct-hashed"),
+                        default="logical")
     parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8),
                         default=8)
+    parser.add_argument("--robust-end-drain", action="store_true")
+    parser.add_argument("--robust-spin-until-reset", action="store_true")
+    parser.add_argument("--robust-serial-fence", action="store_true")
+    parser.add_argument("--robust-post-spin", type=int, default=500)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()
     out = args.out.resolve()
     case = prepare(args.profile, args.sms, out,
-                   warps_per_core=args.warps_per_core)
+                   loader=args.loader, warps_per_core=args.warps_per_core,
+                   robust_end_drain=args.robust_end_drain,
+                   robust_spin_until_reset=args.robust_spin_until_reset,
+                   robust_serial_fence=args.robust_serial_fence,
+                   robust_post_spin=args.robust_post_spin)
     if args.prepare_only:
         return
     env = build_environment()
+    env["MU_ADDR_HASH"] = "1" if args.loader == "direct-hashed" else "0"
     with (out / "build.log").open("w") as log:
         subprocess.run(["make", "clean"], cwd=ROOT, stdout=log,
                        stderr=subprocess.STDOUT, check=True, env=env)

@@ -281,7 +281,10 @@ def build_environment() -> dict[str, str]:
 
 
 def prepare(profile: str, sms: int, out: Path, *, loader: str = "logical",
-            warps_per_core: int = 8) -> dict:
+            warps_per_core: int = 8, robust_end_drain: bool = False,
+            robust_spin_until_reset: bool = False,
+            robust_serial_fence: bool = False,
+            robust_post_spin: int = 500) -> dict:
     if profile not in PROFILES:
         raise ValueError(f"unknown profile: {profile}")
     if sms not in (1, 2, 4):
@@ -290,6 +293,12 @@ def prepare(profile: str, sms: int, out: Path, *, loader: str = "logical",
         raise ValueError("loader must be logical or direct-hashed")
     if warps_per_core not in (1, 2, 4, 8):
         raise ValueError("warps_per_core must be 1, 2, 4, or 8")
+    if robust_spin_until_reset and not robust_end_drain:
+        raise ValueError("robust_spin_until_reset requires robust_end_drain")
+    if robust_serial_fence and not robust_end_drain:
+        raise ValueError("robust_serial_fence requires robust_end_drain")
+    if robust_post_spin < 0:
+        raise ValueError("robust_post_spin must be nonnegative")
     reference = reference_objects()
     dims = PROFILES[profile]
     nx, ny, nz = dims["nx"], dims["ny"], dims["nz"]
@@ -324,6 +333,10 @@ def prepare(profile: str, sms: int, out: Path, *, loader: str = "logical",
         f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
         f"#define NIGHTLY_OCC {warps_per_core}",
+        f"#define NIGHTLY_ROBUST_GMEM_END {int(robust_end_drain)}",
+        f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
+        f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
+        f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define HOTSPOT3D_NX {nx}u",
         f"#define HOTSPOT3D_NY {ny}u",
         f"#define HOTSPOT3D_NZ {nz}u",
@@ -403,7 +416,12 @@ def prepare(profile: str, sms: int, out: Path, *, loader: str = "logical",
         "partition": "disjoint-contiguous-16-column-64-byte-lines",
         "partition_boundaries": boundaries,
         "muon_warps_per_core": warps_per_core,
-        "scalar_no_vpu": True,
+        "robust_end_drain": robust_end_drain,
+        "robust_spin_until_reset": robust_spin_until_reset,
+        "robust_serial_fence": robust_serial_fence,
+        "robust_post_spin": robust_post_spin,
+        "scalar_no_vpu": True, "scalar_only": True, "no_vpu": True,
+        "vpu": False, "vector_isa": False, "gemmini": False, "mx": False,
         "expected_digest": f"{expected_digest:016x}",
         "stage_expected_digests": stage_expected_digests,
         "owner_digest": f"{owner_digest:016x}",
@@ -430,12 +448,20 @@ def main() -> None:
                         default="logical")
     parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8),
                         default=8)
+    parser.add_argument("--robust-end-drain", action="store_true")
+    parser.add_argument("--robust-spin-until-reset", action="store_true")
+    parser.add_argument("--robust-serial-fence", action="store_true")
+    parser.add_argument("--robust-post-spin", type=int, default=500)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()
     out = args.out.resolve()
     case = prepare(args.profile, args.sms, out, loader=args.loader,
-                   warps_per_core=args.warps_per_core)
+                   warps_per_core=args.warps_per_core,
+                   robust_end_drain=args.robust_end_drain,
+                   robust_spin_until_reset=args.robust_spin_until_reset,
+                   robust_serial_fence=args.robust_serial_fence,
+                   robust_post_spin=args.robust_post_spin)
     if args.prepare_only:
         return
     env = build_environment()

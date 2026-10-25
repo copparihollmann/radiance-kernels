@@ -67,6 +67,19 @@ PASSTHROUGH = (
     "is_official_default_canary", "is_full_size_performance_workload",
     "derived_performance_contract", "abi_mapping", "reference_makefile",
     "reference_makefile_sha256", "reference_makefile_git_blob",
+    "profile", "nx", "ny", "nz", "iterations", "columns", "updates",
+    "stage_expected_digests", "owner_digest", "scalar_no_vpu",
+    "cells", "seed", "wall_value_range", "output_digest", "owner_words",
+    "phase_order", "boundary_rule", "intermediate_strategy",
+    "thread_schedule", "phase_synchronization", "work_accounting",
+    "is_upstream_sized_canary", "is_meaningful_workload",
+    "meaningful_workload_contract", "stages", "fan1_stages",
+    "fan2_stages", "useful_scalar_updates",
+    "upstream_generated_default_size",
+    "meaningful_vs_upstream_default_cubic_work_ratio", "owner_stride",
+    "solution", "relative_backward_error", "residual_norm",
+    "residual_tolerance", "residual_tolerance_justification",
+    "final_digests",
 )
 
 
@@ -163,7 +176,8 @@ def main() -> None:
                         choices=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d",
                                  "nearn", "spmv_jds", "sfilter",
-                                 "streamcluster", "lbm", "btree"))
+                                 "streamcluster", "lbm", "btree",
+                                 "hotspot3d", "pathfinder", "gaussian"))
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     manifest = assemble(args.root.resolve(), args.family)

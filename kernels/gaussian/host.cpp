@@ -102,10 +102,17 @@ int main() {
   // Host waits are the explicit device-wide edges Fan1(t)->Fan2(t) and
   // Fan2(t)->Fan1(t+1). DRAM state survives each inter-stage soft reset.
   for (uint32_t stage = 0u; stage < GAUSSIAN_STAGES; ++stage) {
+#if !NIGHTLY_ROBUST_SPIN_UNTIL_RESET
     if (stage != 0u) hold_gpu_in_reset();
+#endif
     nightly_host_launch(NIGHTLY_CLUSTERS, stage);
     completed &= nightly_host_wait(NIGHTLY_CLUSTERS);
     total_cycles += nightly_host_report(NIGHTLY_CLUSTERS);
+#if NIGHTLY_ROBUST_SPIN_UNTIL_RESET
+    // Every robust stage publishes END and then waits for this reset.  Reset
+    // the final stage too, before the host reads A, b, m, owners, and guards.
+    hold_gpu_in_reset();
+#endif
     if (!completed) break;
   }
   asm volatile("fence rw, rw" ::: "memory");

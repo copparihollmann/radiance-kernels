@@ -298,8 +298,17 @@ def validate_parameters(rows: int, cols: int, sms: int, loader: str,
 
 def prepare(rows: int, cols: int, out: Path, *, sms: int = 1,
             loader: str = "logical", warps_per_core: int = 8,
-            preset: str = "custom") -> dict:
+            preset: str = "custom", robust_end_drain: bool = False,
+            robust_spin_until_reset: bool = False,
+            robust_serial_fence: bool = False,
+            robust_post_spin: int = 500) -> dict:
     validate_parameters(rows, cols, sms, loader, warps_per_core)
+    if robust_spin_until_reset and not robust_end_drain:
+        raise ValueError("robust_spin_until_reset requires robust_end_drain")
+    if robust_serial_fence and not robust_end_drain:
+        raise ValueError("robust_serial_fence requires robust_end_drain")
+    if robust_post_spin < 0:
+        raise ValueError("robust_post_spin must be nonnegative")
     wall = fixture_wall(rows, cols)
     expected = cpu_oracle(wall, rows, cols)
     modeled, owners = partitioned_model(wall, rows, cols, sms)
@@ -317,6 +326,10 @@ def prepare(rows: int, cols: int, out: Path, *, sms: int = 1,
         f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
         f"#define NIGHTLY_OCC {warps_per_core}",
+        f"#define NIGHTLY_ROBUST_GMEM_END {int(robust_end_drain)}",
+        f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
+        f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
+        f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define PATHFINDER_ROWS {rows}u",
         f"#define PATHFINDER_COLS {cols}u",
         f"#define PATHFINDER_INTS_PER_LINE {INTS_PER_CACHE_LINE}u",
@@ -390,7 +403,10 @@ def prepare(rows: int, cols: int, out: Path, *, sms: int = 1,
         "scalar_only": True, "no_vpu": True, "vpu": False,
         "vector_isa": False, "gemmini": False, "mx": False,
         "muon_warps_per_core": warps_per_core,
-        "robust_end_drain": False,
+        "robust_end_drain": robust_end_drain,
+        "robust_spin_until_reset": robust_spin_until_reset,
+        "robust_serial_fence": robust_serial_fence,
+        "robust_post_spin": robust_post_spin,
         "reference_repository": "vortexgpgpu/vortex",
         "reference_revision": REFERENCE_REVISION,
         "reference_main": REFERENCE_MAIN,
@@ -464,6 +480,10 @@ def main() -> None:
                         default="logical")
     parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8),
                         default=8)
+    parser.add_argument("--robust-end-drain", action="store_true")
+    parser.add_argument("--robust-spin-until-reset", action="store_true")
+    parser.add_argument("--robust-serial-fence", action="store_true")
+    parser.add_argument("--robust-post-spin", type=int, default=500)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()
@@ -481,7 +501,11 @@ def main() -> None:
         rows, cols = presets[args.preset]
     out = args.out.resolve()
     case = prepare(rows, cols, out, sms=args.sms, loader=args.loader,
-                   warps_per_core=args.warps_per_core, preset=args.preset)
+                   warps_per_core=args.warps_per_core, preset=args.preset,
+                   robust_end_drain=args.robust_end_drain,
+                   robust_spin_until_reset=args.robust_spin_until_reset,
+                   robust_serial_fence=args.robust_serial_fence,
+                   robust_post_spin=args.robust_post_spin)
     if not args.prepare_only:
         case = build(case, out)
         print(json.dumps(case, indent=2))

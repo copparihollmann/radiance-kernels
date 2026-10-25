@@ -79,10 +79,18 @@ int main() {
   uint64_t total_cycles = 0u;
   for (uint32_t iteration = 0u; iteration < HOTSPOT3D_ITERATIONS;
        ++iteration) {
+#if !NIGHTLY_ROBUST_SPIN_UNTIL_RESET
     if (iteration != 0u) hold_gpu_in_reset();
+#endif
     nightly_host_launch(NIGHTLY_CLUSTERS, iteration);
     completed &= nightly_host_wait(NIGHTLY_CLUSTERS);
     total_cycles += nightly_host_report(NIGHTLY_CLUSTERS);
+#if NIGHTLY_ROBUST_SPIN_UNTIL_RESET
+    // Robust kernels deliberately keep `finished` low after publishing END.
+    // Reset immediately after every completed launch, including the final
+    // launch, before either relaunching or reading the checked output.
+    hold_gpu_in_reset();
+#endif
     if (!completed) break;
   }
   asm volatile("fence rw, rw" ::: "memory");

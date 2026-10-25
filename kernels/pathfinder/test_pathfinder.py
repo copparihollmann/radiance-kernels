@@ -144,13 +144,23 @@ class PathfinderTest(unittest.TestCase):
             self.assertIn(".globl pathfinder_scratch", assembly)
             self.assertIn(".globl pathfinder_guard_middle", assembly)
             meaningful = run.prepare(256, 4096, Path(temp) / "meaningful",
-                                     sms=4, preset="meaningful")
+                                     sms=4, preset="meaningful",
+                                     loader="direct-hashed",
+                                     robust_end_drain=True,
+                                     robust_spin_until_reset=True,
+                                     robust_serial_fence=True,
+                                     robust_post_spin=20000)
             self.assertTrue(meaningful["is_meaningful_workload"])
             self.assertEqual(meaningful["cells"], 1_048_576)
             self.assertTrue(meaningful["work_accounting"]
                             ["all_threads_have_useful_work_every_phase"])
             self.assertEqual(meaningful["work_accounting"]
                              ["uniform_barrier_count_per_sm"], 257)
+            self.assertTrue(meaningful["gpu_address_hash"])
+            self.assertTrue(meaningful["robust_end_drain"])
+            self.assertTrue(meaningful["robust_spin_until_reset"])
+            self.assertTrue(meaningful["robust_serial_fence"])
+            self.assertEqual(meaningful["robust_post_spin"], 20000)
 
     def test_prepare_is_deterministic(self):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
@@ -210,6 +220,10 @@ class PathfinderTest(unittest.TestCase):
             run.validate_parameters(16, 32, 4, "logical", 8)
         with self.assertRaisesRegex(ValueError, "multiple of 16"):
             run.validate_parameters(16, 70, 2, "logical", 8)
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+                run.prepare(16, 64, Path(temp),
+                            robust_serial_fence=True)
 
 
 if __name__ == "__main__":

@@ -68,7 +68,10 @@ class GaussianRunTest(unittest.TestCase):
 
     def test_meaningful_contract_and_residual(self):
         with self.tempdir() as directory:
-            case = run.prepare("meaningful", 4, Path(directory))
+            case = run.prepare(
+                "meaningful", 4, Path(directory), loader="direct-hashed",
+                robust_end_drain=True, robust_spin_until_reset=True,
+                robust_serial_fence=True, robust_post_spin=20000)
             self.assertEqual(case["size"], 64)
             self.assertEqual(case["stages"], 126)
             self.assertEqual(case["meaningful_vs_upstream_default_cubic_work_ratio"], 8.0)
@@ -76,6 +79,21 @@ class GaussianRunTest(unittest.TestCase):
                                  case["residual_tolerance"])
             self.assertEqual(case["fan1_stages"], 63)
             self.assertEqual(case["fan2_stages"], 63)
+            self.assertEqual(case["loader"], "direct-hashed")
+            self.assertTrue(case["gpu_address_hash"])
+            self.assertTrue(case["robust_end_drain"])
+            self.assertTrue(case["robust_spin_until_reset"])
+            self.assertTrue(case["robust_serial_fence"])
+            self.assertEqual(case["robust_post_spin"], 20000)
+            config = (run.GENERATED / "config.h").read_text()
+            self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 1", config)
+            self.assertIn("#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET 1", config)
+
+    def test_robust_completion_requires_end_drain(self):
+        with self.tempdir() as directory:
+            with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+                run.prepare("canary", 1, Path(directory),
+                            robust_spin_until_reset=True)
 
     def test_reproducible_generation(self):
         with self.tempdir() as first, self.tempdir() as second:
