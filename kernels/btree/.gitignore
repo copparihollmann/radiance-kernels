@@ -1,0 +1,8 @@
+__pycache__/
+generated/
+runs/
+data.S
+*.o
+*.elf
+*.dump
+*.addrhash
