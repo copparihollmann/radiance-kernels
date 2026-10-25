@@ -82,6 +82,14 @@ For a workload that still loses a line, `--robust-serial-fence` explicitly
 fences every worker warp in sequence through an uncached mailbox handoff
 before the cache drains. It requires `--robust-end-drain`; its cost is measured
 and it is an FPGA candidate until repeated complete-output gates pass.
+`--robust-cluster-l1-manager` is a separate, bounded completion candidate. It
+keeps all three robust passes and has every core capacity-drain its private L0d,
+but synchronizes all L0d drains before one manager core per cluster drains the
+cluster-shared L1. The default is off and retains the established epilogue
+exactly. This option also requires `--robust-end-drain`; it has no FPGA
+correctness claim until it passes the same complete-output hardware gates.
+The opt-in protocol reserves reusable barrier ID 13; the STREAM kernel itself
+does not issue barriers and therefore does not conflict with that reservation.
 Use `--diagnostic-readback` to print the actual
 digest and all guard words on failure; that flag changes only the RV64 host
 checker. Neither option reduces the array length or changes an elemental

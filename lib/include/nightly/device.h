@@ -38,6 +38,9 @@
 #ifndef NIGHTLY_ROBUST_TOKEN_FENCE
 #define NIGHTLY_ROBUST_TOKEN_FENCE 0
 #endif
+#ifndef NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
+#define NIGHTLY_ROBUST_CLUSTER_L1_MANAGER 0
+#endif
 #if NIGHTLY_ROBUST_SPIN_UNTIL_RESET && !NIGHTLY_ROBUST_GMEM_END
 #error "NIGHTLY_ROBUST_SPIN_UNTIL_RESET requires NIGHTLY_ROBUST_GMEM_END"
 #endif
@@ -46,6 +49,9 @@
 #endif
 #if NIGHTLY_ROBUST_TOKEN_FENCE && !NIGHTLY_ROBUST_SERIAL_FENCE
 #error "NIGHTLY_ROBUST_TOKEN_FENCE requires NIGHTLY_ROBUST_SERIAL_FENCE"
+#endif
+#if NIGHTLY_ROBUST_CLUSTER_L1_MANAGER && !NIGHTLY_ROBUST_GMEM_END
+#error "NIGHTLY_ROBUST_CLUSTER_L1_MANAGER requires NIGHTLY_ROBUST_GMEM_END"
 #endif
 #if NIGHTLY_ROBUST_GMEM_END
 #include <rad_tapeout.h>
@@ -70,8 +76,12 @@ extern "C" uint32_t __mu_num_warps = NIGHTLY_OCC;
 /* mu_start.S: take the cluster index for the warp stacks from printBuf (see mu_cluster_id) */
 extern "C" uint32_t __mu_cluster_from_pb = 1;
 
-/* Barrier ids: mu_schedule uses 0.  nightly_kernel_end uses 15.  Kernels use 1..14. */
+/* Barrier ids: mu_schedule uses 0, nightly_kernel_end uses 15, and kernels may
+ * use 1..14.  Robust completion reuses 14 after the kernel body has converged.
+ * Callers enabling NIGHTLY_ROBUST_CLUSTER_L1_MANAGER must additionally reserve
+ * 13 from their kernel body so its repeated epilogue rendezvous cannot collide. */
 #define NIGHTLY_BAR_END 15u
+#define NIGHTLY_BAR_ROBUST_DRAIN 13u
 
 static inline uint32_t nightly_mcycle(void) {
   uint32_t c;
@@ -211,6 +221,65 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
    * because the arrival barrier synchronizes warps but does not drain their
    * independent store queues.  Keep the divergent guard explicit: LLVM has
    * previously cloned a following barrier into both arms without the else. */
+#if NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(RAD_EPI_QUEUE_SPIN);
+    mu_fence();
+    nightly_l0d_drain();
+  } else {
+    asm volatile("nop");
+  }
+  /* Candidate completion optimization: L0d is private to each core, so one
+   * lane on every core still performs every required L0d capacity walk.  L1
+   * is shared by the cluster, so only warp 0 / lane 0 capacity-drains it.
+   * Both barriers are encountered uniformly by every warp.  The first makes
+   * all private L0d drains complete before the manager starts L1; the second
+   * prevents the next pass (or END) from racing the shared drain.  Barrier 13
+   * is reusable after each completed rendezvous and does not collide with the
+   * scheduler (0) or END/fence barrier 14/15.  Opt-in callers reserve 13 from
+   * their kernel body for this protocol. */
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+  if (warp == 0u && lane == 0u) {
+    nightly_l1_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(RAD_EPI_SETTLE);
+    nightly_l0d_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+  if (warp == 0u && lane == 0u) {
+    nightly_l1_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+
+  /* Keep the third pass that full-size xRAGE required in the default path. */
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(RAD_EPI_SETTLE);
+    nightly_l0d_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+  if (warp == 0u && lane == 0u) {
+    nightly_l1_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(NIGHTLY_ROBUST_POST_SPIN);
+  } else {
+    asm volatile("nop");
+  }
+#else
   if (warp < MU_NUM_CORES && lane == 0u) {
     rad_pause(RAD_EPI_QUEUE_SPIN);
     mu_fence();
@@ -232,6 +301,7 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
   } else {
     asm volatile("nop");
   }
+#endif
   mu_barrier(NIGHTLY_BAR_END - 1u, warps);
   if (warp < MU_NUM_CORES && lane == 0u) {
     nightly_pb_put(NIGHTLY_PB_END + (uint32_t)vx_core_id(), nightly_mcycle());

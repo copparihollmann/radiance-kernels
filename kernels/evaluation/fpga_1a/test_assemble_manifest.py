@@ -51,6 +51,27 @@ class AssembleManifestTests(unittest.TestCase):
                                       "collision_policy": "parallel"}),
                          "scatter-parallel")
 
+    def test_stream_completion_candidate_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "stream-copy--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "stream-copy", "correctness": "digest-checked",
+                "robust_end_drain": True,
+                "robust_cluster_l1_manager": True,
+                "robust_completion_mode": "cluster-l1-manager-candidate",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "stream")["workloads"][0]
+            self.assertTrue(row["robust_cluster_l1_manager"])
+            self.assertEqual(
+                row["robust_completion_mode"],
+                "cluster-l1-manager-candidate",
+            )
+
     def test_gather_block_cyclic_metadata_is_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

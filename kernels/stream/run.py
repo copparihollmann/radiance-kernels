@@ -65,7 +65,8 @@ def prepare(kind: str, elements: int, out: Path,
             robust_serial_fence: bool = False,
             robust_post_spin: int = 500,
             block_cyclic_lines: bool = False,
-            block_cyclic_chunk_lines: int = 0) -> dict:
+            block_cyclic_chunk_lines: int = 0,
+            robust_cluster_l1_manager: bool = False) -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
     if elements * 12 + 0x100000 > 0x70000000:
@@ -78,6 +79,8 @@ def prepare(kind: str, elements: int, out: Path,
         raise ValueError("robust_spin_until_reset requires robust_end_drain")
     if robust_serial_fence and not robust_end_drain:
         raise ValueError("robust_serial_fence requires robust_end_drain")
+    if robust_cluster_l1_manager and not robust_end_drain:
+        raise ValueError("robust_cluster_l1_manager requires robust_end_drain")
     if robust_post_spin < 0:
         raise ValueError("robust_post_spin must be nonnegative")
     if block_cyclic_lines and block_cyclic_chunk_lines:
@@ -104,6 +107,7 @@ def prepare(kind: str, elements: int, out: Path,
         f"#define NIGHTLY_ROBUST_GMEM_END {int(robust_end_drain)}",
         f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
         f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
+        f"#define NIGHTLY_ROBUST_CLUSTER_L1_MANAGER {int(robust_cluster_l1_manager)}",
         f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define STREAM_KIND {KINDS[kind]}",
         f"#define STREAM_ELEMENTS {elements}u",
@@ -157,6 +161,7 @@ def prepare(kind: str, elements: int, out: Path,
                 f"stream:{kind}:{elements}:scalar{scalar.hex()}:occ{warps_per_core}:"
                 f"robust{int(robust_end_drain)}:spin{int(robust_spin_until_reset)}:"
                 f"serial{int(robust_serial_fence)}:"
+                f"l1manager{int(robust_cluster_l1_manager)}:"
                 f"post{robust_post_spin}:blockcyclic{int(block_cyclic_lines)}:"
                 f"chunklines{block_cyclic_chunk_lines}".encode()
             ).hexdigest(),
@@ -169,6 +174,11 @@ def prepare(kind: str, elements: int, out: Path,
             "robust_end_drain": robust_end_drain,
             "robust_spin_until_reset": robust_spin_until_reset,
             "robust_serial_fence": robust_serial_fence,
+            "robust_cluster_l1_manager": robust_cluster_l1_manager,
+            "robust_completion_mode": (
+                "cluster-l1-manager-candidate" if robust_cluster_l1_manager
+                else "per-core-l1" if robust_end_drain else "disabled"
+            ),
             "robust_post_spin": robust_post_spin,
             "stream_block_cyclic_lines": block_cyclic_lines,
             "stream_block_cyclic_chunk_lines": block_cyclic_chunk_lines,
@@ -199,6 +209,8 @@ def main() -> None:
                         help="FPGA-only: keep workers live after END until the host soft-reset")
     parser.add_argument("--robust-serial-fence", action="store_true",
                         help="fence each worker warp serially before robust cache drains")
+    parser.add_argument("--robust-cluster-l1-manager", action="store_true",
+                        help="candidate: one core per cluster drains shared L1 after synchronized private L0 drains")
     parser.add_argument("--robust-post-spin", type=int, default=500,
                         help="target cycles after the final robust cache drain (measured)")
     parser.add_argument("--diagnostic-readback", action="store_true",
@@ -218,13 +230,16 @@ def main() -> None:
         parser.error("--robust-spin-until-reset requires --robust-end-drain")
     if args.robust_serial_fence and not args.robust_end_drain:
         parser.error("--robust-serial-fence requires --robust-end-drain")
+    if args.robust_cluster_l1_manager and not args.robust_end_drain:
+        parser.error("--robust-cluster-l1-manager requires --robust-end-drain")
     out = args.out.resolve()
     case = prepare(args.kind, args.elements, out, args.full_host_check,
                    args.sms, args.loader, args.warps_per_core, args.scalar,
                    args.robust_end_drain, args.diagnostic_readback,
                    args.robust_spin_until_reset, args.robust_serial_fence,
                    args.robust_post_spin, args.block_cyclic_lines,
-                   args.block_cyclic_chunk_lines)
+                   args.block_cyclic_chunk_lines,
+                   args.robust_cluster_l1_manager)
     case["host_timing_requested"] = args.host_timing
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:
