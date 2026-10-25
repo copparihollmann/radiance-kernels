@@ -63,6 +63,7 @@ class AssembleManifestTests(unittest.TestCase):
                 "robust_end_drain": True, "robust_spin_until_reset": True,
                 "robust_serial_fence": True,
                 "robust_token_fence": False,
+                "robust_drain_passes": 1,
                 "robust_post_spin": 20000,
                 "correctness": "digest-checked",
                 "kernel_revision": "abc", "kernel_source_sha256": "def",
@@ -80,6 +81,7 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertTrue(row["robust_spin_until_reset"])
             self.assertTrue(row["robust_serial_fence"])
             self.assertFalse(row["robust_token_fence"])
+            self.assertEqual(row["robust_drain_passes"], 1)
             self.assertEqual(row["robust_post_spin"], 20000)
             self.assertEqual(row["elf_sha256"], AM.sha256(build / "kernel.soc.elf"))
 
