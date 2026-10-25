@@ -40,6 +40,23 @@ The nightly RTL is:
 | `mx.h` | MxGemmini commands: loads, loops, scale memory, requantizer, stores |
 | `verify.h` | GPU-side comparison of a result tensor with a golden |
 
+`device.h` normally fences one worker warp per core before publishing END.
+Kernels that define `NIGHTLY_ROBUST_GMEM_END=1` use the stricter experimental
+completion path: settle all warp store queues, capacity-evict L0d and L1 via
+per-cluster/per-core scratch, then publish END. FPGA builds may additionally
+define `NIGHTLY_ROBUST_SPIN_UNTIL_RESET=1` to spin instead of raising the
+defective tile-finished flush edge; after every core posts END, the host then
+soft-resets the still-live warps before reading GMEM. Cyclotron gates use the
+same drain without the spin because the public model lacks that reset MMIO.
+`NIGHTLY_ROBUST_SERIAL_FENCE=1` strengthens the experimental path by handing
+an uncached printBuf epoch from warp to warp and issuing exactly one
+`mu_fence()` at a time before either cache drain. This avoids the taped-out SFU
+hazard from simultaneous fences while explicitly retiring every worker warp's
+own store queue. The serialized fences are included in the measured interval.
+This is intended for
+measured correctness failures where END can precede host-visible writeback;
+its drain cycles are part of the kernel interval and it is not enabled globally.
+
 ## Build and run
 
 1. Use the muon LLVM toolchain with the stack word stride (`llvm/llvm-muon`).

@@ -239,6 +239,13 @@ def fnv(values) -> int:
     return h
 
 
+def fnv32(values) -> int:
+    h = FNV_OFFSET
+    for value in values:
+        h = ((h ^ (value & 0xFFFFFFFF)) * FNV_PRIME) & MASK64
+    return h
+
+
 def source_tag(source: str) -> int:
     return {"sparse": 1, "dense": 2, "sparse_gather": 3}[source]
 
@@ -366,11 +373,26 @@ def write_destination_groups(case: dict) -> int:
 
 def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
             loader: str = "logical", source_pad_lines: int = 0,
-            output_pad_lines: int = 0, warps_per_core: int = 4) -> dict:
+            output_pad_lines: int = 0, warps_per_core: int = 4,
+            gather_block_cyclic_16: bool = False,
+            robust_end_drain: bool = False,
+            robust_spin_until_reset: bool = False,
+            robust_serial_fence: bool = False,
+            robust_token_fence: bool = False,
+            robust_post_spin: int = 500,
+            diagnostic_readback: bool = False) -> dict:
     if not 0 <= source_pad_lines < 64 or not 0 <= output_pad_lines < 64:
         raise ValueError("cache padding must be between 0 and 63 lines")
     if warps_per_core not in (1, 2, 4, 8):
         raise ValueError("warps_per_core must be 1, 2, 4, or 8")
+    if robust_spin_until_reset and not robust_end_drain:
+        raise ValueError("robust_spin_until_reset requires robust_end_drain")
+    if robust_serial_fence and not robust_end_drain:
+        raise ValueError("robust_serial_fence requires robust_end_drain")
+    if robust_token_fence and not robust_serial_fence:
+        raise ValueError("robust_token_fence requires robust_serial_fence")
+    if robust_post_spin < 0:
+        raise ValueError("robust_post_spin must be nonnegative")
     GENERATED.mkdir(exist_ok=True)
     write_u32(GENERATED / "pattern.bin", case["pattern"])
     write_u32(GENERATED / "pattern_gather.bin", case["gather"])
@@ -385,6 +407,11 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         write_u32(GENERATED / "group_offsets.bin", [])
         write_u32(GENERATED / "group_tasks.bin", [])
     expected, overlap = reference(case)
+    pattern_digest = fnv32(case["pattern"])
+    source_digest = fnv(
+        payload(case["payload_tag"], case.get("source_index_base", 0) + i)
+        for i in range(case["src_length"])
+    )
     exploratory = overlap and case["collision_policy"] == "parallel"
     gather_owners = case["length"] * case["wrap"]
     gather_iteration_partition = (
@@ -392,6 +419,10 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         and case["count"] > case["wrap"]
         and sms >= 4
     )
+    if gather_block_cyclic_16 and case["kind"] not in ("gather", "multigather"):
+        raise ValueError("gather block-cyclic scheduling requires Gather or MultiGather")
+    if gather_block_cyclic_16 and gather_iteration_partition:
+        raise ValueError("gather block-cyclic scheduling conflicts with iteration partitioning")
     gather_scratch_elements = gather_owners * sms if gather_iteration_partition else 8
     probe_index = destination(case, 0, 0) if exploratory else 0
     expected_nonzero_outputs = written_destination_count(case) if exploratory else 0
@@ -402,9 +433,15 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
         f"#define NIGHTLY_OCC {warps_per_core}",
+        f"#define NIGHTLY_ROBUST_GMEM_END {int(robust_end_drain)}",
+        f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
+        f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
+        f"#define NIGHTLY_ROBUST_TOKEN_FENCE {int(robust_token_fence)}",
+        f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define SPATTER_KIND {KINDS[case['kind']]}",
         "#define SPATTER_CHAIN 0",
         f"#define SPATTER_PATTERN_LENGTH {case['length']}u",
+        f"#define SPATTER_SOURCE_LENGTH {case['src_length']}u",
         f"#define SPATTER_COUNT {case['count']}u",
         f"#define SPATTER_WRAP {case['wrap']}u",
         f"#define SPATTER_DELTA {case['delta']}u",
@@ -415,12 +452,15 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define SPATTER_GROUP_COUNT {destination_group_count}u",
         f"#define SPATTER_OUTPUT_LENGTH {case['dst_length']}u",
         f"#define SPATTER_EXPECTED_DIGEST 0x{(expected or 0):016x}ULL",
+        f"#define SPATTER_EXPECTED_PATTERN_DIGEST 0x{pattern_digest:016x}ULL",
+        f"#define SPATTER_EXPECTED_SOURCE_DIGEST 0x{source_digest:016x}ULL",
         f"#define SPATTER_READBACK_SAMPLES {readback_samples}u",
         f"#define SPATTER_EXPECTED_SAMPLE_DIGEST 0x{expected_sample:016x}ULL",
         f"#define SPATTER_EXPLORATORY_PROBE_INDEX {probe_index}u",
         f"#define SPATTER_EXPECTED_NONZERO_OUTPUTS {expected_nonzero_outputs}u",
         f"#define SPATTER_EXPLORATORY {int(exploratory)}",
         f"#define SPATTER_GATHER_ITERATION_PARTITION {int(gather_iteration_partition)}",
+        f"#define SPATTER_GATHER_BLOCK_CYCLIC_16 {int(gather_block_cyclic_16)}",
         f"#define SPATTER_GATHER_OWNERS {gather_owners}u",
     ]
     (GENERATED / "config.h").write_text("\n".join(lines) + "\n")
@@ -467,12 +507,20 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "source_tag": case["payload_tag"],
         "requested_local_work_size": case["requested_local_work_size"],
         "muon_warps_per_core": warps_per_core,
+        "robust_end_drain": robust_end_drain,
+        "robust_spin_until_reset": robust_spin_until_reset,
+        "robust_serial_fence": robust_serial_fence,
+        "robust_token_fence": robust_token_fence,
+        "robust_post_spin": robust_post_spin,
+        "diagnostic_readback": diagnostic_readback,
         "source_pad_cache_lines": source_pad_lines,
         "output_pad_cache_lines": output_pad_lines,
         "layout_padding_bytes": (source_pad_lines + output_pad_lines) * 64,
         "source_elements": case["src_length"], "output_elements": case["dst_length"],
         "logical_payload_bytes": case["count"] * case["length"] * 16,
         "expected_digest": None if expected is None else f"{expected:016x}",
+        "expected_pattern_digest": f"{pattern_digest:016x}",
+        "expected_source_digest": f"{source_digest:016x}",
         "expected_sample_digest": f"{expected_sample:016x}" if readback_samples else None,
         "readback_samples": readback_samples,
         "exploratory_probe_index": probe_index if overlap else None,
@@ -481,6 +529,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "collision_policy": case["collision_policy"],
         "destination_group_count": destination_group_count,
         "gather_iteration_partition": gather_iteration_partition,
+        "gather_block_cyclic_16": gather_block_cyclic_16,
         "gather_scratch_elements": gather_scratch_elements if gather_iteration_partition else 0,
         "pattern_inputs": case.get("_pattern_inputs", []),
         "status": "prepared",
@@ -536,6 +585,20 @@ def main() -> int:
                         help="0..63 cache lines inserted before the destination array")
     parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8), default=4,
                         help="Muon occupancy; recorded in the result manifest")
+    parser.add_argument("--gather-block-cyclic-16", action="store_true",
+                        help="assign complete 16-element Gather chunks round-robin to SMs")
+    parser.add_argument("--robust-end-drain", action="store_true",
+                        help="settle store queues and capacity-drain L0d/L1 before END")
+    parser.add_argument("--robust-spin-until-reset", action="store_true",
+                        help="FPGA-only: keep workers live after END until the host soft-reset")
+    parser.add_argument("--robust-serial-fence", action="store_true",
+                        help="fence each worker warp serially before robust cache drains")
+    parser.add_argument("--robust-token-fence", action="store_true",
+                        help="serialize worker fences with one token wait per warp")
+    parser.add_argument("--robust-post-spin", type=int, default=500,
+                        help="target cycles after the final robust cache drain (measured)")
+    parser.add_argument("--diagnostic-readback", action="store_true",
+                        help="print complete mismatch diagnostics if validation fails")
     parser.add_argument("--count", type=int,
                         help="replace the suite repetition count for a clearly labeled scaled run")
     parser.add_argument("--iteration-start", type=int, default=0,
@@ -566,6 +629,12 @@ def main() -> int:
         parser.error("--count must be positive")
     if args.iteration_start < 0:
         parser.error("--iteration-start must be nonnegative")
+    if args.robust_spin_until_reset and not args.robust_end_drain:
+        parser.error("--robust-spin-until-reset requires --robust-end-drain")
+    if args.robust_serial_fence and not args.robust_end_drain:
+        parser.error("--robust-serial-fence requires --robust-end-drain")
+    if args.robust_token_fence and not args.robust_serial_fence:
+        parser.error("--robust-token-fence requires --robust-serial-fence")
     if not 0 <= args.source_pad_lines < 64 or not 0 <= args.output_pad_lines < 64:
         parser.error("cache padding must be between 0 and 63 lines")
     out = args.out.resolve()
@@ -582,13 +651,25 @@ def main() -> int:
             parser.error("--suite and --case must match the existing build")
         selected = (
             args.sms, args.loader, args.source_pad_lines, args.output_pad_lines,
-            args.warps_per_core,
+            args.warps_per_core, args.robust_end_drain,
+            args.gather_block_cyclic_16,
+            args.robust_spin_until_reset, args.robust_serial_fence,
+            args.robust_token_fence,
+            args.robust_post_spin,
+            args.diagnostic_readback,
         )
         recorded = (
             manifest["sm_count"], manifest["loader"],
             manifest.get("source_pad_cache_lines", 0),
             manifest.get("output_pad_cache_lines", 0),
             manifest.get("muon_warps_per_core", 4),
+            manifest.get("robust_end_drain", False),
+            manifest.get("gather_block_cyclic_16", False),
+            manifest.get("robust_spin_until_reset", False),
+            manifest.get("robust_serial_fence", False),
+            manifest.get("robust_token_fence", False),
+            manifest.get("robust_post_spin", 500),
+            manifest.get("diagnostic_readback", False),
         )
         if selected != recorded:
             parser.error("--sim-only build options must match the existing ELF manifest")
@@ -615,6 +696,12 @@ def main() -> int:
         manifest = prepare(
             case, args.suite, args.case, args.sms, args.loader,
             args.source_pad_lines, args.output_pad_lines, args.warps_per_core,
+            args.gather_block_cyclic_16,
+            args.robust_end_drain, args.robust_spin_until_reset,
+            args.robust_serial_fence,
+            args.robust_token_fence,
+            args.robust_post_spin,
+            args.diagnostic_readback,
         )
         manifest["original_count"] = original_count
         manifest["count_overridden"] = args.count is not None and args.count != original_count
@@ -658,6 +745,8 @@ def main() -> int:
                 host_flags.append("-DSPATTER_FORCE_FULL_READBACK=1")
             if args.host_timing:
                 host_flags.append("-DRAD_HOST_TIMING=1")
+            if args.diagnostic_readback:
+                host_flags.append("-DSPATTER_DIAGNOSTIC_READBACK=1")
             if host_flags:
                 build_env["EXTRA_HOST_CXXFLAGS"] = (
                     build_env.get("EXTRA_HOST_CXXFLAGS", "") + " " +

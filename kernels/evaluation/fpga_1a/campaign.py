@@ -370,6 +370,14 @@ def required_workloads(rows: list[dict]) -> list[str]:
     return problems
 
 
+def target_execution_order(target: dict) -> tuple[int, int]:
+    """Run matched normal-DRAM scaling points before secondary comparisons."""
+    sm = target.get("sm_count")
+    if target.get("bitstream_config") == f"{sm}SM_DRAM":
+        return (0, {1: 0, 2: 1, 4: 2}.get(sm, 3))
+    return (1, 0)
+
+
 def make_plan(build_path: Path, asset_path: Path, asset_root: Path,
               out: Path, warmups: int, repetitions: int,
               allow_incomplete: bool) -> dict:
@@ -382,7 +390,7 @@ def make_plan(build_path: Path, asset_path: Path, asset_root: Path,
         raise ValueError("build matrix is incomplete:\n  " + "\n  ".join(problems))
     assets, receipts = load_assets(asset_path, asset_root)
     jobs = []
-    for target in assets["targets"]:
+    for target in sorted(assets["targets"], key=target_execution_order):
         matched = [r for r in rows if r["sm_count"] == target["sm_count"]
                    and r["loader"] == target["loader"]]
         if not matched:
@@ -727,7 +735,7 @@ def main() -> None:
     )
     running.add_argument(
         "--exclude-family", action="append", default=[],
-        choices=("stream", "spatter", "xrage", "fp8_gemm"),
+        choices=("stream", "spatter", "xrage", "fp8_gemm", "gemv_bf16"),
         help="skip a quarantined workload family; may be specified more than once",
     )
     running.add_argument(

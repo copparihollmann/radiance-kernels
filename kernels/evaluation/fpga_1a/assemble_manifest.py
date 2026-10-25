@@ -13,8 +13,29 @@ import subprocess
 REPO = Path(__file__).resolve().parents[3]
 PASSTHROUGH = (
     "case", "collision_policy", "destination_group_count",
-    "muon_warps_per_core",
+    "muon_warps_per_core", "robust_end_drain", "robust_spin_until_reset",
+    "robust_serial_fence", "robust_token_fence", "robust_post_spin",
+    "gather_block_cyclic_16",
+    "diagnostic_readback",
     "source_pad_cache_lines", "output_pad_cache_lines",
+    "rows", "cols", "ilp", "unroll", "output_words", "element_format",
+    "accumulation", "partition", "reference_contract", "no_vpu",
+    "benchmark_contract",
+    "size", "stream_elements", "output_element_count", "expected_digest", "max_ulp",
+    "reference_repository", "reference_revision", "reference_kernel",
+    "reference_kernel_sha256", "reference_kernel_git_blob",
+    "reference_main", "reference_main_sha256", "reference_converter",
+    "reference_converter_sha256", "generated_sha256",
+    "reference_seed", "records", "expected_top_indices",
+    "device_elf_sha256",
+    "dimension", "stored_nnz", "expanded_nnz", "jds_padded_entries",
+    "jds_padding_entries", "jds_depth", "jds_warp_size", "jds_padded_rows",
+    "partition_boundaries", "partition_nnz", "partition_complete",
+    "partition_overlap", "accumulation_order", "scalar_only", "vpu",
+    "vector_isa", "gemmini", "mx", "padding_index_policy", "dataset",
+    "dataset_source", "dataset_files", "upstream_gold_validation",
+    "generator_model_check", "absolute_tolerance", "relative_tolerance",
+    "oracle", "equation",
 )
 
 
@@ -98,7 +119,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--family", required=True,
-                        choices=("stream", "spatter", "xrage", "fp8_gemm"))
+                        choices=("stream", "stream_dot", "spatter", "xrage",
+                                 "fp8_gemm", "gemv_bf16", "stencil3d",
+                                 "nearn", "spmv_jds"))
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     manifest = assemble(args.root.resolve(), args.family)

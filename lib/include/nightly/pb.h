@@ -15,7 +15,10 @@
  *   7      CLUSTER   host -> GPU: NIGHTLY_CLUSTER_TAG | cluster index, written before LAUNCH (see
  *                    nightly_cluster_id: the cluster-ID CSR is 1 bit wide in the RTL)
  *   8..15  PHASE    GPU -> host: kernel-defined phase stamps (mcycle), cluster core 0
- *   16..63 free
+ *   16     FENCE_EPOCH device-only robust-completion warp-fence handoff
+ *   17..47 free
+ *   48     HEARTBEAT kernel progress
+ *   49..63 free
  */
 #ifndef NIGHTLY_PB_H
 #define NIGHTLY_PB_H
@@ -32,6 +35,7 @@
 #define NIGHTLY_PB_STATUS  6u
 #define NIGHTLY_PB_CLUSTER 7u
 #define NIGHTLY_PB_PHASE   8u   /* + phase index, 0..7 */
+#define NIGHTLY_PB_FENCE_EPOCH 16u
 #define NIGHTLY_PB_HEARTBEAT 48u /* kernel progress value, printed by the host while it waits */
 
 #define NIGHTLY_LAUNCH_MAGIC 0x6E1A0C11u

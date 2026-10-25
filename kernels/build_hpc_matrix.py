@@ -82,7 +82,7 @@ def record(path: Path, *, name: str, family: str, sms: int,
 
 
 def build_stream(out: Path, sms: list[int], loaders: list[str],
-                 elements: int) -> list[dict]:
+                 elements: int, scalar: float) -> list[dict]:
     rows = []
     for loader in loaders:
         for sm in sms:
@@ -91,10 +91,12 @@ def build_stream(out: Path, sms: list[int], loaders: list[str],
                 target = out / loader / name
                 run(["python3", str(STREAM / "run.py"), "--kind", kind,
                      "--elements", str(elements), "--sms", str(sm),
-                     "--loader", loader, "--full-host-check", "--out", str(target)])
+                     "--loader", loader, "--scalar", str(scalar),
+                     "--full-host-check", "--out", str(target)])
                 rows.append(record(target, name=name, family="stream",
                                    sms=sm, loader=loader,
-                                   extra={"operation": kind, "elements": elements}))
+                                   extra={"operation": kind, "elements": elements,
+                                          "scalar": scalar}))
     return rows
 
 
@@ -160,7 +162,8 @@ def build_gemm(out: Path, sms: list[int], loaders: list[str]) -> list[dict]:
                 "gpu_address_hash": loader == "direct-hashed",
                 "shape": {"m": 512, "n": 512, "k": 512},
                 "format": "mxfp8-e4m3", "vpu": False,
-                "correctness": "nightly-device-full-and-host-spot-check",
+                "b_copy_policy": "cluster-parity",
+                "correctness": "nightly-device-full-bit-exact-and-host-spot-check",
                 "status": "built", "elf_sha256": sha256(elf),
             }
             (target / "result.json").write_text(json.dumps(result, indent=2) + "\n")
@@ -176,26 +179,35 @@ def main() -> None:
     parser.add_argument("--loaders", nargs="+",
                         choices=("logical", "direct-hashed"),
                         default=("logical", "direct-hashed"))
-    parser.add_argument("--stream-elements", type=int, default=4102)
+    parser.add_argument("--stream-elements", type=int, default=1048576)
+    parser.add_argument("--stream-scalar", type=float, default=3.0,
+                        help="Scale/Triad scalar; 3.0 matches STREAM v5.10")
     parser.add_argument("--xrage-suite", type=Path,
                         help="suite emitted by spatter/tools/extract-xrage-bundle.py")
     parser.add_argument("--require-xrage", action="store_true",
                         help="fail instead of producing a matrix without xRAGE")
     parser.add_argument("--skip-gemm", action="store_true")
+    parser.add_argument("--only-gemm", action="store_true",
+                        help="build only the no-VPU MX-GEMM rows")
     args = parser.parse_args()
+    if args.only_gemm and args.skip_gemm:
+        parser.error("--only-gemm and --skip-gemm are mutually exclusive")
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     sms = sorted(set(args.sms))
     loaders = list(dict.fromkeys(args.loaders))
-    rows = build_stream(out, sms, loaders, args.stream_elements)
-    rows.extend(build_spatter(out, sms, loaders))
-    if args.xrage_suite is not None:
-        suite = args.xrage_suite.resolve()
-        if not suite.is_file():
-            parser.error(f"--xrage-suite is not a file: {suite}")
-        rows.extend(build_xrage(out, sms, loaders, suite))
-    elif args.require_xrage:
-        parser.error("--require-xrage needs --xrage-suite")
+    rows = []
+    if not args.only_gemm:
+        rows.extend(build_stream(out, sms, loaders, args.stream_elements,
+                                 args.stream_scalar))
+        rows.extend(build_spatter(out, sms, loaders))
+        if args.xrage_suite is not None:
+            suite = args.xrage_suite.resolve()
+            if not suite.is_file():
+                parser.error(f"--xrage-suite is not a file: {suite}")
+            rows.extend(build_xrage(out, sms, loaders, suite))
+        elif args.require_xrage:
+            parser.error("--require-xrage needs --xrage-suite")
     if not args.skip_gemm:
         rows.extend(build_gemm(out, sms, loaders))
     source = source_state()

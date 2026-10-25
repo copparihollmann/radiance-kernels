@@ -18,7 +18,40 @@ int main() {
   nh_puts("mesh_util_kernel="); nh_putfix(nightly_util_bp(macs, peak * NIGHTLY_CLUSTERS, cyc), 2);
   nh_puts("% mesh_util_c0_first_to_last_compute=");
   nh_putfix(nightly_util_bp(macs / NIGHTLY_CLUSTERS, peak, mesh1 - mesh0), 2); nh_puts("%\n");
-  const int good = nightly_host_check("C", NIGHTLY_CLUSTERS, GEMM_C_ADDR, GEMM_G_ADDR, GEMM_M * GEMM_N, 100, GEMM_M * GEMM_N / 100);
+  constexpr uint32_t elements = GEMM_M * GEMM_N;
+  const int good = nightly_host_check(
+      "C", NIGHTLY_CLUSTERS, GEMM_C_ADDR, GEMM_G_ADDR, elements,
+      100, elements / 100);
+  // The generic helper supports approximate neural-network kernels.  This GEMM
+  // golden models the accelerator's own accumulation order, so require the
+  // stronger result that the complete BF16 output is bit-exact.  Also gate the
+  // independently addressed Rocket sample and every published verification
+  // field; printing either check without making it affect PASS hid failures.
+  int strict = 1;
+  const NhVerify verify0 = nightly_host_read_verify(0);
+  if (!verify0.done || verify0.n != elements || verify0.exact != elements ||
+      verify0.ulp1 || verify0.bad || verify0.poison || verify0.nonfin ||
+      verify0.err_bp) {
+    strict = 0;
+  }
+  for (uint32_t cl = 1; cl < NIGHTLY_CLUSTERS; ++cl) {
+    const NhVerify verify = nightly_host_read_verify(cl);
+    if (verify.done != verify0.done || verify.n != verify0.n ||
+        verify.exact != verify0.exact || verify.ulp1 != verify0.ulp1 ||
+        verify.bad != verify0.bad || verify.poison != verify0.poison ||
+        verify.nonfin != verify0.nonfin || verify.err_bp != verify0.err_bp) {
+      strict = 0;
+    }
+  }
+  constexpr uint32_t spot_samples = elements < 128 ? elements : 128;
+  const uint32_t spot_exact = nightly_host_spot_check(
+      GEMM_C_ADDR, GEMM_G_ADDR, elements, spot_samples);
+  if (spot_exact != spot_samples) strict = 0;
+  nh_puts("C strict bit-exact gate: device=");
+  nh_puts(verify0.exact == elements ? "exact" : "mismatch");
+  nh_puts(" host_spot="); nh_putu(spot_exact); nh_putc('/');
+  nh_putu(spot_samples); nh_puts(" clusters=");
+  nh_puts(strict ? "agree" : "mismatch"); nh_putc('\n');
 #if defined(GEMM_DIAG) && GEMM_DIAG
   nh_puts("bad per 128x64 tile (row-major tiles):");
   for (uint32_t t = 0; t < 16; t++) { nh_putc(' '); nh_putu(nightly_pb_read(0, 32 + t)); }
@@ -37,7 +70,7 @@ int main() {
     nh_flush();
   }
 #endif
-  const int pass = ok && good;   // < 1 % Frobenius, < 1 % of elements off by more than one step
+  const int pass = ok && good && strict;
   nh_puts(pass ? "PASS\n" : "FAIL\n"); nh_flush();
   exit(pass ? 0 : 1);
 }

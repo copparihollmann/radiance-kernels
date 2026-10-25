@@ -2,3 +2,5 @@ data
 gemv
 expected
 __pycache__
+generated
+data.S

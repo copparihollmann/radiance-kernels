@@ -4,12 +4,14 @@ The [workload result summary](../README.md) combines these cycles
 with the Spatter measurements.
 
 The four independent STREAM operations use float32 arrays: Copy `C=A`, Scale
-`B=2*C`, Add `C=A+B`, and Triad `A=B+2*C`. They build through `../common.mk`
+`B=3*C`, Add `C=A+B`, and Triad `A=B+3*C`, matching the elemental equations
+and scalar in STREAM v5.10. They build through `../common.mk`
 and run on the same Radiance SoC as `kernels/spatter`. The generated
 inputs are exact small integers in float32, so the expected output digest does
 not depend on rounding differences. One operation runs per ELF; a complete
-four-stage STREAM sequence would use a different data dependency and timing
-contract.
+four-stage, ten-iteration STREAM sequence would use a different data dependency
+and timing contract. These results must therefore be reported as independent
+STREAM elemental kernels, not as an official STREAM bandwidth score.
 
 Build each case with `LLVM_MUON`, `RISCV_TOOLCHAIN_PATH`,
 `RISCV64_TOOLCHAIN_PATH`, `RISCV`, and `MU_STACK_WORD_STRIDE` set for the same
@@ -23,6 +25,11 @@ python3 run.py --kind scale --elements 65536 --out runs/scale-65536
 python3 run.py --kind add --elements 65536 --out runs/add-65536
 python3 run.py --kind triad --elements 65536 --out runs/triad-65536
 ```
+
+`--scalar` is recorded in every manifest. Its default is the STREAM v5.10
+value `3.0`; a different value is deliberately labelled `stream-like` rather
+than equation-equivalent. The full campaign defaults to 1,048,576 elements so
+the measured region is not dominated by the former 4,102-element smoke size.
 
 Pass `--sms 1`, `--sms 2`, or `--sms 4` to build for that many physical SMs.
 Each SM owns a contiguous range aligned to a 64-byte cache line. The host tags
@@ -62,6 +69,23 @@ The interval is not a per-core GPU cycle count; compare it with other runs
 only after recording the host clock domain and hardware revision. The flag
 changes only the RV64 host; the RV32 Muon image was checked byte-for-byte
 against the untimed 256-element Copy smoke build.
+
+`--robust-end-drain` is an opt-in completion mode for configurations where all
+cores reach END but a full host digest still sees dirty output lines. It waits
+for independent warp store queues, capacity-evicts each core's L0d and the
+shared L1 through disjoint `(SM, core)` scratch windows, and records the added
+work inside `kernel_cycles`. On FPGA, pair it with
+`--robust-spin-until-reset` to post END without returning through the defective
+tile-finished flush and let the host soft-reset workers before GMEM readback.
+Cyclotron gates omit that flag because the public model lacks the reset MMIO.
+For a workload that still loses a line, `--robust-serial-fence` explicitly
+fences every worker warp in sequence through an uncached mailbox handoff
+before the cache drains. It requires `--robust-end-drain`; its cost is measured
+and it is an FPGA candidate until repeated complete-output gates pass.
+Use `--diagnostic-readback` to print the actual
+digest and all guard words on failure; that flag changes only the RV64 host
+checker. Neither option reduces the array length or changes an elemental
+equation.
 
 Use `../spatter/tools/spatter-verilator-run.py` and
 `../spatter/tools/spatter-cyclotron-run.py` with `--source-root runs` and a

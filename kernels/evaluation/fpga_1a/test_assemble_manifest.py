@@ -23,6 +23,10 @@ class AssembleManifestTests(unittest.TestCase):
                 "status": "built", "sm_count": 4, "loader": "logical",
                 "kind": "scatter", "collision_policy": "ordered", "case": 1,
                 "destination_group_count": 17, "muon_warps_per_core": 8,
+                "robust_end_drain": True, "robust_spin_until_reset": True,
+                "robust_serial_fence": True,
+                "robust_token_fence": False,
+                "robust_post_spin": 20000,
                 "correctness": "digest-checked",
                 "kernel_revision": "abc", "kernel_source_sha256": "def",
             }
@@ -35,12 +39,158 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(row["operation"], "scatter-ordered")
             self.assertEqual(row["destination_group_count"], 17)
             self.assertEqual(row["muon_warps_per_core"], 8)
+            self.assertTrue(row["robust_end_drain"])
+            self.assertTrue(row["robust_spin_until_reset"])
+            self.assertTrue(row["robust_serial_fence"])
+            self.assertFalse(row["robust_token_fence"])
+            self.assertEqual(row["robust_post_spin"], 20000)
             self.assertEqual(row["elf_sha256"], AM.sha256(build / "kernel.soc.elf"))
 
     def test_parallel_scatter_uses_canonical_operation(self):
         self.assertEqual(AM.operation({"kind": "scatter",
                                       "collision_policy": "parallel"}),
                          "scatter-parallel")
+
+    def test_gather_block_cyclic_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "xrage-gather-blockcyclic16--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "gather", "gather_block_cyclic_16": True,
+                "correctness": "digest-checked",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "xrage")["workloads"][0]
+            self.assertEqual(row["operation"], "gather")
+            self.assertTrue(row["gather_block_cyclic_16"])
+
+    def test_gemv_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "gemv-bf16--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "gemv", "rows": 16, "cols": 4096,
+                "ilp": 1, "unroll": 8, "output_words": 8,
+                "element_format": "bf16", "no_vpu": True,
+                "correctness": "full-output-exact-device-order-digest",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "gemv_bf16")["workloads"][0]
+            self.assertEqual(row["operation"], "gemv")
+            self.assertEqual(row["rows"], 16)
+            self.assertEqual(row["output_words"], 8)
+            self.assertTrue(row["no_vpu"])
+
+    def test_stencil_reference_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "stencil3d--size-64--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "size": 64, "output_element_count": 64 ** 3,
+                "expected_digest": "1234", "max_ulp": 6,
+                "reference_repository": "vortexgpgpu/vortex",
+                "reference_revision": "abc", "reference_kernel": "kernel.cpp",
+                "reference_seed": 50,
+                "correctness": "complete-output-reference-check",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "stencil3d")["workloads"][0]
+            self.assertEqual(row["size"], 64)
+            self.assertEqual(row["output_element_count"], 64 ** 3)
+            self.assertEqual(row["max_ulp"], 6)
+            self.assertEqual(row["reference_seed"], 50)
+
+    def test_stream_dot_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "stream-dot--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "stream-dot", "stream_elements": 1048576,
+                "output_element_count": 4, "expected_digest": "1234",
+                "reference_repository": "UoB-HPC/BabelStream",
+                "reference_revision": "abc", "reference_kernel": "dot_kernel",
+                "correctness": "exact-device-order-partials-and-guards",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "stream_dot")["workloads"][0]
+            self.assertEqual(row["operation"], "stream-dot")
+            self.assertEqual(row["stream_elements"], 1048576)
+            self.assertEqual(row["output_element_count"], 4)
+            self.assertEqual(row["reference_repository"], "UoB-HPC/BabelStream")
+
+    def test_nearn_reference_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "nearn--records-1048576--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "nearest-neighbor-distance", "records": 1048576,
+                "output_element_count": 1048576, "expected_digest": "1234",
+                "expected_top_indices": [4, 3, 2, 1, 0], "max_ulp": 1,
+                "reference_repository": "vortexgpgpu/vortex",
+                "reference_revision": "abc", "reference_kernel": "kernel.cl",
+                "reference_kernel_sha256": "deadbeef",
+                "correctness": "complete-output-ulp-and-top-k-check",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "nearn")["workloads"][0]
+            self.assertEqual(row["records"], 1048576)
+            self.assertEqual(row["expected_top_indices"], [4, 3, 2, 1, 0])
+            self.assertEqual(row["max_ulp"], 1)
+            self.assertEqual(row["reference_kernel_sha256"], "deadbeef")
+
+    def test_spmv_jds_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "spmv-jds--dubcova3--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "sparse-matrix-vector-product",
+                "dimension": 146689, "expanded_nnz": 3636649,
+                "jds_padded_entries": 3637664,
+                "partition_boundaries": [0, 20544, 53184, 89456, 146689],
+                "partition_nnz": [909329, 909362, 908874, 909084],
+                "partition_complete": True, "partition_overlap": False,
+                "accumulation_order": "strict-increasing-k-no-contraction",
+                "scalar_only": True, "vpu": False, "vector_isa": False,
+                "gemmini": False, "mx": False,
+                "reference_repository": "vortexgpgpu/vortex",
+                "reference_revision": "abc", "reference_kernel": "kernel.cl",
+                "reference_kernel_sha256": "deadbeef",
+                "reference_main": "main.cc", "reference_main_sha256": "feedface",
+                "reference_converter": "convert_dataset.c",
+                "reference_converter_sha256": "cafebabe",
+                "generated_sha256": {"data.bin": "1234"},
+                "correctness": "complete-output-upstream-tolerance-exact-digest-and-guards",
+            }
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "spmv_jds")["workloads"][0]
+            self.assertEqual(row["operation"], "sparse-matrix-vector-product")
+            self.assertEqual(row["dimension"], 146689)
+            self.assertEqual(row["partition_nnz"],
+                             [909329, 909362, 908874, 909084])
+            self.assertTrue(row["partition_complete"])
+            self.assertFalse(row["vpu"])
+            self.assertFalse(row["vector_isa"])
+            self.assertEqual(row["reference_main_sha256"], "feedface")
+            self.assertEqual(row["reference_converter_sha256"], "cafebabe")
+            self.assertEqual(row["generated_sha256"], {"data.bin": "1234"})
 
 
 if __name__ == "__main__":

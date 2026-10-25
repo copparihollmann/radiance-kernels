@@ -108,7 +108,17 @@ static inline int nightly_host_wait(uint32_t n_clusters, uint64_t max_polls = 50
     for (uint32_t cl = 0; cl < n_clusters; cl++)
       for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++)
         done += nightly_pb_read(cl, NIGHTLY_PB_END + c) != 0;
-    if (done == n_clusters * NIGHTLY_CORES_PER_CLUSTER) return 1;
+    if (done == n_clusters * NIGHTLY_CORES_PER_CLUSTER) {
+#if defined(NIGHTLY_ROBUST_SPIN_UNTIL_RESET) && NIGHTLY_ROBUST_SPIN_UNTIL_RESET
+      /* Robust device kernels deliberately spin after publishing END so the
+       * tile's broken finish-edge flush cannot race host readback.  Reset
+       * retires those warps without changing DRAM, matching rad_tapeout.h's
+       * measured-good in-kernel epilogue protocol. */
+      *(volatile uint32_t *)NIGHTLY_HOST_GPU_RESET = 1u;
+      asm volatile("fence" ::: "memory");
+#endif
+      return 1;
+    }
   }
   return 0;
 }

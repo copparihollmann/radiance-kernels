@@ -186,6 +186,32 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
           gather_source(j, final_iteration));
     }
   }
+#elif SPATTER_GATHER_BLOCK_CYCLIC_16
+  // Assign complete 16-element (two cache-line) output chunks round-robin
+  // across SMs.  This retains exclusive cache-line ownership while mixing
+  // distant sections of an irregular pattern to reduce per-SM load skew.
+  constexpr uint32_t owners = length * SPATTER_WRAP;
+  constexpr uint32_t block_elements = 16u;
+  constexpr uint32_t chunks =
+      (owners + block_elements - 1u) / block_elements;
+  const uint32_t owned_chunks = block_id < chunks
+      ? (chunks + NIGHTLY_CLUSTERS - 1u - block_id) / NIGHTLY_CLUSTERS
+      : 0u;
+  const uint32_t chunk_stride = threads_per_block / block_elements;
+  const uint32_t lane = tid % block_elements;
+  for (uint32_t chunk_rank = tid / block_elements;
+       chunk_rank < owned_chunks; chunk_rank += chunk_stride) {
+    const uint32_t chunk = block_id + chunk_rank * NIGHTLY_CLUSTERS;
+    const uint32_t owner = chunk * block_elements + lane;
+    if (owner >= owners)
+      continue;
+    const uint32_t r = owner / length;
+    const uint32_t j = owner - r * length;
+    for (uint32_t i = r; i < SPATTER_COUNT; i += SPATTER_WRAP) {
+      spatter::copy_value(spatter_dense, owner, spatter_sparse,
+                          gather_source(j, i));
+    }
+  }
 #else
   // A dense output slot has one owner. It processes the iterations that wrap
   // to that slot in order, so the full Spatter gather result is deterministic.

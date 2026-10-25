@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -30,10 +31,10 @@ def input_value(name: str, i: int) -> float:
     return float((5 * i) % 1024 + 3)
 
 
-def result_value(kind: str, i: int) -> float:
+def result_value(kind: str, i: int, scalar: float) -> float:
     a, b, c = (input_value(name, i) for name in "abc")
-    return {"copy": a, "scale": 2.0 * c, "add": a + b,
-            "triad": b + 2.0 * c}[kind]
+    return {"copy": a, "scale": scalar * c, "add": a + b,
+            "triad": b + scalar * c}[kind]
 
 
 def float_word(value: float) -> int:
@@ -57,13 +58,26 @@ def write_input(path: Path, name: str, elements: int) -> None:
 
 def prepare(kind: str, elements: int, out: Path,
             full_host_check: bool = False, sms: int = 1,
-            loader: str = "logical", warps_per_core: int = 4) -> dict:
+            loader: str = "logical", warps_per_core: int = 4,
+            scalar: float = 3.0, robust_end_drain: bool = False,
+            diagnostic_readback: bool = False,
+            robust_spin_until_reset: bool = False,
+            robust_serial_fence: bool = False,
+            robust_post_spin: int = 500) -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
     if elements * 12 + 0x100000 > 0x70000000:
         raise ValueError("STREAM arrays exceed the GPU DRAM address window")
     if warps_per_core not in (1, 2, 4, 8):
         raise ValueError("warps_per_core must be 1, 2, 4, or 8")
+    if not math.isfinite(scalar) or scalar <= 0.0:
+        raise ValueError("scalar must be finite and greater than zero")
+    if robust_spin_until_reset and not robust_end_drain:
+        raise ValueError("robust_spin_until_reset requires robust_end_drain")
+    if robust_serial_fence and not robust_end_drain:
+        raise ValueError("robust_serial_fence requires robust_end_drain")
+    if robust_post_spin < 0:
+        raise ValueError("robust_post_spin must be nonnegative")
     GENERATED.mkdir(exist_ok=True)
     output = OUTPUT[kind]
     for name in "abc":
@@ -71,7 +85,7 @@ def prepare(kind: str, elements: int, out: Path,
             write_input(GENERATED / f"{name}.bin", name, elements)
         else:
             (GENERATED / f"{name}.bin").write_bytes(b"")
-    values = [float_word(result_value(kind, i)) for i in range(elements)]
+    values = [float_word(result_value(kind, i, scalar)) for i in range(elements)]
     expected = digest(values)
     samples = min(64, elements) if elements > 1024 and not full_host_check else 0
     positions = [i * (elements - 1) // (samples - 1) for i in range(samples)] if samples else []
@@ -81,8 +95,13 @@ def prepare(kind: str, elements: int, out: Path,
         f"#define HPC_SM_COUNT {sms}u",
         f"#define NIGHTLY_CLUSTERS {sms}",
         f"#define NIGHTLY_OCC {warps_per_core}",
+        f"#define NIGHTLY_ROBUST_GMEM_END {int(robust_end_drain)}",
+        f"#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET {int(robust_spin_until_reset)}",
+        f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
+        f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define STREAM_KIND {KINDS[kind]}",
         f"#define STREAM_ELEMENTS {elements}u",
+        f"#define STREAM_SCALAR {scalar.hex()}f",
         f"#define STREAM_READBACK_SAMPLES {samples}u",
         f"#define STREAM_EXPECTED_READBACK_DIGEST 0x{(expected_sample or expected):016x}ULL",
     ]
@@ -116,6 +135,9 @@ def prepare(kind: str, elements: int, out: Path,
             "sm_count": sms,
             "loader": loader, "gpu_address_hash": loader == "direct-hashed",
             "pattern_length": elements, "stream_elements": elements,
+            "stream_scalar": scalar,
+            "benchmark_contract": "stream-v5.10-elemental-equation"
+                                  if scalar == 3.0 else "stream-like",
             "count": 1, "output_elements": elements,
             "logical_payload_bytes": elements * (12 if kind in ("add", "triad") else 8),
             "expected_digest": f"{expected:016x}",
@@ -124,7 +146,10 @@ def prepare(kind: str, elements: int, out: Path,
             "collision_policy": "parallel",
             "address_plan": {"read": "dense", "write": "dense", "operation": kind},
             "suite_sha256": hashlib.sha256(
-                f"stream:{kind}:{elements}:occ{warps_per_core}".encode()
+                f"stream:{kind}:{elements}:scalar{scalar.hex()}:occ{warps_per_core}:"
+                f"robust{int(robust_end_drain)}:spin{int(robust_spin_until_reset)}:"
+                f"serial{int(robust_serial_fence)}:"
+                f"post{robust_post_spin}".encode()
             ).hexdigest(),
             "case": KINDS[kind], "kernel_source_sha256": source.hexdigest(),
             "correctness": "sample-checked" if samples else "digest-checked",
@@ -132,6 +157,11 @@ def prepare(kind: str, elements: int, out: Path,
             "status": "prepared", "simulator": None,
             "element_format": "float32", "output_element_count": elements,
             "muon_warps_per_core": warps_per_core,
+            "robust_end_drain": robust_end_drain,
+            "robust_spin_until_reset": robust_spin_until_reset,
+            "robust_serial_fence": robust_serial_fence,
+            "robust_post_spin": robust_post_spin,
+            "diagnostic_readback": diagnostic_readback,
             "checker_word_pairs": elements // 2}
     (GENERATED / "manifest.json").write_text(json.dumps(case, indent=2) + "\n")
     out.mkdir(parents=True, exist_ok=True)
@@ -150,6 +180,18 @@ def main() -> None:
                         help="logical GPU loading, or direct loading that bypasses the RTL hash")
     parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8), default=4,
                         help="Muon occupancy used to trade latency hiding for queue pressure")
+    parser.add_argument("--scalar", type=float, default=3.0,
+                        help="Scale/Triad scalar (STREAM v5.10 uses 3.0)")
+    parser.add_argument("--robust-end-drain", action="store_true",
+                        help="settle store queues and capacity-drain L0d/L1 before END")
+    parser.add_argument("--robust-spin-until-reset", action="store_true",
+                        help="FPGA-only: keep workers live after END until the host soft-reset")
+    parser.add_argument("--robust-serial-fence", action="store_true",
+                        help="fence each worker warp serially before robust cache drains")
+    parser.add_argument("--robust-post-spin", type=int, default=500,
+                        help="target cycles after the final robust cache drain (measured)")
+    parser.add_argument("--diagnostic-readback", action="store_true",
+                        help="print actual digest and guards when the RV64 check fails")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--full-host-check", action="store_true",
@@ -157,9 +199,16 @@ def main() -> None:
     parser.add_argument("--host-timing", action="store_true",
                         help="print RV64 release-to-all-finished cycle interval")
     args = parser.parse_args()
+    if args.robust_spin_until_reset and not args.robust_end_drain:
+        parser.error("--robust-spin-until-reset requires --robust-end-drain")
+    if args.robust_serial_fence and not args.robust_end_drain:
+        parser.error("--robust-serial-fence requires --robust-end-drain")
     out = args.out.resolve()
     case = prepare(args.kind, args.elements, out, args.full_host_check,
-                   args.sms, args.loader, args.warps_per_core)
+                   args.sms, args.loader, args.warps_per_core, args.scalar,
+                   args.robust_end_drain, args.diagnostic_readback,
+                   args.robust_spin_until_reset, args.robust_serial_fence,
+                   args.robust_post_spin)
     case["host_timing_requested"] = args.host_timing
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:
@@ -170,6 +219,10 @@ def main() -> None:
         build_env["EXTRA_HOST_CXXFLAGS"] = (
             build_env.get("EXTRA_HOST_CXXFLAGS", "") +
             " -DRAD_HOST_TIMING=1").strip()
+    if args.diagnostic_readback:
+        build_env["EXTRA_HOST_CXXFLAGS"] = (
+            build_env.get("EXTRA_HOST_CXXFLAGS", "") +
+            " -DSTREAM_DIAGNOSTIC_READBACK=1").strip()
     with (out / "build.log").open("w") as log:
         subprocess.run(["make", "kernel.soc.elf"], cwd=ROOT, stdout=log,
                        stderr=subprocess.STDOUT, check=True, env=build_env)

@@ -21,12 +21,71 @@ class StreamRunTest(unittest.TestCase):
             )
             self.assertEqual(result["muon_warps_per_core"], 2)
             self.assertEqual(result["sm_count"], 4)
+            self.assertEqual(result["stream_scalar"], 3.0)
+            self.assertEqual(result["benchmark_contract"],
+                             "stream-v5.10-elemental-equation")
             self.assertIn("#define NIGHTLY_OCC 2", run.GENERATED.joinpath("config.h").read_text())
+            self.assertIn("#define STREAM_SCALAR 0x1.8000000000000p+1f",
+                          run.GENERATED.joinpath("config.h").read_text())
+            self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 0",
+                          run.GENERATED.joinpath("config.h").read_text())
+            self.assertFalse(result["robust_end_drain"])
+            self.assertFalse(result["robust_spin_until_reset"])
+            self.assertFalse(result["robust_serial_fence"])
+            self.assertEqual(result["robust_post_spin"], 500)
+            self.assertFalse(result["diagnostic_readback"])
+
+    def test_nonstandard_scalar_is_explicitly_stream_like(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = run.prepare("triad", 32, Path(directory), scalar=2.0)
+            self.assertEqual(result["stream_scalar"], 2.0)
+            self.assertEqual(result["benchmark_contract"], "stream-like")
 
     def test_rejects_unsupported_warps_per_core(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "warps_per_core"):
                 run.prepare("copy", 32, Path(directory), warps_per_core=3)
+
+    def test_records_robust_end_and_diagnostic_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = run.prepare(
+                "triad", 32, Path(directory), sms=4,
+                robust_end_drain=True, diagnostic_readback=True,
+            )
+            self.assertTrue(result["robust_end_drain"])
+            self.assertTrue(result["diagnostic_readback"])
+            self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 1",
+                          run.GENERATED.joinpath("config.h").read_text())
+
+    def test_records_fpga_spin_handshake_and_requires_drain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = run.prepare(
+                "triad", 32, Path(directory), sms=4,
+                robust_end_drain=True, robust_spin_until_reset=True,
+                robust_serial_fence=True,
+                robust_post_spin=20000,
+            )
+            self.assertTrue(result["robust_spin_until_reset"])
+            self.assertTrue(result["robust_serial_fence"])
+            self.assertEqual(result["robust_post_spin"], 20000)
+            self.assertIn("#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET 1",
+                          run.GENERATED.joinpath("config.h").read_text())
+            self.assertIn("#define NIGHTLY_ROBUST_SERIAL_FENCE 1",
+                          run.GENERATED.joinpath("config.h").read_text())
+            self.assertIn("#define NIGHTLY_ROBUST_POST_SPIN 20000u",
+                          run.GENERATED.joinpath("config.h").read_text())
+            with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+                run.prepare(
+                    "triad", 32, Path(directory),
+                    robust_spin_until_reset=True,
+                )
+            with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+                run.prepare(
+                    "triad", 32, Path(directory),
+                    robust_serial_fence=True,
+                )
+            with self.assertRaisesRegex(ValueError, "robust_post_spin"):
+                run.prepare("triad", 32, Path(directory), robust_post_spin=-1)
 
 
 if __name__ == "__main__":

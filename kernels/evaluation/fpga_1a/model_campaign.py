@@ -38,6 +38,7 @@ TIMING_FILES = (
     "execute.toml", "writeback_operand_fetch.toml", "fence.toml",
     "barrier.toml", "dma_tensor.toml",
 )
+SM_NAME_TOKEN = re.compile(r"-{1,2}(?:1|2|4)sm(?=-|$)")
 
 
 def sha256(path: Path) -> str:
@@ -51,6 +52,11 @@ def sha256(path: Path) -> str:
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2) + "\n")
+
+
+def workload_group_name(name: str) -> str:
+    """Remove an explicit SM-count token wherever a build name places it."""
+    return SM_NAME_TOKEN.sub("", name)
 
 
 def output_address(elf: Path) -> int:
@@ -88,12 +94,17 @@ def workload_checks(row: dict, result: dict, elf: Path) -> tuple[list[str], list
     gmem: list[str] = []
     smem: list[str] = []
     family = row["family"]
-    if family in ("stream", "spatter", "xrage"):
+    if family in ("stream", "stream_dot", "spatter", "xrage", "gemv_bf16",
+                  "stencil3d", "nearn", "spmv_jds"):
         address = output_address(elf)
         if family == "spatter":
             address += int(result.get("output_pad_cache_lines", 0)) * 64
-        if family == "stream":
+        if family in ("stream", "stream_dot"):
             words = int(result.get("output_element_count", result["stream_elements"]))
+        elif family in ("stencil3d", "nearn", "spmv_jds"):
+            words = int(result["output_element_count"])
+        elif family == "gemv_bf16":
+            words = int(result["output_words"])
         else:
             words = int(result["output_elements"]) * 2
         expected = result.get("expected_digest")
@@ -219,7 +230,13 @@ def run(args: argparse.Namespace) -> None:
             result_file = run_dir / "result.json"
             if args.resume and result_file.is_file():
                 old = json.loads(result_file.read_text())
-                if old.get("status") == "passed":
+                # A reused output directory may be pointed at a rebuilt
+                # manifest.  Never let --resume silently promote a passing
+                # result from an older ELF.
+                if (old.get("status") == "passed" and
+                        old.get("elf_sha256") == row["elf_sha256"] and
+                        old.get("timing") == args.timing and
+                        int(old.get("sm_count", -1)) == int(row["sm_count"])):
                     continue
             run_dir.mkdir(parents=True, exist_ok=True)
             config = make_config(
@@ -281,7 +298,7 @@ def summarize(root: Path) -> None:
     passed = [row for row in records if row.get("status") == "passed"]
     grouped: dict[tuple[str, int], list[int]] = {}
     for row in passed:
-        grouped.setdefault((row["name"].rsplit("--", 1)[0], row["sm_count"]), []).append(
+        grouped.setdefault((workload_group_name(row["name"]), row["sm_count"]), []).append(
             row["kernel_cycles"]
         )
     rows = []
@@ -320,8 +337,12 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--sms", type=int, nargs="+", choices=(1, 2, 4), default=(1, 2, 4))
     parser.add_argument("--families", nargs="+",
-                        choices=("stream", "spatter", "xrage", "fp8_gemm"),
-                        default=("stream", "spatter", "xrage", "fp8_gemm"))
+                        choices=("stream", "stream_dot", "spatter", "xrage",
+                                 "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
+                                 "spmv_jds"),
+                        default=("stream", "stream_dot", "spatter", "xrage",
+                                 "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
+                                 "spmv_jds"))
     parser.add_argument("--match", help="regular expression matched against workload names")
     parser.add_argument("--repetitions", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=2_000_000_000)

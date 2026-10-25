@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import run as run_module
 from run import (GENERATED, destination, fnv, normalize, parse_pattern, payload,
                  prepare, reference, sample_digest, source_index, source_tag,
                  write_destination_groups, write_source,
@@ -18,6 +19,24 @@ from run_chain import expected_output
 
 
 class SpatterMappingTest(unittest.TestCase):
+    def setUp(self):
+        # prepare() materializes generated inputs and data.S. Keep unit tests
+        # away from the production build workspace so they cannot replace a
+        # full-size payload while another process is linking an ELF.
+        self.workspace = tempfile.TemporaryDirectory()
+        self.old_root = run_module.ROOT
+        self.old_generated = run_module.GENERATED
+        run_module.ROOT = Path(self.workspace.name)
+        run_module.GENERATED = run_module.ROOT / "generated"
+        run_module.GENERATED.mkdir()
+        globals()["GENERATED"] = run_module.GENERATED
+
+    def tearDown(self):
+        run_module.ROOT = self.old_root
+        run_module.GENERATED = self.old_generated
+        globals()["GENERATED"] = self.old_generated
+        self.workspace.cleanup()
+
     def test_standard_gpu_stream_families(self):
         suite = json.loads((Path(__file__).parent / "smoke.json").read_text())
         for raw in suite[:5]:
@@ -185,7 +204,7 @@ class SpatterMappingTest(unittest.TestCase):
         suite = Path(__file__).parent / "smoke.json"
         result = prepare(case, suite, 0, sms=2, loader="logical",
                          source_pad_lines=3, output_pad_lines=5)
-        assembly = (Path(__file__).parent / "data.S").read_text()
+        assembly = (run_module.ROOT / "data.S").read_text()
         self.assertEqual(result["source_pad_cache_lines"], 3)
         self.assertEqual(result["output_pad_cache_lines"], 5)
         self.assertEqual(result["layout_padding_bytes"], 512)
@@ -205,6 +224,87 @@ class SpatterMappingTest(unittest.TestCase):
         self.assertIn("#define NIGHTLY_OCC 8", config)
         with self.assertRaisesRegex(ValueError, "warps_per_core"):
             prepare(case, suite, 0, warps_per_core=3)
+
+    def test_block_cyclic_gather_owns_whole_16_element_chunks(self):
+        case = normalize({"kernel": "Gather", "pattern": list(range(73)),
+                          "count": 1, "wrap": 1})
+        suite = Path(__file__).parent / "smoke.json"
+        result = prepare(case, suite, 0, sms=4,
+                         gather_block_cyclic_16=True)
+        self.assertTrue(result["gather_block_cyclic_16"])
+        config = GENERATED.joinpath("config.h").read_text()
+        self.assertIn("#define SPATTER_GATHER_BLOCK_CYCLIC_16 1", config)
+
+        chunks = (case["length"] + 15) // 16
+        owners_by_sm = [[] for _ in range(4)]
+        for chunk in range(chunks):
+            sm = chunk % 4
+            owners_by_sm[sm].extend(
+                range(chunk * 16, min(case["length"], (chunk + 1) * 16)))
+        self.assertEqual(sorted(owner for owners in owners_by_sm for owner in owners),
+                         list(range(case["length"])))
+        self.assertEqual([len(owners) for owners in owners_by_sm], [25, 16, 16, 16])
+        for chunk in range(chunks):
+            # Sixteen float64 outputs are exactly two whole 64-byte lines.
+            self.assertEqual((chunk * 16 * 8) % 64, 0)
+
+        scatter = normalize({"kernel": "Scatter", "pattern": [0, 1],
+                             "count": 1})
+        with self.assertRaisesRegex(ValueError, "requires Gather"):
+            prepare(scatter, suite, 0, sms=4, gather_block_cyclic_16=True)
+        repeated = normalize({"kernel": "Gather", "pattern": [0, 1],
+                              "count": 5, "wrap": 1})
+        with self.assertRaisesRegex(ValueError, "conflicts with iteration"):
+            prepare(repeated, suite, 0, sms=4, gather_block_cyclic_16=True)
+
+    def test_records_opt_in_robust_end_drain(self):
+        case = normalize({"kernel": "Gather", "pattern": [0, 1], "count": 1})
+        suite = Path(__file__).parent / "smoke.json"
+        default = prepare(case, suite, 0)
+        self.assertFalse(default["robust_end_drain"])
+        self.assertFalse(default["robust_spin_until_reset"])
+        self.assertFalse(default["robust_serial_fence"])
+        self.assertFalse(default["robust_token_fence"])
+        self.assertEqual(default["robust_post_spin"], 500)
+        self.assertFalse(default["diagnostic_readback"])
+        self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 0",
+                      GENERATED.joinpath("config.h").read_text())
+        robust = prepare(case, suite, 0, robust_end_drain=True)
+        self.assertTrue(robust["robust_end_drain"])
+        self.assertIn("#define NIGHTLY_ROBUST_GMEM_END 1",
+                      GENERATED.joinpath("config.h").read_text())
+
+    def test_records_fpga_spin_handshake_and_requires_drain(self):
+        case = normalize({"kernel": "Gather", "pattern": [0, 1], "count": 1})
+        suite = Path(__file__).parent / "smoke.json"
+        robust = prepare(
+            case, suite, 0, robust_end_drain=True,
+            robust_spin_until_reset=True, robust_serial_fence=True,
+            robust_token_fence=True,
+            robust_post_spin=20000,
+            diagnostic_readback=True,
+        )
+        self.assertTrue(robust["robust_spin_until_reset"])
+        self.assertTrue(robust["robust_serial_fence"])
+        self.assertTrue(robust["robust_token_fence"])
+        self.assertEqual(robust["robust_post_spin"], 20000)
+        self.assertTrue(robust["diagnostic_readback"])
+        self.assertIn("#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET 1",
+                      GENERATED.joinpath("config.h").read_text())
+        self.assertIn("#define NIGHTLY_ROBUST_SERIAL_FENCE 1",
+                      GENERATED.joinpath("config.h").read_text())
+        self.assertIn("#define NIGHTLY_ROBUST_TOKEN_FENCE 1",
+                      GENERATED.joinpath("config.h").read_text())
+        self.assertIn("#define NIGHTLY_ROBUST_POST_SPIN 20000u",
+                      GENERATED.joinpath("config.h").read_text())
+        with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+            prepare(case, suite, 0, robust_spin_until_reset=True)
+        with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+            prepare(case, suite, 0, robust_serial_fence=True)
+        with self.assertRaisesRegex(ValueError, "requires robust_serial_fence"):
+            prepare(case, suite, 0, robust_token_fence=True)
+        with self.assertRaisesRegex(ValueError, "robust_post_spin"):
+            prepare(case, suite, 0, robust_post_spin=-1)
 
     def test_ordered_schedule_compacts_empty_destinations(self):
         case = normalize({"kernel": "Scatter", "pattern": [3, 3, 10],

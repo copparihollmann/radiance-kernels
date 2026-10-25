@@ -132,6 +132,15 @@ store, removes cross-SM output races, and avoids a host-mediated phase.  The
 1-SM and 2-SM builds retain the faster direct owner path; the selected strategy
 and scratch size are recorded in `result.json`.
 
+For single-iteration Gather traces whose irregular addresses are uneven across
+large contiguous pattern regions, `--gather-block-cyclic-16` is an opt-in
+load-balancing experiment. It assigns successive 16-element (two 64-byte-line)
+output chunks round-robin across physical SMs. Every output cache line still has
+exactly one owner and every original transfer is retained. The option is rejected
+for Scatter and for the repeated-Gather iteration-partition path, and is recorded
+in both the build result and assembled manifest. It remains a candidate until
+matched full-output model and FPGA results beat the contiguous-owner baseline.
+
 `run.py` owns the shared `generated/` directory, so build cases sequentially.
 `--prepare-only` emits the plan, data, config and manifest without compiling.
 `--count N` makes a clearly labeled scaled run while preserving the input
@@ -151,6 +160,24 @@ evidence.
 experiment parameter. Four remains the default. Compare absolute cycles and
 correctness at the same dataset and SM count; a larger scaling ratio caused by
 slowing the lower-SM endpoint is not an optimization.
+
+`--robust-end-drain` is an opt-in correctness experiment for long write-heavy
+FPGA workloads. After all worker warps arrive, one lane per core waits for the
+other store queues, capacity-drains that core's L0d and the cluster L1 through
+scratch lines unique to `(SM, core)`, and only then publishes END. With the
+FPGA-only `--robust-spin-until-reset` companion flag, workers stay live after
+END so the defective tile-finished flush cannot race readback; the host
+soft-resets them after every core reports END and before checking GMEM.
+Cyclotron gates omit that flag because the public model lacks the reset MMIO.
+`--robust-serial-fence` candidate retires every worker warp's store queue
+explicitly before those drains. It serializes the fences through an uncached
+printBuf epoch because simultaneous warp fences are unsafe on the taped-out
+SFU path. It requires `--robust-end-drain`, and all fence/drain overhead remains
+inside `kernel_cycles`. The useful
+Spatter/xRAGE transfers and their timing boundaries are unchanged; the drain
+overhead is included in `kernel_cycles`. Do not promote this mode based on a
+single pass or on a host-side delay: require repeated full-output checks on the
+affected FPGA configuration and then all matching SM/memory configurations.
 
 For the newer hashed `RadianceHBMConfig` with direct DRAM loading (`+loadmem`
 or FireSim LoadMem), set `MU_ADDR_HASH=1` when building. The hash parameters

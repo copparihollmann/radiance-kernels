@@ -38,6 +38,13 @@ runtime configuration, script, and parser is hashed before execution; changed
 assets invalidate the plan. Copied simulator drivers are first-class hashed assets,
 not untracked command-line inputs. Completed repetitions are resumable.
 
+The manifest/model adapters also accept correctness-gated optional families:
+BabelStream-derived Dot, BF16 GEMV, Vortex-derived Nearn and Stencil3D, and
+Vortex/Parboil JDS SpMV. These additions do not weaken the required primary
+matrix. Each optional family must provide its own complete output oracle,
+logical/direct 1/2/4-SM artifacts, and fail-closed admission audit before it is
+included in a hardware plan.
+
 FireSim targets provide one fixed `bdf`. FPGA target groups must be sequential:
 Corigine programming disconnects the selected card and performs a host-wide PCIe
 rescan, so `--parallel-targets` is rejected for FireSim plans. The campaign
@@ -77,9 +84,9 @@ whole configuration matrix. Unknown IDs fail closed. Every selected job uses
 the complete programming form, including when resuming a partial campaign.
 
 For Nicolas's launcher, `-b NAME` selects the paired archive and driver from
-the copied registry; `--bdf 1a:00.0` selects the reserved card; and the final
-positional path is the workload ELF. For example:
-`run.sh -b 2SM_HBM --bdf 1a:00.0 ELF`. Registry-driven plans retain and hash
+the copied registry; `--bdf 1a:00.0` selects the reserved card; and
+`--fastloadmem ELF` selects the workload. For example:
+`run.sh -b 2SM_HBM --bdf 1a:00.0 --fastloadmem ELF`. Registry-driven plans retain and hash
 the explicit archive/driver paths, and planning rejects a `-b` name whose
 expected filenames do not match those receipts.
 

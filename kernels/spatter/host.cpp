@@ -36,6 +36,49 @@ static uint64_t output_sample_digest() {
   return digest;
 }
 
+#if SPATTER_DIAGNOSTIC_READBACK
+static uint64_t words_digest(uint32_t address, uint32_t words_count) {
+  volatile uint32_t* words = reinterpret_cast<volatile uint32_t*>(
+      rad_device_to_host_address(address));
+  uint64_t digest = 0xCBF29CE484222325ULL;
+  for (uint32_t i = 0; i < words_count; ++i) {
+    digest ^= words[i];
+    digest *= 0x100000001B3ULL;
+  }
+  return digest;
+}
+
+static void diagnose_gather_elements() {
+#if SPATTER_KIND == 0 && SPATTER_COUNT == 1 && SPATTER_WRAP == 1
+  volatile uint32_t* output = reinterpret_cast<volatile uint32_t*>(
+      rad_device_to_host_address(SPATTER_OUTPUT_ADDR));
+  volatile uint32_t* source = reinterpret_cast<volatile uint32_t*>(
+      rad_device_to_host_address(SPATTER_SOURCE_ADDR));
+  volatile uint32_t* pattern = reinterpret_cast<volatile uint32_t*>(
+      rad_device_to_host_address(SPATTER_PATTERN_ADDR));
+  uint32_t mismatches = 0;
+  for (uint32_t i = 0; i < SPATTER_PATTERN_LENGTH; ++i) {
+    const uint32_t source_index = pattern[i];
+    const uint32_t actual_lo = output[2u * i];
+    const uint32_t actual_hi = output[2u * i + 1u];
+    const uint32_t expected_lo = source[2u * source_index];
+    const uint32_t expected_hi = source[2u * source_index + 1u];
+    if (actual_lo != expected_lo || actual_hi != expected_hi) {
+      if (mismatches < 16u) {
+        rad_puts("SPATTER_DIAG mismatch output_index="); rad_putu(i);
+        rad_puts(" source_index="); rad_putu(source_index);
+        rad_puts(" actual="); rad_putx(actual_hi); rad_putx(actual_lo);
+        rad_puts(" expected="); rad_putx(expected_hi); rad_putx(expected_lo);
+        rad_putc('\n');
+      }
+      ++mismatches;
+    }
+  }
+  rad_puts("SPATTER_DIAG mismatch_count="); rad_putu(mismatches); rad_putc('\n');
+#endif
+}
+#endif
+
 static bool guards_intact() {
   volatile uint32_t* before = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(SPATTER_GUARD_BEFORE_ADDR));
@@ -78,7 +121,8 @@ int main() {
   nightly_host_report(NIGHTLY_CLUSTERS);
   asm volatile("fence rw, rw" ::: "memory");
 
-  bool passed = completed && guards_intact();
+  const bool guards_ok = guards_intact();
+  bool passed = completed && guards_ok;
 #if SPATTER_EXPLORATORY
   // Collisions make the final values schedule-dependent, but every source
   // payload is nonzero. Check exact destination coverage, not one probe: a
@@ -94,13 +138,45 @@ int main() {
   passed = passed && actual_digest == SPATTER_EXPECTED_DIGEST;
 #if SPATTER_DIAGNOSTIC_READBACK
   if (!passed) {
-    rad_puts("SPATTER_DIAG full_digest_actual=");
+    rad_puts("SPATTER_DIAG completed="); rad_putu(completed);
+    rad_puts(" guards="); rad_putu(guards_ok);
+    rad_puts(" full_digest_actual=");
     rad_putx(static_cast<uint32_t>(actual_digest >> 32));
     rad_putx(static_cast<uint32_t>(actual_digest));
     rad_puts(" expected=");
     rad_putx(static_cast<uint32_t>(SPATTER_EXPECTED_DIGEST >> 32));
     rad_putx(static_cast<uint32_t>(SPATTER_EXPECTED_DIGEST));
-    rad_putc('\n'); rad_flush();
+    rad_putc('\n');
+    const uint64_t pattern_digest = words_digest(
+        SPATTER_PATTERN_ADDR, SPATTER_PATTERN_LENGTH);
+    const uint64_t source_digest = words_digest(
+        SPATTER_SOURCE_ADDR, SPATTER_SOURCE_LENGTH * 2u);
+    rad_puts("SPATTER_DIAG pattern_digest_actual=");
+    rad_putx(static_cast<uint32_t>(pattern_digest >> 32));
+    rad_putx(static_cast<uint32_t>(pattern_digest));
+    rad_puts(" expected=");
+    rad_putx(static_cast<uint32_t>(SPATTER_EXPECTED_PATTERN_DIGEST >> 32));
+    rad_putx(static_cast<uint32_t>(SPATTER_EXPECTED_PATTERN_DIGEST));
+    rad_putc('\n');
+    rad_puts("SPATTER_DIAG source_digest_actual=");
+    rad_putx(static_cast<uint32_t>(source_digest >> 32));
+    rad_putx(static_cast<uint32_t>(source_digest));
+    rad_puts(" expected=");
+    rad_putx(static_cast<uint32_t>(SPATTER_EXPECTED_SOURCE_DIGEST >> 32));
+    rad_putx(static_cast<uint32_t>(SPATTER_EXPECTED_SOURCE_DIGEST));
+    rad_putc('\n');
+    diagnose_gather_elements();
+    if (!guards_ok) {
+      for (unsigned i = 0; i < 16; ++i) {
+        rad_puts("SPATTER_DIAG guard "); rad_putu(i);
+        rad_puts(" before="); rad_putx(before[i]);
+        rad_puts(" expected_before="); rad_putx(0xA5A50000u ^ i);
+        rad_puts(" after="); rad_putx(after[i]);
+        rad_puts(" expected_after="); rad_putx(0x5A5A0000u ^ i);
+        rad_putc('\n');
+      }
+    }
+    rad_flush();
   }
 #endif
 #elif SPATTER_READBACK_SAMPLES
@@ -108,7 +184,8 @@ int main() {
   passed = passed && actual_sample_digest == SPATTER_EXPECTED_SAMPLE_DIGEST;
 #if SPATTER_DIAGNOSTIC_READBACK
   if (!passed) {
-    rad_puts("SPATTER_DIAG guards="); rad_putu(guards_intact());
+    rad_puts("SPATTER_DIAG completed="); rad_putu(completed);
+    rad_puts(" guards="); rad_putu(guards_ok);
     rad_puts(" actual="); rad_putx(static_cast<uint32_t>(actual_sample_digest >> 32));
     rad_putx(static_cast<uint32_t>(actual_sample_digest));
     rad_puts(" expected="); rad_putx(static_cast<uint32_t>(SPATTER_EXPECTED_SAMPLE_DIGEST >> 32));

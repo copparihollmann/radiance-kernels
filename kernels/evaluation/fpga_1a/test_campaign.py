@@ -13,10 +13,28 @@ from campaign import (SafetyAbort, archive_incomplete_safety_attempt,
                       descendant_pids, exclusive_host_lock, execute,
                       external_firesim_activity, inventory,
                       is_firesim_hardware_process, load_assets, make_plan,
-                      process_table, sha256, summarize)
+                      process_table, sha256, summarize,
+                      target_execution_order)
 
 
 class CampaignTest(unittest.TestCase):
+    def test_primary_dram_scaling_targets_run_before_secondary_models(self):
+        targets = [
+            {"id": "baseline", "sm_count": 2,
+             "bitstream_config": "2SM_DRAM_baseline"},
+            {"id": "hbm", "sm_count": 2,
+             "bitstream_config": "2SM_HBM"},
+            {"id": "four", "sm_count": 4,
+             "bitstream_config": "4SM_DRAM"},
+            {"id": "one", "sm_count": 1,
+             "bitstream_config": "1SM_DRAM"},
+            {"id": "two", "sm_count": 2,
+             "bitstream_config": "2SM_DRAM"},
+        ]
+        ordered = sorted(targets, key=target_execution_order)
+        self.assertEqual([target["id"] for target in ordered],
+                         ["one", "two", "four", "baseline", "hbm"])
+
     def test_archives_incomplete_safety_attempt_before_retry(self):
         with tempfile.TemporaryDirectory() as directory:
             result_dir = Path(directory) / "job"

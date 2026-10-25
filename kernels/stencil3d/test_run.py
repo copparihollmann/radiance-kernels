@@ -1,0 +1,48 @@
+"""Focused tests for the faithful Vortex stencil3d generator."""
+
+import importlib.util
+from pathlib import Path
+import tempfile
+import unittest
+
+RUN_PATH = Path(__file__).resolve().parent / "run.py"
+RUN_SPEC = importlib.util.spec_from_file_location("stencil3d_run", RUN_PATH)
+assert RUN_SPEC is not None and RUN_SPEC.loader is not None
+run = importlib.util.module_from_spec(RUN_SPEC)
+RUN_SPEC.loader.exec_module(run)
+
+
+class Stencil3dRunTest(unittest.TestCase):
+    def test_reference_generation_is_reproducible(self):
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            a = run.prepare(4, Path(first), sms=4, loader="logical")
+            b = run.prepare(4, Path(second), sms=4, loader="logical")
+            self.assertEqual(a["input_sha256"], b["input_sha256"])
+            self.assertEqual(a["expected_sha256"], b["expected_sha256"])
+            self.assertEqual(a["expected_digest"], b["expected_digest"])
+            self.assertEqual(a["output_element_count"], 64)
+            self.assertEqual(a["reference_revision"], run.REFERENCE_REVISION)
+            self.assertEqual(a["max_ulp"], 6)
+            self.assertIn("#define NIGHTLY_CLUSTERS 4",
+                          run.GENERATED.joinpath("config.h").read_text())
+
+    def test_boundary_replication_matches_constant_volume(self):
+        output = run.reference_output([run.f32(0.25)] * 8, 2)
+        self.assertEqual([run.float_word(value) for value in output],
+                         [run.float_word(run.f32(0.25))] * 8)
+
+    def test_robust_completion_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = run.prepare(
+                2, Path(directory), robust_end_drain=True,
+                robust_spin_until_reset=True, robust_serial_fence=True,
+                robust_post_spin=20000,
+            )
+            self.assertTrue(result["robust_spin_until_reset"])
+            self.assertTrue(result["robust_serial_fence"])
+            with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
+                run.prepare(2, Path(directory), robust_spin_until_reset=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

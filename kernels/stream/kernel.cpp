@@ -24,11 +24,11 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
 #if STREAM_KIND == 0
     stream_c[i] = stream_a[i];
 #elif STREAM_KIND == 1
-    stream_b[i] = 2.0f * stream_c[i];
+    stream_b[i] = STREAM_SCALAR * stream_c[i];
 #elif STREAM_KIND == 2
     stream_c[i] = stream_a[i] + stream_b[i];
 #elif STREAM_KIND == 3
-    stream_a[i] = stream_b[i] + 2.0f * stream_c[i];
+    stream_a[i] = stream_b[i] + STREAM_SCALAR * stream_c[i];
 #endif
   }
   nightly_kernel_end(tid, threads_per_block);
