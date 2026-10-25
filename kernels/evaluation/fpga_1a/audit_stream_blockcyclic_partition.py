@@ -11,9 +11,11 @@ from pathlib import Path
 LINE_ELEMENTS = 16
 
 
-def audit(elements: int, sm_counts: tuple[int, ...]) -> dict:
+def audit(elements: int, sm_counts: tuple[int, ...], chunk_lines: int = 1) -> dict:
     if elements < 1:
         raise ValueError("elements must be positive")
+    if chunk_lines < 1:
+        raise ValueError("chunk_lines must be positive")
     checks = []
     lines = (elements + LINE_ELEMENTS - 1) // LINE_ELEMENTS
     for sms in sm_counts:
@@ -23,7 +25,7 @@ def audit(elements: int, sm_counts: tuple[int, ...]) -> dict:
         line_counts = [0] * sms
         element_counts = [0] * sms
         for line in range(lines):
-            owner = line % sms
+            owner = (line // chunk_lines) % sms
             line_counts[owner] += 1
             begin = line * LINE_ELEMENTS
             end = min(begin + LINE_ELEMENTS, elements)
@@ -46,6 +48,7 @@ def audit(elements: int, sm_counts: tuple[int, ...]) -> dict:
         "status": "pass" if passed else "fail",
         "elements": elements,
         "line_elements": LINE_ELEMENTS,
+        "chunk_lines": chunk_lines,
         "cache_line_bytes": 64,
         "checks": checks,
     }
@@ -55,9 +58,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--elements", type=int, default=1_048_576)
     parser.add_argument("--sms", type=int, nargs="+", default=[1, 2, 4])
+    parser.add_argument("--chunk-lines", type=int, default=1)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    result = audit(args.elements, tuple(args.sms))
+    result = audit(args.elements, tuple(args.sms), args.chunk_lines)
     rendered = json.dumps(result, indent=2) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

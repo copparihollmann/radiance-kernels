@@ -16,7 +16,7 @@ PASSTHROUGH = (
     "muon_warps_per_core", "robust_end_drain", "robust_spin_until_reset",
     "robust_serial_fence", "robust_token_fence", "robust_post_spin",
     "gather_block_cyclic_16", "gather_block_cyclic_elements",
-    "stream_block_cyclic_lines",
+    "stream_block_cyclic_lines", "stream_block_cyclic_chunk_lines",
     "pattern_length", "host_full_readback",
     "expected_pattern_digest", "expected_source_digest",
     "diagnostic_readback",

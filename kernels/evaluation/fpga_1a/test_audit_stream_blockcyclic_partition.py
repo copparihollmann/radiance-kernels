@@ -25,6 +25,17 @@ class StreamBlockCyclicPartitionAuditTests(unittest.TestCase):
             AUDIT.audit(0, (1,))
         with self.assertRaisesRegex(ValueError, "positive"):
             AUDIT.audit(16, (0,))
+        with self.assertRaisesRegex(ValueError, "chunk_lines"):
+            AUDIT.audit(16, (1,), 0)
+
+    def test_exact_ownership_for_multi_line_chunks(self):
+        result = AUDIT.audit(1049, (1, 2, 4), chunk_lines=8)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["chunk_lines"], 8)
+        for check in result["checks"]:
+            self.assertTrue(check["coverage_exactly_once"])
+            self.assertTrue(check["cache_line_exclusive"])
+            self.assertEqual(check["total_elements"], 1049)
 
 
 if __name__ == "__main__":

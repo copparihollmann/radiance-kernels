@@ -64,7 +64,8 @@ def prepare(kind: str, elements: int, out: Path,
             robust_spin_until_reset: bool = False,
             robust_serial_fence: bool = False,
             robust_post_spin: int = 500,
-            block_cyclic_lines: bool = False) -> dict:
+            block_cyclic_lines: bool = False,
+            block_cyclic_chunk_lines: int = 0) -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
     if elements * 12 + 0x100000 > 0x70000000:
@@ -79,6 +80,10 @@ def prepare(kind: str, elements: int, out: Path,
         raise ValueError("robust_serial_fence requires robust_end_drain")
     if robust_post_spin < 0:
         raise ValueError("robust_post_spin must be nonnegative")
+    if block_cyclic_lines and block_cyclic_chunk_lines:
+        raise ValueError("select only one STREAM block-cyclic schedule")
+    if block_cyclic_chunk_lines < 0:
+        raise ValueError("block-cyclic chunk lines must be nonnegative")
     GENERATED.mkdir(exist_ok=True)
     output = OUTPUT[kind]
     for name in "abc":
@@ -105,6 +110,7 @@ def prepare(kind: str, elements: int, out: Path,
         f"#define STREAM_SCALAR {scalar.hex()}f",
         f"#define STREAM_READBACK_SAMPLES {samples}u",
         f"#define STREAM_EXPECTED_READBACK_DIGEST 0x{(expected_sample or expected):016x}ULL",
+        f"#define STREAM_BLOCK_CYCLIC_CHUNK_LINES {block_cyclic_chunk_lines}u",
         f"#define STREAM_BLOCK_CYCLIC_LINES {int(block_cyclic_lines)}",
     ]
     (GENERATED / "config.h").write_text("\n".join(config) + "\n")
@@ -151,7 +157,8 @@ def prepare(kind: str, elements: int, out: Path,
                 f"stream:{kind}:{elements}:scalar{scalar.hex()}:occ{warps_per_core}:"
                 f"robust{int(robust_end_drain)}:spin{int(robust_spin_until_reset)}:"
                 f"serial{int(robust_serial_fence)}:"
-                f"post{robust_post_spin}:blockcyclic{int(block_cyclic_lines)}".encode()
+                f"post{robust_post_spin}:blockcyclic{int(block_cyclic_lines)}:"
+                f"chunklines{block_cyclic_chunk_lines}".encode()
             ).hexdigest(),
             "case": KINDS[kind], "kernel_source_sha256": source.hexdigest(),
             "correctness": "sample-checked" if samples else "digest-checked",
@@ -164,6 +171,7 @@ def prepare(kind: str, elements: int, out: Path,
             "robust_serial_fence": robust_serial_fence,
             "robust_post_spin": robust_post_spin,
             "stream_block_cyclic_lines": block_cyclic_lines,
+            "stream_block_cyclic_chunk_lines": block_cyclic_chunk_lines,
             "diagnostic_readback": diagnostic_readback,
             "checker_word_pairs": elements // 2}
     (GENERATED / "manifest.json").write_text(json.dumps(case, indent=2) + "\n")
@@ -197,6 +205,8 @@ def main() -> None:
                         help="print actual digest and guards when the RV64 check fails")
     parser.add_argument("--block-cyclic-lines", action="store_true",
                         help="round-robin complete 64-byte lines across physical SMs")
+    parser.add_argument("--block-cyclic-chunk-lines", type=int, default=0,
+                        help="round-robin chunks containing this many complete cache lines")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--full-host-check", action="store_true",
@@ -213,7 +223,8 @@ def main() -> None:
                    args.sms, args.loader, args.warps_per_core, args.scalar,
                    args.robust_end_drain, args.diagnostic_readback,
                    args.robust_spin_until_reset, args.robust_serial_fence,
-                   args.robust_post_spin, args.block_cyclic_lines)
+                   args.robust_post_spin, args.block_cyclic_lines,
+                   args.block_cyclic_chunk_lines)
     case["host_timing_requested"] = args.host_timing
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:

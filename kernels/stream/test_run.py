@@ -35,6 +35,7 @@ class StreamRunTest(unittest.TestCase):
             self.assertEqual(result["robust_post_spin"], 500)
             self.assertFalse(result["diagnostic_readback"])
             self.assertFalse(result["stream_block_cyclic_lines"])
+            self.assertEqual(result["stream_block_cyclic_chunk_lines"], 0)
 
     def test_records_opt_in_cache_line_block_cyclic_partition(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -50,6 +51,27 @@ class StreamRunTest(unittest.TestCase):
             self.assertNotEqual(result["suite_sha256"], baseline["suite_sha256"])
             self.assertIn("#define STREAM_BLOCK_CYCLIC_LINES 1",
                           run.GENERATED.joinpath("config.h").read_text())
+
+    def test_records_chunked_cache_line_block_cyclic_partition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = run.prepare(
+                "scale", 1024, Path(directory), full_host_check=True,
+                sms=4, block_cyclic_chunk_lines=64,
+            )
+            self.assertEqual(result["stream_block_cyclic_chunk_lines"], 64)
+            config = run.GENERATED.joinpath("config.h").read_text()
+            self.assertIn("#define STREAM_BLOCK_CYCLIC_CHUNK_LINES 64u", config)
+            self.assertIn("#define STREAM_BLOCK_CYCLIC_LINES 0", config)
+            with self.assertRaisesRegex(ValueError, "only one"):
+                run.prepare(
+                    "scale", 1024, Path(directory), block_cyclic_lines=True,
+                    block_cyclic_chunk_lines=64,
+                )
+            with self.assertRaisesRegex(ValueError, "nonnegative"):
+                run.prepare(
+                    "scale", 1024, Path(directory),
+                    block_cyclic_chunk_lines=-1,
+                )
 
     def test_nonstandard_scalar_is_explicitly_stream_like(self):
         with tempfile.TemporaryDirectory() as directory:
