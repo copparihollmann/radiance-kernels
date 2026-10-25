@@ -9,13 +9,32 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from campaign import (SafetyAbort, descendant_pids, exclusive_host_lock,
-                      execute, external_firesim_activity, inventory,
+from campaign import (SafetyAbort, archive_incomplete_safety_attempt,
+                      descendant_pids, exclusive_host_lock, execute,
+                      external_firesim_activity, inventory,
                       is_firesim_hardware_process, load_assets, make_plan,
                       process_table, sha256, summarize)
 
 
 class CampaignTest(unittest.TestCase):
+    def test_archives_incomplete_safety_attempt_before_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result_dir = Path(directory) / "job"
+            result_dir.mkdir()
+            for name, contents in (
+                    ("safety-abort.json", "{}\n"),
+                    ("request.json", "{}\n"),
+                    ("stdout.log", "partial stdout\n"),
+                    ("stderr.log", "partial stderr\n")):
+                (result_dir / name).write_text(contents)
+            first = archive_incomplete_safety_attempt(result_dir)
+            self.assertEqual(first.name, "safety-abort-001")
+            self.assertFalse((result_dir / "safety-abort.json").exists())
+            self.assertEqual((first / "stdout.log").read_text(), "partial stdout\n")
+            (result_dir / "safety-abort.json").write_text("{}\n")
+            second = archive_incomplete_safety_attempt(result_dir)
+            self.assertEqual(second.name, "safety-abort-002")
+
     def test_process_table_tolerates_disappearing_proc_entry(self):
         with patch.object(Path, "read_bytes", side_effect=ProcessLookupError):
             self.assertEqual(process_table(), [])

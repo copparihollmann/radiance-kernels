@@ -175,6 +175,32 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+def archive_incomplete_safety_attempt(result_dir: Path) -> Path | None:
+    """Preserve an interrupted safety attempt before a deliberate retry.
+
+    Safety aborts intentionally do not create result.json, so ordinary resume
+    is allowed.  Without an archive, however, request/stdout/stderr and the
+    abort record would be overwritten by that retry and the concurrency event
+    would disappear from the provenance trail.
+    """
+    safety = result_dir / "safety-abort.json"
+    if not safety.is_file():
+        return None
+    attempts = result_dir / "attempts"
+    attempts.mkdir(parents=True, exist_ok=True)
+    index = 1
+    while (attempts / f"safety-abort-{index:03d}").exists():
+        index += 1
+    archived = attempts / f"safety-abort-{index:03d}"
+    archived.mkdir()
+    for name in ("safety-abort.json", "request.json", "stdout.log", "stderr.log",
+                 "parser.stdout", "parser.stderr"):
+        path = result_dir / name
+        if path.exists():
+            path.replace(archived / name)
+    return archived
+
+
 def role(path: Path) -> str:
     lower = path.name.lower()
     if lower.endswith((".tar.gz", ".tgz")) and any(
@@ -426,6 +452,10 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
                 f"{job['id']}: prior failed result requires inspection; "
                 "resume with --rerun-failed only after the cause is understood"
             )
+    archived = archive_incomplete_safety_attempt(result_dir)
+    if archived is not None:
+        print(f"{job['id']}: archived prior safety attempt at {archived}",
+              flush=True)
     result_dir.mkdir(parents=True, exist_ok=True)
     values = context(job, asset_root, result_dir)
     target = job["target"]
