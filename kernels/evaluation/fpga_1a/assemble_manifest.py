@@ -47,6 +47,13 @@ PASSTHROUGH = (
     "partition_work_cache_line_safe", "partition_switch_cache_line_safe",
     "switch_segment_stride", "point_abi", "coordinate_layout",
     "initial_assignment", "branch_semantics", "memset_semantics",
+    "dimensions", "padded_dimensions", "timesteps", "layout",
+    "active_cells", "destination_populations_checked",
+    "velocity_words_checked", "expected_population_digest",
+    "expected_output_raw_digest", "expected_output_raw_words",
+    "gold_velocity_digest", "upstream_velocity_tolerance",
+    "operation_order", "reference_files", "reference_verified",
+    "official_dimensions_verified", "official_default_one_timestep_verified",
 )
 
 
@@ -93,6 +100,16 @@ def assemble(root: Path, family: str) -> dict:
             "correctness": result.get("correctness"),
             "status": "built",
         }
+        if result.get("device_elf"):
+            device_elf = Path(result["device_elf"]).resolve()
+            if not device_elf.is_file():
+                raise ValueError(f"device ELF is missing: {device_elf}")
+            device_hash = sha256(device_elf)
+            if (result.get("device_elf_sha256") and
+                    result["device_elf_sha256"] != device_hash):
+                raise ValueError(f"device ELF changed: {device_elf}")
+            row["device_elf"] = str(device_elf)
+            row["device_elf_sha256"] = device_hash
         op = operation(result)
         if op is not None:
             row["operation"] = op
@@ -133,7 +150,7 @@ def main() -> None:
                         choices=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d",
                                  "nearn", "spmv_jds", "sfilter",
-                                 "streamcluster"))
+                                 "streamcluster", "lbm"))
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     manifest = assemble(args.root.resolve(), args.family)

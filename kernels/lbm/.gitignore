@@ -1,0 +1,6 @@
+/data.S
+/generated/
+/runs/
+/*.o
+/*.elf
+/*.dump

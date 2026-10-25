@@ -196,6 +196,46 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(row["timing_contract"],
                              "fused-memset-plus-pgain-full-sequence")
 
+    def test_lbm_full_oracle_and_partition_metadata_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "lbm--official-32x32x8-one-step-gather--4sm"
+            build.mkdir()
+            (build / "kernel.soc.elf").write_bytes(b"elf")
+            result = {
+                "status": "built", "sm_count": 4, "loader": "logical",
+                "kind": "d3q19-gather-stream-collide",
+                "dimensions": [32, 32, 8],
+                "padded_dimensions": [40, 32, 12], "timesteps": 1,
+                "active_cells": 8192,
+                "destination_populations_checked": 155648,
+                "velocity_words_checked": 24576,
+                "expected_population_digest": "pop",
+                "expected_output_raw_digest": "raw",
+                "expected_output_raw_words": 307200,
+                "gold_velocity_digest": "velocity",
+                "partition": {"cache_line_safe": True, "complete": True},
+                "reference_verified": True,
+                "official_default_one_timestep_verified": True,
+                "correctness": "complete-output-and-upstream-gold",
+            }
+            device = build / "kernel.radiance.elf"
+            device.write_bytes(b"device")
+            result["device_elf"] = str(device)
+            result["device_elf_sha256"] = AM.sha256(device)
+            (build / "result.json").write_text(json.dumps(result))
+            row = AM.assemble(root, "lbm")["workloads"][0]
+            self.assertEqual(row["operation"],
+                             "d3q19-gather-stream-collide")
+            self.assertEqual(row["dimensions"], [32, 32, 8])
+            self.assertEqual(row["expected_output_raw_words"], 307200)
+            self.assertEqual(row["expected_output_raw_digest"], "raw")
+            self.assertTrue(row["partition"]["cache_line_safe"])
+            self.assertTrue(row["reference_verified"])
+            self.assertTrue(row["official_default_one_timestep_verified"])
+            self.assertEqual(row["device_elf"], str(device.resolve()))
+            self.assertEqual(row["device_elf_sha256"], AM.sha256(device))
+
     def test_nearn_reference_metadata_is_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

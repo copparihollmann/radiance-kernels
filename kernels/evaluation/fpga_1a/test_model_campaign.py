@@ -145,17 +145,22 @@ class ModelCampaignTests(unittest.TestCase):
 
     def test_streamcluster_checks_complete_work_and_physical_switch_outputs(self):
         row = {"name": "streamcluster-pgain--n128-d32--4sm",
-               "family": "streamcluster", "sm_count": 4}
-        result = {"output_work_float_count": 2176,
-                  "work_expected_digest": "work-digest",
-                  "switch_storage_bytes": 256,
-                  "switch_functional_expected_digest": "switch-digest"}
-        original = MC.output_address
-        MC.output_address = lambda _elf: 0x12004140
+               "family": "streamcluster", "sm_count": 4,
+               "output_work_float_count": 2176,
+               "work_expected_digest": "work-digest",
+               "switch_storage_bytes": 256,
+               "switch_functional_expected_digest": "switch-digest"}
+        result = {}
+        addresses = {
+            "streamcluster_work_output": 0x12004140,
+            "streamcluster_switch_output": 0x120063c0,
+        }
+        original = MC.device_symbol_address
+        MC.device_symbol_address = lambda _row, symbol: addresses[symbol]
         try:
             gmem, smem = MC.workload_checks(row, result, Path("kernel.elf"))
         finally:
-            MC.output_address = original
+            MC.device_symbol_address = original
         self.assertEqual(smem, [])
         self.assertEqual(len(gmem), 2)
         self.assertIn("address = 0x12004140", gmem[0])
@@ -164,6 +169,50 @@ class ModelCampaignTests(unittest.TestCase):
         self.assertIn("address = 0x120063c0", gmem[1])
         self.assertIn("words = 64", gmem[1])
         self.assertIn('expected_fnv64 = "switch-digest"', gmem[1])
+
+    def test_lbm_checks_complete_padded_output_by_exact_symbol(self):
+        row = {"name": "lbm--official-32x32x8-one-step-gather--4sm",
+               "family": "lbm", "sm_count": 4,
+               "expected_output_raw_words": 307200,
+               "expected_output_raw_digest": "lbm-digest"}
+        result = {}
+        original = MC.device_symbol_address
+        MC.device_symbol_address = lambda _row, symbol: (
+            0x12804180 if symbol == "lbm_output_raw" else None
+        )
+        try:
+            gmem, smem = MC.workload_checks(row, result, Path("kernel.elf"))
+        finally:
+            MC.device_symbol_address = original
+        self.assertEqual(smem, [])
+        self.assertEqual(len(gmem), 1)
+        self.assertIn("address = 0x12804180", gmem[0])
+        self.assertIn("words = 307200", gmem[0])
+        self.assertIn('expected_fnv64 = "lbm-digest"', gmem[0])
+
+    def test_config_honors_recorded_warp_count(self):
+        row = {"name": "stream--copy--2sm", "family": "stream",
+               "sm_count": 2, "muon_warps_per_core": 4}
+        result = {"stream_elements": 4, "output_element_count": 4,
+                  "expected_digest": "1234"}
+        original = MC.output_address
+        MC.output_address = lambda _elf: 0x10004140
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                config = MC.make_config(
+                    row, result, Path("kernel.elf"), Path(directory), 99, False,
+                )
+        finally:
+            MC.output_address = original
+        self.assertIn("num_warps = 4", config)
+
+    def test_expected_correctness_check_counts(self):
+        self.assertEqual(MC.expected_correctness_checks(
+            {"family": "streamcluster", "sm_count": 4}), 2)
+        self.assertEqual(MC.expected_correctness_checks(
+            {"family": "fp8_gemm", "sm_count": 4}), 16)
+        self.assertEqual(MC.expected_correctness_checks(
+            {"family": "lbm", "sm_count": 4}), 1)
 
     def test_spatter_output_padding_adjusts_check_address(self):
         row = {"name": "spatter--case-4-pad--4sm", "family": "spatter",

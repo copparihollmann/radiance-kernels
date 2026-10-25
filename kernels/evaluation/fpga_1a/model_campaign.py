@@ -39,6 +39,7 @@ TIMING_FILES = (
     "barrier.toml", "dma_tensor.toml",
 )
 SM_NAME_TOKEN = re.compile(r"-{1,2}(?:1|2|4)sm(?=-|$)")
+MUON_NM = Path(__file__).resolve().parents[3] / "llvm/llvm-muon/bin/llvm-nm"
 
 
 def sha256(path: Path) -> str:
@@ -76,6 +77,20 @@ def output_address(elf: Path) -> int:
     return candidates[0] + 64
 
 
+def device_symbol_address(row: dict, symbol: str) -> int:
+    device_elf = Path(row["device_elf"]).resolve()
+    expected = row["device_elf_sha256"]
+    if sha256(device_elf) != expected:
+        raise ValueError(f"device ELF changed: {device_elf}")
+    output = subprocess.check_output([str(MUON_NM), "-n", str(device_elf)],
+                                     text=True)
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) == 3 and fields[2] == symbol:
+            return int(fields[0], 16)
+    raise ValueError(f"missing {symbol} in {device_elf}")
+
+
 def toml_quote(value: object) -> str:
     return json.dumps(str(value))
 
@@ -95,19 +110,27 @@ def workload_checks(row: dict, result: dict, elf: Path) -> tuple[list[str], list
     smem: list[str] = []
     family = row["family"]
     if family == "streamcluster":
-        work_address = output_address(elf)
-        work_words = int(result["output_work_float_count"])
-        switch_words = int(result["switch_storage_bytes"]) // 4
-        switch_address = work_address + work_words * 4 + 128
+        work_address = device_symbol_address(row, "streamcluster_work_output")
+        switch_address = device_symbol_address(row, "streamcluster_switch_output")
+        work_words = int(row["output_work_float_count"])
+        switch_words = int(row["switch_storage_bytes"]) // 4
         gmem.extend((
             "{ label = %s, address = 0x%08x, words = %d, expected_fnv64 = %s }"
             % (toml_quote(row["name"] + "-work"), work_address, work_words,
-               toml_quote(result["work_expected_digest"])),
+               toml_quote(row["work_expected_digest"])),
             "{ label = %s, address = 0x%08x, words = %d, expected_fnv64 = %s }"
             % (toml_quote(row["name"] + "-switch"), switch_address,
                switch_words,
-               toml_quote(result["switch_functional_expected_digest"])),
+               toml_quote(row["switch_functional_expected_digest"])),
         ))
+    elif family == "lbm":
+        address = device_symbol_address(row, "lbm_output_raw")
+        gmem.append(
+            "{ label = %s, address = 0x%08x, words = %d, expected_fnv64 = %s }"
+            % (toml_quote(row["name"] + "-complete-raw-output"), address,
+               int(row["expected_output_raw_words"]),
+               toml_quote(row["expected_output_raw_digest"]))
+        )
     elif family in ("stream", "stream_dot", "spatter", "xrage", "gemv_bf16",
                   "stencil3d", "nearn", "spmv_jds", "sfilter"):
         address = output_address(elf)
@@ -164,6 +187,14 @@ def workload_checks(row: dict, result: dict, elf: Path) -> tuple[list[str], list
     return gmem, smem
 
 
+def expected_correctness_checks(row: dict) -> int:
+    if row["family"] == "fp8_gemm":
+        return 4 * int(row["sm_count"])
+    if row["family"] == "streamcluster":
+        return 2
+    return 1
+
+
 def make_config(row: dict, result: dict, elf: Path, timing_dir: Path,
                 timeout: int, timing: bool) -> str:
     sms = int(row["sm_count"])
@@ -174,7 +205,9 @@ def make_config(row: dict, result: dict, elf: Path, timing_dir: Path,
         for cluster in range(sms)
     )
     lines = [
-        "[muon]", "num_lanes = 16", "num_warps = 8", "num_cores = 2",
+        "[muon]", "num_lanes = 16",
+        f"num_warps = {int(row.get('muon_warps_per_core', 8))}",
+        "num_cores = 2",
         "num_regs = 256", "start_pc = 0x10000000", "",
         "[mem]", "io_cout_addr = 0xFF080000", "io_cout_size = 64", "",
         "[sim]", f"elf = {toml_quote(elf)}", f"timeout = {timeout}",
@@ -274,7 +307,7 @@ def run(args: argparse.Namespace) -> None:
                 }
                 for cluster, cycles, start, end in CLUSTER_CYCLES.findall(proc.stdout)
             ]
-            expected_checks = 1 if row["family"] != "fp8_gemm" else 4 * row["sm_count"]
+            expected_checks = expected_correctness_checks(row)
             observed_checks = len(GMEM_PASS.findall(proc.stdout)) + len(SMEM_PASS.findall(proc.stdout))
             passed = (proc.returncode == 0 and finished is not None and kernel is not None
                       and observed_checks == expected_checks
@@ -353,10 +386,10 @@ def main() -> None:
     parser.add_argument("--families", nargs="+",
                         choices=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
-                                 "spmv_jds", "sfilter", "streamcluster"),
+                                 "spmv_jds", "sfilter", "streamcluster", "lbm"),
                         default=("stream", "stream_dot", "spatter", "xrage",
                                  "fp8_gemm", "gemv_bf16", "stencil3d", "nearn",
-                                 "spmv_jds", "sfilter", "streamcluster"))
+                                 "spmv_jds", "sfilter", "streamcluster", "lbm"))
     parser.add_argument("--match", help="regular expression matched against workload names")
     parser.add_argument("--repetitions", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=2_000_000_000)
