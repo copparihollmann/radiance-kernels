@@ -133,13 +133,22 @@ store, removes cross-SM output races, and avoids a host-mediated phase.  The
 and scratch size are recorded in `result.json`.
 
 For single-iteration Gather traces whose irregular addresses are uneven across
-large contiguous pattern regions, `--gather-block-cyclic-16` is an opt-in
-load-balancing experiment. It assigns successive 16-element (two 64-byte-line)
-output chunks round-robin across physical SMs. Every output cache line still has
-exactly one owner and every original transfer is retained. The option is rejected
-for Scatter and for the repeated-Gather iteration-partition path, and is recorded
-in both the build result and assembled manifest. It remains a candidate until
-matched full-output model and FPGA results beat the contiguous-owner baseline.
+large contiguous pattern regions, `--gather-block-cyclic-elements N` assigns
+successive cache-line-aligned output blocks round-robin across physical SMs.
+`N` must be a positive multiple of eight; the legacy
+`--gather-block-cyclic-16` spelling selects 16 elements. Every output cache line
+still has exactly one owner and every original transfer is retained. These
+options are rejected for Scatter and for the repeated-Gather iteration-partition
+path, are mutually exclusive, and are recorded in both the build result and
+assembled manifest.
+
+The original-size xRAGE5 Gather selects 1,024 elements per block. Complete
+FPGA-1A output checks pass at 183,653,399 / 94,143,239 / 50,377,247 cycles for
+1/2/4-SM primary DRAM, preserving all 8,368,968 transfers and the same digest.
+That is 1.868765x from 2 to 4 SM and improves the prior checked 16-element
+schedule by 2.83% at 2 SM and 2.84% at 4 SM without reducing scaling. These
+numbers are specific to the recorded FPGA/configuration matrix; other traces
+and systems must re-run the same full-output and absolute-performance gates.
 
 `run.py` owns the shared `generated/` directory, so build cases sequentially.
 `--prepare-only` emits the plan, data, config and manifest without compiling.
