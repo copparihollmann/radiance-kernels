@@ -172,7 +172,12 @@ def prepare(kind: str, elements: int, out: Path,
                 f"post{robust_post_spin}:blockcyclic{int(block_cyclic_lines)}:"
                 f"chunklines{block_cyclic_chunk_lines}".encode()
             ).hexdigest(),
-            "case": KINDS[kind], "kernel_source_sha256": source.hexdigest(),
+            "case": KINDS[kind],
+            "kernel_revision": subprocess.check_output(
+                ["git", "-C", str(ROOT.parents[1]), "rev-parse", "HEAD"],
+                text=True,
+            ).strip(),
+            "kernel_source_sha256": source.hexdigest(),
             "correctness": "sample-checked" if samples else "digest-checked",
             "host_full_readback": full_host_check or not samples,
             "status": "prepared", "simulator": None,
