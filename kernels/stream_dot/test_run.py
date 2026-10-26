@@ -27,6 +27,7 @@ class StreamDotRunTest(unittest.TestCase):
                                  loader="logical", warps_per_core=2)
             self.assertEqual(result["reference_repository"], "UoB-HPC/BabelStream")
             self.assertEqual(result["reference_revision"], run.UPSTREAM_REVISION)
+            self.assertIsNotNone(result["kernel_revision"])
             self.assertEqual(result["output_element_count"], 4)
             self.assertEqual(len(result["expected_partial_words"]), 4)
             self.assertEqual(result["correctness"],

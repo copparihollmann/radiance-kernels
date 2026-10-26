@@ -94,6 +94,14 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def git_revision(path: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def prepare(elements: int, out: Path, *, sms: int = 1,
             loader: str = "logical", warps_per_core: int = 8,
             robust_end_drain: bool = False,
@@ -192,6 +200,7 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         "robust_spin_until_reset": robust_spin_until_reset,
         "robust_serial_fence": robust_serial_fence,
         "robust_post_spin": robust_post_spin,
+        "kernel_revision": git_revision(ROOT),
         "kernel_source_sha256": source_hash.hexdigest(),
         "input_a_sha256": sha256(GENERATED / "a.bin"),
         "input_b_sha256": sha256(GENERATED / "b.bin"),
