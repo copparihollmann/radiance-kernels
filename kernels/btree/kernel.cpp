@@ -85,6 +85,22 @@ static int32_t point_lookup(int32_t search_key) {
   return (int32_t)((value & mask) | (0xffffffffu & ~mask));
 }
 
+// Construct the global output address only after both tree traversals have
+// returned.  Keeping that address live across nested noinline calls exposed a
+// Muon RV32 calling-convention bug in multi-SM builds: a callee reused the
+// caller's saved pointer register and the eventual store targeted the record
+// index instead of btree_range_outputs.  This helper changes neither the
+// traversal nor the output contract; it only shortens the pointer lifetime.
+__attribute__((noinline))
+static void write_range_output(uint32_t query, int32_t start, int32_t end,
+                               uint32_t block_id) {
+  __global BTreeRangeOutput* output = &btree_range_outputs[query];
+  output->start = start;
+  output->length = start >= 0 && end >= start ? end - start + 1 : 0;
+  output->owner_sm = block_id;
+  output->tag = BTREE_RANGE_TAG ^ query;
+}
+
 static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
                         uint32_t block_id) {
   // Four 16-byte result records fill one 64-byte line. Contiguous line-granule
@@ -111,11 +127,7 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
     const int32_t range_end = btree_range_queries[query].end;
     const int32_t start = leaf_record_index(range_start);
     const int32_t end = leaf_record_index(range_end);
-    btree_range_outputs[query].start = start;
-    btree_range_outputs[query].length =
-        start >= 0 && end >= start ? end - start + 1 : 0;
-    btree_range_outputs[query].owner_sm = block_id;
-    btree_range_outputs[query].tag = BTREE_RANGE_TAG ^ query;
+    write_range_output(query, start, end, block_id);
   }
 
   nightly_kernel_end(tid, threads_per_block);
