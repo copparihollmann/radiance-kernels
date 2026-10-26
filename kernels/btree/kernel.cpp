@@ -24,11 +24,13 @@ extern __global BTreeRangeOutput btree_range_outputs[];
 // taped-out Muon path can lose lanes under the deeply nested, data-dependent
 // early exits used by the direct OpenCL translation.  Bit selection preserves
 // the first-match semantics without changing the tree, queries, or outputs.
-static uint32_t select_u32(uint32_t take, uint32_t yes, uint32_t no) {
+__attribute__((always_inline))
+static inline uint32_t select_u32(uint32_t take, uint32_t yes, uint32_t no) {
   const uint32_t mask = 0u - (take & 1u);
   return (yes & mask) | (no & ~mask);
 }
 
+__attribute__((noinline))
 static uint32_t descend_to_leaf(int32_t search_key) {
   uint32_t node_index = 0u;
   for (uint32_t level = 0u; level < BTREE_HEIGHT; ++level) {
@@ -54,25 +56,7 @@ static uint32_t descend_to_leaf(int32_t search_key) {
   return node_index;
 }
 
-static int32_t point_lookup(int32_t search_key) {
-  const __global BTreeNode* leaf = &btree_nodes[descend_to_leaf(search_key)];
-  uint32_t result = 0xffffffffu;
-  uint32_t found = 0u;
-  for (uint32_t slot = 0u; slot < BTREE_ORDER; ++slot) {
-    const uint32_t key_match = (uint32_t)(leaf->keys[slot] == search_key);
-    const int32_t record_index = leaf->indices[slot];
-    const uint32_t record_u = (uint32_t)record_index;
-    const uint32_t valid = (uint32_t)(record_index >= 0) &
-                           (uint32_t)(record_u < BTREE_RECORD_COUNT);
-    const uint32_t take = key_match & valid & (found ^ 1u);
-    const uint32_t value = (uint32_t)btree_records[record_u &
-        (0u - valid)];
-    result = select_u32(take, value, result);
-    found |= key_match & valid;
-  }
-  return (int32_t)result;
-}
-
+__attribute__((noinline))
 static int32_t leaf_record_index(int32_t search_key) {
   const __global BTreeNode* leaf = &btree_nodes[descend_to_leaf(search_key)];
   uint32_t result = 0xffffffffu;
@@ -88,6 +72,17 @@ static int32_t leaf_record_index(int32_t search_key) {
     found |= key_match & valid;
   }
   return (int32_t)result;
+}
+
+__attribute__((noinline))
+static int32_t point_lookup(int32_t search_key) {
+  const int32_t record_index = leaf_record_index(search_key);
+  const uint32_t record_u = (uint32_t)record_index;
+  const uint32_t valid = (uint32_t)(record_index >= 0) &
+                         (uint32_t)(record_u < BTREE_RECORD_COUNT);
+  const uint32_t mask = 0u - valid;
+  const uint32_t value = (uint32_t)btree_records[record_u & mask];
+  return (int32_t)((value & mask) | (0xffffffffu & ~mask));
 }
 
 static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
