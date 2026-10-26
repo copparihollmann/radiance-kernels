@@ -61,6 +61,14 @@ def sha256(path: Path) -> str:
     return value.hexdigest()
 
 
+def git_revision(path: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 @dataclass
 class Dataset:
     name: str
@@ -339,6 +347,33 @@ def partition_work(row_nnz: list[int], boundaries: list[int]) -> list[int]:
             for i in range(len(boundaries) - 1)]
 
 
+def block_cyclic_ranges(dimension: int, sms: int,
+                        chunk_rows: int) -> list[list[tuple[int, int]]]:
+    chunks = (dimension + chunk_rows - 1) // chunk_rows
+    return [[(chunk * chunk_rows, min(dimension, (chunk + 1) * chunk_rows))
+             for chunk in range(sm, chunks, sms)]
+            for sm in range(sms)]
+
+
+def ranged_reference_output(jds: Jds, vector: list[float],
+                            ownership: list[list[tuple[int, int]]]
+                            ) -> tuple[list[float], list[int]]:
+    output = [f32(float("nan"))] * jds.dimension
+    visits = [0] * jds.dimension
+    for ranges in ownership:
+        for begin, end in ranges:
+            for row in range(begin, end):
+                output[row] = reference_row(jds, vector, row)
+                visits[row] += 1
+    return output, visits
+
+
+def ranged_work(costs: list[int],
+                ownership: list[list[tuple[int, int]]]) -> list[int]:
+    return [sum(sum(costs[begin:end]) for begin, end in ranges)
+            for ranges in ownership]
+
+
 def validate_boundaries(boundaries: list[int], dimension: int, sms: int) -> None:
     if len(boundaries) != sms + 1 or boundaries[0] != 0 or boundaries[-1] != dimension:
         raise ValueError("partition does not cover the output domain")
@@ -399,7 +434,8 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
             robust_end_drain: bool = False,
             robust_spin_until_reset: bool = False,
             robust_serial_fence: bool = False,
-            robust_post_spin: int = 500) -> dict:
+            robust_post_spin: int = 500,
+            block_cyclic_rows: int = 0) -> dict:
     if sms not in (1, 2, 4):
         raise ValueError("sms must be 1, 2, or 4")
     if loader not in ("logical", "direct-hashed"):
@@ -412,6 +448,14 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
         raise ValueError("robust_serial_fence requires robust_end_drain")
     if robust_post_spin < 0:
         raise ValueError("robust_post_spin must be nonnegative")
+    threads_per_block = warps_per_core * 2 * 16
+    if (block_cyclic_rows < 0 or
+            (block_cyclic_rows and
+             (block_cyclic_rows % OUTPUT_LINE_FLOATS or
+              block_cyclic_rows < threads_per_block))):
+        raise ValueError(
+            "block-cyclic rows must be zero or a cache-line multiple at least "
+            "as large as the thread block")
 
     jds = build_jds(dataset.rows)
     expected = reference_output(jds, dataset.vector)
@@ -419,11 +463,23 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
     expected_digest = digest(expected_words)
     boundaries = balanced_boundaries(jds.row_nnz, sms)
     validate_boundaries(boundaries, jds.dimension, sms)
-    work = partition_work(jds.row_nnz, boundaries)
+    ownership = None
+    loop_costs = [jds.group_bounds[row // JDS_WARP_SIZE]
+                  for row in jds.row_to_jds]
+    if block_cyclic_rows:
+        ownership = block_cyclic_ranges(jds.dimension, sms,
+                                        block_cyclic_rows)
+        work = ranged_work(jds.row_nnz, ownership)
+        loop_work = ranged_work(loop_costs, ownership)
+        partitioned, visits = ranged_reference_output(
+            jds, dataset.vector, ownership)
+    else:
+        work = partition_work(jds.row_nnz, boundaries)
+        loop_work = partition_work(loop_costs, boundaries)
+        partitioned, visits = partitioned_reference_output(
+            jds, dataset.vector, boundaries)
     if sum(work) != sum(jds.row_nnz):
         raise ValueError("partition does not execute every real nonzero exactly once")
-    partitioned, visits = partitioned_reference_output(jds, dataset.vector,
-                                                        boundaries)
     if visits != [1] * jds.dimension:
         raise ValueError("partition does not execute every output exactly once")
     if [float_word(value) for value in partitioned] != expected_words:
@@ -460,6 +516,7 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
         f"#define SPMV_DIMENSION {jds.dimension}u",
         f"#define SPMV_JDS_WARP_SIZE {JDS_WARP_SIZE}u",
         f"#define SPMV_JDS_DEPTH {len(jds.pointers)}u",
+        f"#define SPMV_BLOCK_CYCLIC_ROWS {block_cyclic_rows}u",
         f"#define SPMV_SM_BOUNDARIES {boundary_initializer}",
         f"#define SPMV_ABS_TOL_BITS 0x{float_word(abs_tol):08x}u",
         f"#define SPMV_REL_TOL_BITS 0x{float_word(rel_tol):08x}u",
@@ -493,8 +550,10 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
     generated_hashes = {
         path.name: sha256(path) for path in sorted(GENERATED.glob("*.bin"))
     }
+    schedule = (f"-rowblockcyclic{block_cyclic_rows}"
+                if block_cyclic_rows else "")
     manifest = {
-        "name": f"spmv-jds--{dataset.name}--{sms}sm",
+        "name": f"spmv-jds{schedule}--{dataset.name}--{sms}sm",
         "family": "spmv_jds", "kind": "sparse-matrix-vector-product",
         "sm_count": sms, "loader": loader,
         "gpu_address_hash": loader == "direct-hashed",
@@ -525,9 +584,17 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
         "accumulation_order": "strict-increasing-k-no-contraction",
         "scalar_only": True, "no_vpu": True, "vpu": False, "vector_isa": False,
         "gemmini": False, "mx": False,
-        "partition": "nonzero-balanced-contiguous-16-float-output-line-aligned",
-        "partition_boundaries": boundaries, "partition_nnz": work,
+        "partition": (
+            "disjoint-block-cyclic-cache-line-complete-output-row-chunks"
+            if block_cyclic_rows else
+            "nonzero-balanced-contiguous-16-float-output-line-aligned"),
+        "partition_boundaries": boundaries if not block_cyclic_rows else [],
+        "partition_ownership": ownership,
+        "partition_block_cyclic_rows": block_cyclic_rows,
+        "partition_nnz": work,
+        "partition_loop_iterations": loop_work,
         "partition_complete": True, "partition_overlap": False,
+        "partition_cache_line_safe": True,
         "padding_index_policy": "upstream-minus-one-normalized-to-zero-for-zero-data",
         "dataset": dataset.name, "dataset_source": dataset.source_kind,
         "dataset_files": dataset.source_files,
@@ -541,6 +608,7 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
         "robust_post_spin": robust_post_spin,
         "logical_payload_bytes": sum(jds.row_nnz) * 8 + jds.dimension * 8,
         "resident_generated_bytes": total_bytes,
+        "kernel_revision": git_revision(ROOT),
         "kernel_source_sha256": source_digest(),
         "generated_sha256": generated_hashes,
         "status": "prepared", "simulator": None,
@@ -567,6 +635,7 @@ def main() -> None:
     parser.add_argument("--robust-spin-until-reset", action="store_true")
     parser.add_argument("--robust-serial-fence", action="store_true")
     parser.add_argument("--robust-post-spin", type=int, default=500)
+    parser.add_argument("--block-cyclic-rows", type=int, default=0)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()
@@ -586,6 +655,7 @@ def main() -> None:
         robust_spin_until_reset=args.robust_spin_until_reset,
         robust_serial_fence=args.robust_serial_fence,
         robust_post_spin=args.robust_post_spin,
+        block_cyclic_rows=args.block_cyclic_rows,
     )
     if args.prepare_only:
         return

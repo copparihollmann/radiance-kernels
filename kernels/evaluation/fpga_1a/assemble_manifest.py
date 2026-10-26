@@ -43,6 +43,7 @@ PASSTHROUGH = (
     "partition_overlap", "accumulation_order", "scalar_only", "vpu",
     "partition_row_boundaries", "partition_ownership",
     "partition_ownership_sha256", "partition_cache_line_safe",
+    "partition_block_cyclic_rows", "partition_loop_iterations",
     "cache_line_bytes", "dataset_contract", "dataset_contract_preserved",
     "vector_isa", "gemmini", "mx", "padding_index_policy", "dataset",
     "dataset_source", "dataset_files", "upstream_gold_validation",

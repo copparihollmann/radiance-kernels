@@ -347,6 +347,8 @@ class AssembleManifestTests(unittest.TestCase):
                 "jds_padded_entries": 3637664,
                 "partition_boundaries": [0, 20544, 53184, 89456, 146689],
                 "partition_nnz": [909329, 909362, 908874, 909084],
+                "partition_loop_iterations": [909865, 908926, 909477, 909117],
+                "partition_block_cyclic_rows": 4080,
                 "partition_complete": True, "partition_overlap": False,
                 "accumulation_order": "strict-increasing-k-no-contraction",
                 "scalar_only": True, "vpu": False, "vector_isa": False,
@@ -366,6 +368,9 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(row["dimension"], 146689)
             self.assertEqual(row["partition_nnz"],
                              [909329, 909362, 908874, 909084])
+            self.assertEqual(row["partition_loop_iterations"],
+                             [909865, 908926, 909477, 909117])
+            self.assertEqual(row["partition_block_cyclic_rows"], 4080)
             self.assertTrue(row["partition_complete"])
             self.assertFalse(row["vpu"])
             self.assertFalse(row["vector_isa"])

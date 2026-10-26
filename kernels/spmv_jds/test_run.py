@@ -76,6 +76,46 @@ class SpmvJdsRunTest(unittest.TestCase):
         self.assertEqual(sum(work), sum(costs))
         self.assertLess(max(work), sum(costs[:32]))
 
+    def test_block_cyclic_ranges_are_line_safe_disjoint_and_complete(self):
+        dimension = 146689
+        ownership = run.block_cyclic_ranges(dimension, 4, 4080)
+        visits = [0] * dimension
+        for ranges in ownership:
+            for begin, end in ranges:
+                self.assertEqual(begin % run.OUTPUT_LINE_FLOATS, 0)
+                if end != dimension:
+                    self.assertEqual(end % run.OUTPUT_LINE_FLOATS, 0)
+                for row in range(begin, end):
+                    visits[row] += 1
+        self.assertEqual(visits, [1] * dimension)
+        self.assertEqual([len(ranges) for ranges in ownership], [9, 9, 9, 9])
+
+    def test_block_cyclic_prepare_preserves_exact_output_contract(self):
+        dataset = run.fixture_dataset(4096, 7)
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            control = run.prepare(dataset, Path(first), sms=4)
+            candidate = run.prepare(
+                dataset, Path(second), sms=4, block_cyclic_rows=512)
+            self.assertEqual(candidate["expected_digest"],
+                             control["expected_digest"])
+            self.assertEqual(candidate["partition_block_cyclic_rows"], 512)
+            self.assertEqual(
+                candidate["partition"],
+                "disjoint-block-cyclic-cache-line-complete-output-row-chunks")
+            self.assertEqual(sum(candidate["partition_nnz"]),
+                             candidate["expanded_nnz"])
+            self.assertEqual(len(candidate["partition_loop_iterations"]), 4)
+            self.assertTrue(candidate["partition_cache_line_safe"])
+            self.assertEqual(len(candidate["partition_ownership"]), 4)
+
+    def test_block_cyclic_rows_must_use_all_threads(self):
+        dataset = run.fixture_dataset(1024, 7)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "thread block"):
+                run.prepare(
+                    dataset, Path(directory), sms=4,
+                    block_cyclic_rows=128)
+
     def test_matrix_market_import_mirrors_and_validates_gold(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
