@@ -71,6 +71,14 @@ def expected_partials(elements: int, sms: int, warps_per_core: int) -> list[floa
     return partials
 
 
+def expected_final_sum(partials: list[float]) -> float:
+    """Mirror the RV64 host's ordered binary32 sum of device partials."""
+    result = f32(0.0)
+    for value in partials:
+        result = f32(result + value)
+    return result
+
+
 def write_constant(path: Path, value: float, elements: int) -> None:
     word = struct.pack("<f", f32(value))
     with path.open("wb") as stream:
@@ -115,9 +123,7 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
     partials = expected_partials(elements, sms, warps_per_core)
     words = [float_word(value) for value in partials]
     expected_digest = digest(words)
-    expected_final = f32(0.0)
-    for value in partials:
-        expected_final = f32(expected_final + value)
+    expected_final = expected_final_sum(partials)
     scalar_golden = f32(f32(START_A) * f32(START_B) * elements)
     relative_error = abs(expected_final - scalar_golden) / abs(scalar_golden)
     expected_words = ", ".join(f"0x{word:08x}u" for word in words)
@@ -133,6 +139,7 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         f"#define STREAM_DOT_ELEMENTS {elements}u",
         f"#define STREAM_DOT_EXPECTED_WORDS {{{expected_words}}}",
         f"#define STREAM_DOT_EXPECTED_DIGEST 0x{expected_digest:016x}ULL",
+        f"#define STREAM_DOT_EXPECTED_FINAL_WORD 0x{float_word(expected_final):08x}u",
     ]
     (GENERATED / "config.h").write_text("\n".join(config) + "\n")
     asm = [
@@ -172,7 +179,7 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         "expected_final_word": f"{float_word(expected_final):08x}",
         "scalar_golden_word": f"{float_word(scalar_golden):08x}",
         "relative_error_vs_scalar_golden": relative_error,
-        "correctness": "exact-device-order-partials-and-guards",
+        "correctness": "exact-device-order-partials-host-final-scalar-and-guards",
         "benchmark_contract": "babelstream-derived-dot-f32",
         "reference_repository": UPSTREAM_REPOSITORY,
         "reference_revision": UPSTREAM_REVISION,

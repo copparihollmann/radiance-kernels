@@ -30,7 +30,13 @@ class StreamDotRunTest(unittest.TestCase):
             self.assertEqual(result["output_element_count"], 4)
             self.assertEqual(len(result["expected_partial_words"]), 4)
             self.assertEqual(result["correctness"],
-                             "exact-device-order-partials-and-guards")
+                             "exact-device-order-partials-host-final-scalar-and-guards")
+            config = (run.GENERATED / "config.h").read_text()
+            self.assertIn("#define STREAM_DOT_EXPECTED_FINAL_WORD ", config)
+            self.assertEqual(
+                result["expected_final_word"],
+                f"{run.float_word(run.expected_final_sum(run.expected_partials(256, 4, 2))):08x}",
+            )
             self.assertLess(result["relative_error_vs_scalar_golden"], 1e-4)
 
     def test_sm_count_changes_only_reduction_partition(self):
