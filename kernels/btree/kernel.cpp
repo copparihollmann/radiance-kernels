@@ -30,13 +30,14 @@ static inline uint32_t select_u32(uint32_t take, uint32_t yes, uint32_t no) {
   return (yes & mask) | (no & ~mask);
 }
 
-__attribute__((noinline))
-static uint32_t descend_to_leaf(int32_t search_key) {
+__attribute__((always_inline))
+static inline uint32_t descend_to_leaf(int32_t search_key) {
   uint32_t node_index = 0u;
   for (uint32_t level = 0u; level < BTREE_HEIGHT; ++level) {
     const __global BTreeNode* node = &btree_nodes[node_index];
     uint32_t next = node_index;
     uint32_t found = 0u;
+#pragma clang loop unroll(disable)
     for (uint32_t slot = 0u; slot < BTREE_ORDER; ++slot) {
       const uint32_t interval =
           (uint32_t)(node->keys[slot] <= search_key) &
@@ -56,11 +57,12 @@ static uint32_t descend_to_leaf(int32_t search_key) {
   return node_index;
 }
 
-__attribute__((noinline))
-static int32_t leaf_record_index(int32_t search_key) {
+__attribute__((always_inline))
+static inline int32_t leaf_record_index(int32_t search_key) {
   const __global BTreeNode* leaf = &btree_nodes[descend_to_leaf(search_key)];
   uint32_t result = 0xffffffffu;
   uint32_t found = 0u;
+#pragma clang loop unroll(disable)
   for (uint32_t slot = 0u; slot < BTREE_ORDER; ++slot) {
     const uint32_t key_match = (uint32_t)(leaf->keys[slot] == search_key);
     const int32_t record_index = leaf->indices[slot];
@@ -74,8 +76,8 @@ static int32_t leaf_record_index(int32_t search_key) {
   return (int32_t)result;
 }
 
-__attribute__((noinline))
-static int32_t point_lookup(int32_t search_key) {
+__attribute__((always_inline))
+static inline int32_t point_lookup(int32_t search_key) {
   const int32_t record_index = leaf_record_index(search_key);
   const uint32_t record_u = (uint32_t)record_index;
   const uint32_t valid = (uint32_t)(record_index >= 0) &
@@ -85,15 +87,14 @@ static int32_t point_lookup(int32_t search_key) {
   return (int32_t)((value & mask) | (0xffffffffu & ~mask));
 }
 
-// Construct the global output address only after both tree traversals have
-// returned.  Keeping that address live across nested noinline calls exposed a
-// Muon RV32 calling-convention bug in multi-SM builds: a callee reused the
-// caller's saved pointer register and the eventual store targeted the record
-// index instead of btree_range_outputs.  This helper changes neither the
-// traversal nor the output contract; it only shortens the pointer lifetime.
-__attribute__((noinline))
-static void write_range_output(uint32_t query, int32_t start, int32_t end,
-                               uint32_t block_id) {
+// Construct the global output address only after both tree traversals.  This
+// changes neither the traversal nor the output contract; it only keeps the
+// output address out of the traversal's live-register set.  Force-inline it
+// together with the traversal helpers so multi-SM execution has no nested
+// device-call state, while the non-unrolled search loops bound register use.
+__attribute__((always_inline))
+static inline void write_range_output(uint32_t query, int32_t start,
+                                      int32_t end, uint32_t block_id) {
   __global BTreeRangeOutput* output = &btree_range_outputs[query];
   output->start = start;
   output->length = start >= 0 && end >= start ? end - start + 1 : 0;
