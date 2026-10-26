@@ -61,7 +61,10 @@ class NearnRunTest(unittest.TestCase):
         host = RUN_PATH.with_name("host.cpp").read_text()
         self.assertEqual(
             host.count("for (uint32_t i = 0; i < NEARN_RECORDS; ++i)"), 1)
-        self.assertIn("distance < selected_distance[rank]", host)
+        self.assertIn(
+            "float_less(actual, selected_distance_bits[rank])", host)
+        self.assertNotIn("static float as_float", host)
+        self.assertNotIn("float selected_distance", host)
         self.assertIn("selected[rank] != expected_top[rank]", host)
         self.assertIn("if (host_hart_id() != 0)", host)
 

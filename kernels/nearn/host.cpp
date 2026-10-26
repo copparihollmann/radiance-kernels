@@ -15,9 +15,17 @@ static uint32_t ulp_distance(uint32_t lhs, uint32_t rhs) {
   return a > b ? a - b : b - a;
 }
 
-static float as_float(uint32_t bits) {
-  union { uint32_t u; float f; } value = {bits};
-  return value.f;
+static bool float_less(uint32_t lhs, uint32_t rhs) {
+  const uint32_t lhs_magnitude = lhs & 0x7fffffffu;
+  const uint32_t rhs_magnitude = rhs & 0x7fffffffu;
+  /* Match IEEE-754 `lhs < rhs` without executing an F instruction on the
+   * no-FPU Rocket host.  Comparisons involving NaNs are false, and signed
+   * zeroes compare equal. */
+  if (lhs_magnitude > 0x7f800000u || rhs_magnitude > 0x7f800000u)
+    return false;
+  if (lhs_magnitude == 0 && rhs_magnitude == 0)
+    return false;
+  return ordered_float(lhs) < ordered_float(rhs);
 }
 
 static uint64_t host_hart_id() {
@@ -68,10 +76,10 @@ int main() {
   uint32_t nonfinite = 0;
   uint32_t max_ulp = 0;
   uint32_t selected[NEARN_TOP_K];
-  float selected_distance[NEARN_TOP_K];
+  uint32_t selected_distance_bits[NEARN_TOP_K];
   for (uint32_t rank = 0; rank < NEARN_TOP_K; ++rank) {
     selected[rank] = 0xffffffffu;
-    selected_distance[rank] = __builtin_inff();
+    selected_distance_bits[rank] = 0x7f800000u;
   }
   for (uint32_t i = 0; i < NEARN_RECORDS; ++i) {
     const uint32_t actual = got[i];
@@ -85,20 +93,19 @@ int main() {
     /* Maintain the same stable (distance, input-index) top-k order as the
      * former rank-by-rank rescans.  Since i increases monotonically and the
      * comparison is strict, equal distances retain ascending input order. */
-    const float distance = as_float(actual);
     uint32_t insert = NEARN_TOP_K;
     for (uint32_t rank = 0; rank < NEARN_TOP_K; ++rank) {
-      if (distance < selected_distance[rank]) {
+      if (float_less(actual, selected_distance_bits[rank])) {
         insert = rank;
         break;
       }
     }
     if (insert < NEARN_TOP_K) {
       for (uint32_t rank = NEARN_TOP_K - 1; rank > insert; --rank) {
-        selected_distance[rank] = selected_distance[rank - 1];
+        selected_distance_bits[rank] = selected_distance_bits[rank - 1];
         selected[rank] = selected[rank - 1];
       }
-      selected_distance[insert] = distance;
+      selected_distance_bits[insert] = actual;
       selected[insert] = i;
     }
   }
