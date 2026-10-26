@@ -132,6 +132,21 @@ def descendant_pids(rows: list[dict], roots: set[int]) -> set[int]:
     return owned
 
 
+def update_owned_pids(rows: list[dict], owned: set[int]) -> set[int]:
+    """Retain live campaign descendants even after their parent exits.
+
+    GNU timeout can exit while a terminated FireSim grandchild is still being
+    reaped.  That process is reparented to systemd, so reconstructing ownership
+    only from the current process tree misclassifies our own simulator as
+    external activity and turns a real timeout into an endlessly retried
+    safety abort.  Keep previously observed live PIDs, discard exited ones to
+    avoid PID-reuse mistakes, and discover any new descendants.
+    """
+    live = {row["pid"] for row in rows}
+    retained = owned & live
+    return descendant_pids(rows, retained)
+
+
 def external_firesim_activity(rows: list[dict] | None = None,
                               owned_roots: set[int] | None = None) -> list[dict]:
     """Return FireSim hardware processes outside this campaign's process tree."""
@@ -481,7 +496,6 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
         )
     env = None
     if target.get("env"):
-        import os
         env = os.environ.copy()
         env.update({key: str(value).format_map(values)
                     for key, value in target["env"].items()})
@@ -510,11 +524,13 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
             start_new_session=guard_host,
         )
         activity = []
+        owned_pids = {os.getpid(), process.pid}
         while process.poll() is None:
             time.sleep(0.25)
             if guard_host:
-                activity = external_firesim_activity(
-                    owned_roots={os.getpid(), process.pid})
+                rows = process_table()
+                owned_pids = update_owned_pids(rows, owned_pids)
+                activity = external_firesim_activity(rows, owned_pids)
                 if activity:
                     stop_process_group(process)
                     break

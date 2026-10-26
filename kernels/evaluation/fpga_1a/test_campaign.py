@@ -14,7 +14,7 @@ from campaign import (SafetyAbort, archive_incomplete_safety_attempt,
                       external_firesim_activity, inventory,
                       is_firesim_hardware_process, load_assets, make_plan,
                       process_table, sha256, summarize,
-                      target_execution_order)
+                      target_execution_order, update_owned_pids)
 
 
 class CampaignTest(unittest.TestCase):
@@ -95,6 +95,34 @@ class CampaignTest(unittest.TestCase):
         self.assertEqual(descendant_pids(rows, {10}), {10, 11, 12})
         activity = external_firesim_activity(rows, {10})
         self.assertEqual([row["pid"] for row in activity], [20])
+
+    def test_owned_pid_history_survives_reparenting_but_not_exit(self):
+        initial = [
+            {"pid": 10, "ppid": 1, "uid": 1000,
+             "argv": ["python3", "campaign.py"]},
+            {"pid": 11, "ppid": 10, "uid": 1000,
+             "argv": ["timeout", "run.sh"]},
+            {"pid": 12, "ppid": 11, "uid": 1000,
+             "argv": ["./FireSim-corigine_xb10"]},
+        ]
+        owned = update_owned_pids(initial, {10, 11})
+        self.assertEqual(owned, {10, 11, 12})
+        reparented = [
+            {"pid": 10, "ppid": 1, "uid": 1000,
+             "argv": ["python3", "campaign.py"]},
+            {"pid": 12, "ppid": 1, "uid": 1000,
+             "argv": ["./FireSim-corigine_xb10"]},
+            {"pid": 20, "ppid": 1, "uid": 2000,
+             "argv": ["./FireSim-corigine_other"]},
+        ]
+        owned = update_owned_pids(reparented, owned)
+        self.assertEqual(owned, {10, 12})
+        self.assertEqual(
+            [row["pid"] for row in external_firesim_activity(reparented, owned)],
+            [20],
+        )
+        exited = [reparented[0], reparented[2]]
+        self.assertEqual(update_owned_pids(exited, owned), {10})
 
     def test_firesim_hardware_process_signatures(self):
         self.assertTrue(is_firesim_hardware_process(
