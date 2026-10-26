@@ -25,6 +25,15 @@ class SpmvJdsRunTest(unittest.TestCase):
         for forbidden in ("gemmini", "mx::", "mvin", "mvout", "vsetvli"):
             self.assertNotIn(forbidden, source.lower())
 
+    def test_host_checker_is_integer_only_and_bit_exact(self):
+        source = RUN_PATH.with_name("host.cpp").read_text()
+        self.assertIn("bad += actual_word != expected_word;", source)
+        self.assertIn("digest_ok", source)
+        self.assertIn("nonfinite == 0u", source)
+        for forbidden in ("static float", "const float", "as_float",
+                          "abs_float"):
+            self.assertNotIn(forbidden, source)
+
     def test_fixture_is_reproducible_and_records_provenance(self):
         dataset_a = run.fixture_dataset(257, 7)
         dataset_b = run.fixture_dataset(257, 7)
@@ -45,6 +54,13 @@ class SpmvJdsRunTest(unittest.TestCase):
             self.assertFalse(a["vector_isa"])
             self.assertFalse(a["gemmini"])
             self.assertEqual(a["generator_model_check"], "passed")
+            self.assertEqual(
+                a["correctness"],
+                "complete-output-bit-exact-digest-and-guards",
+            )
+            self.assertEqual(a["output_word_comparison"],
+                             "bit-exact-all-elements")
+            self.assertFalse(a["runtime_host_floating_point"])
             self.assertEqual(a["partition_nnz"], [340, 335, 336, 342])
             assembly = RUN_PATH.with_name("data.S").read_text()
             self.assertIn(

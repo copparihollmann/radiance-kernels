@@ -48,6 +48,7 @@ PASSTHROUGH = (
     "vector_isa", "gemmini", "mx", "padding_index_policy", "dataset",
     "dataset_source", "dataset_files", "upstream_gold_validation",
     "generator_model_check", "absolute_tolerance", "relative_tolerance",
+    "output_word_comparison", "runtime_host_floating_point",
     "oracle", "equation", "timing_contract", "official_default_contract",
     "derived", "num", "dim", "k", "candidate", "local_size",
     "output_work_float_count", "output_switch_logical_byte_count",

@@ -5,16 +5,6 @@
 #include "generated/config.h"
 #include "generated/symbols.h"
 
-static float as_float(uint32_t bits) {
-  union {
-    uint32_t u;
-    float f;
-  } value = {bits};
-  return value.f;
-}
-
-static float abs_float(float value) { return value < 0.0f ? -value : value; }
-
 static bool finite_word(uint32_t bits) {
   return ((bits >> 23u) & 0xffu) != 0xffu;
 }
@@ -54,8 +44,6 @@ int main() {
 
   volatile uint32_t* expected = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(SPMV_JDS_EXPECTED_ADDR));
-  const float abs_tol = as_float(SPMV_ABS_TOL_BITS);
-  const float rel_tol = as_float(SPMV_REL_TOL_BITS);
   uint64_t digest = 0xCBF29CE484222325ULL;
   uint32_t exact = 0;
   uint32_t bad = 0;
@@ -67,14 +55,7 @@ int main() {
     digest *= 0x100000001B3ULL;
     exact += actual_word == expected_word;
     nonfinite += !finite_word(actual_word);
-    if (finite_word(actual_word)) {
-      const float actual = as_float(actual_word);
-      const float reference = as_float(expected_word);
-      const float diff = abs_float(reference - actual);
-      if (!(diff <= abs_tol || diff < rel_tol * abs_float(reference))) ++bad;
-    } else {
-      ++bad;
-    }
+    bad += actual_word != expected_word;
   }
 
   const bool guards_ok = guards_intact();

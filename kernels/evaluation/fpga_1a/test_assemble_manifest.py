@@ -360,7 +360,9 @@ class AssembleManifestTests(unittest.TestCase):
                 "reference_converter": "convert_dataset.c",
                 "reference_converter_sha256": "cafebabe",
                 "generated_sha256": {"data.bin": "1234"},
-                "correctness": "complete-output-upstream-tolerance-exact-digest-and-guards",
+                "correctness": "complete-output-bit-exact-digest-and-guards",
+                "output_word_comparison": "bit-exact-all-elements",
+                "runtime_host_floating_point": False,
             }
             (build / "result.json").write_text(json.dumps(result))
             row = AM.assemble(root, "spmv_jds")["workloads"][0]
@@ -377,6 +379,9 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(row["reference_main_sha256"], "feedface")
             self.assertEqual(row["reference_converter_sha256"], "cafebabe")
             self.assertEqual(row["generated_sha256"], {"data.bin": "1234"})
+            self.assertEqual(row["output_word_comparison"],
+                             "bit-exact-all-elements")
+            self.assertFalse(row["runtime_host_floating_point"])
 
 
 if __name__ == "__main__":
