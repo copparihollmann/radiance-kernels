@@ -21,6 +21,7 @@ PASSTHROUGH = (
     "gather_iteration_partition", "gather_scratch_elements",
     "gather_block_cyclic_16", "gather_block_cyclic_elements",
     "stream_block_cyclic_lines", "stream_block_cyclic_chunk_lines",
+    "dot_block_cyclic_chunk_elements", "dot_block_cyclic_chunk_bytes_per_input",
     "pattern_length", "host_full_readback",
     "expected_pattern_digest", "expected_source_digest",
     "diagnostic_readback",

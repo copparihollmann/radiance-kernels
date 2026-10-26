@@ -50,18 +50,26 @@ def partition(total: int, count: int, index: int, granule: int = 16) -> tuple[in
     return min(total, begin_chunk * granule), min(total, (begin_chunk + owned) * granule)
 
 
-def expected_partials(elements: int, sms: int, warps_per_core: int) -> list[float]:
+def expected_partials(elements: int, sms: int, warps_per_core: int,
+                      block_cyclic_chunk_elements: int = 0) -> list[float]:
     threads = warps_per_core * MU_NUM_CORES * MU_NUM_THREADS
     product = f32(f32(START_A) * f32(START_B))
     partials = []
     for sm in range(sms):
-        begin, end = partition(elements, sms, sm)
-        scratch = []
+        scratch = [f32(0.0) for _ in range(threads)]
+        ranges = []
+        if block_cyclic_chunk_elements:
+            chunks = (elements + block_cyclic_chunk_elements - 1) // block_cyclic_chunk_elements
+            for chunk in range(sm, chunks, sms):
+                begin = chunk * block_cyclic_chunk_elements
+                end = min(elements, begin + block_cyclic_chunk_elements)
+                ranges.append((begin, end))
+        else:
+            ranges.append(partition(elements, sms, sm))
         for tid in range(threads):
-            acc = f32(0.0)
-            for _ in range(begin + tid, end, threads):
-                acc = f32(acc + product)
-            scratch.append(acc)
+            for begin, end in ranges:
+                for _ in range(begin + tid, end, threads):
+                    scratch[tid] = f32(scratch[tid] + product)
         offset = threads // 2
         while offset:
             for tid in range(offset):
@@ -107,7 +115,8 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
             robust_end_drain: bool = False,
             robust_spin_until_reset: bool = False,
             robust_serial_fence: bool = False,
-            robust_post_spin: int = 500) -> dict:
+            robust_post_spin: int = 500,
+            block_cyclic_chunk_elements: int = 0) -> dict:
     if elements < 256 or elements % 16:
         raise ValueError("elements must be a multiple of 16 and at least 256")
     if sms not in (1, 2, 4):
@@ -122,13 +131,20 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         raise ValueError("robust_serial_fence requires robust_end_drain")
     if robust_post_spin < 0:
         raise ValueError("robust_post_spin must be nonnegative")
+    if (block_cyclic_chunk_elements < 0 or
+            (block_cyclic_chunk_elements and
+             (block_cyclic_chunk_elements < 16 or
+              block_cyclic_chunk_elements % 16))):
+        raise ValueError(
+            "block-cyclic chunk elements must be zero or a positive multiple of 16")
     if elements * 8 + 0x100000 > 0x70000000:
         raise ValueError("STREAM Dot arrays exceed the GPU DRAM address window")
 
     GENERATED.mkdir(exist_ok=True)
     write_constant(GENERATED / "a.bin", START_A, elements)
     write_constant(GENERATED / "b.bin", START_B, elements)
-    partials = expected_partials(elements, sms, warps_per_core)
+    partials = expected_partials(
+        elements, sms, warps_per_core, block_cyclic_chunk_elements)
     words = [float_word(value) for value in partials]
     expected_digest = digest(words)
     expected_final = expected_final_sum(partials)
@@ -145,6 +161,7 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         f"#define NIGHTLY_ROBUST_SERIAL_FENCE {int(robust_serial_fence)}",
         f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define STREAM_DOT_ELEMENTS {elements}u",
+        f"#define STREAM_DOT_BLOCK_CYCLIC_CHUNK_ELEMENTS {block_cyclic_chunk_elements}u",
         f"#define STREAM_DOT_EXPECTED_WORDS {{{expected_words}}}",
         f"#define STREAM_DOT_EXPECTED_DIGEST 0x{expected_digest:016x}ULL",
         f"#define STREAM_DOT_EXPECTED_FINAL_WORD 0x{float_word(expected_final):08x}u",
@@ -176,8 +193,10 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
     ):
         source_hash.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
         source_hash.update(path.read_bytes())
+    schedule = (f"-blockcyclic{block_cyclic_chunk_elements}"
+                if block_cyclic_chunk_elements else "")
     case = {
-        "name": f"stream-dot-babelstream-f32--{elements}--{sms}sm",
+        "name": f"stream-dot-babelstream-f32{schedule}--{elements}--{sms}sm",
         "kind": "stream-dot", "operation": "stream-dot",
         "family": "stream_dot", "sm_count": sms, "loader": loader,
         "gpu_address_hash": loader == "direct-hashed",
@@ -195,7 +214,11 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         "reference_kernel": UPSTREAM_KERNEL,
         "reduction": "per-sm-strided-thread-partials-plus-shared-tree-host-final-sum",
         "host_final_reduction": "integer-ieee754-binary32-rne-positive-finite",
-        "partition": "disjoint-contiguous-64-byte-input-lines",
+        "partition": ("disjoint-block-cyclic-cache-line-complete-input-chunks"
+                      if block_cyclic_chunk_elements else
+                      "disjoint-contiguous-64-byte-input-lines"),
+        "dot_block_cyclic_chunk_elements": block_cyclic_chunk_elements,
+        "dot_block_cyclic_chunk_bytes_per_input": block_cyclic_chunk_elements * 4,
         "logical_payload_bytes": elements * 8,
         "muon_warps_per_core": warps_per_core,
         "robust_end_drain": robust_end_drain,
@@ -225,6 +248,7 @@ def main() -> None:
     parser.add_argument("--robust-spin-until-reset", action="store_true")
     parser.add_argument("--robust-serial-fence", action="store_true")
     parser.add_argument("--robust-post-spin", type=int, default=500)
+    parser.add_argument("--block-cyclic-chunk-elements", type=int, default=0)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     args = parser.parse_args()
@@ -236,6 +260,7 @@ def main() -> None:
         robust_spin_until_reset=args.robust_spin_until_reset,
         robust_serial_fence=args.robust_serial_fence,
         robust_post_spin=args.robust_post_spin,
+        block_cyclic_chunk_elements=args.block_cyclic_chunk_elements,
     )
     if args.prepare_only:
         return

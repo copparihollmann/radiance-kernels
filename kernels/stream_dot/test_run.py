@@ -113,6 +113,40 @@ int main() {
         self.assertEqual(two[0], two[1])
         self.assertTrue(all(value == four[0] for value in four))
 
+    def test_block_cyclic_chunks_cover_each_element_once(self):
+        elements = 1048592
+        for sms in (1, 2, 4):
+            owners = [0] * elements
+            chunk_elements = 2048
+            chunks = (elements + chunk_elements - 1) // chunk_elements
+            for sm in range(sms):
+                for chunk in range(sm, chunks, sms):
+                    begin = chunk * chunk_elements
+                    end = min(elements, begin + chunk_elements)
+                    for index in range(begin, end):
+                        owners[index] += 1
+            self.assertTrue(all(owner == 1 for owner in owners))
+
+    def test_records_bank_staggered_block_cyclic_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = run.prepare(
+                8192, Path(directory), sms=4, warps_per_core=8,
+                block_cyclic_chunk_elements=2048)
+            self.assertEqual(result["dot_block_cyclic_chunk_elements"], 2048)
+            self.assertEqual(result["dot_block_cyclic_chunk_bytes_per_input"], 8192)
+            self.assertEqual(
+                result["partition"],
+                "disjoint-block-cyclic-cache-line-complete-input-chunks")
+            self.assertIn("-blockcyclic2048--", result["name"])
+            self.assertEqual(len(result["expected_partial_words"]), 4)
+            self.assertLess(result["relative_error_vs_scalar_golden"], 1e-4)
+
+    def test_rejects_non_cache_line_block_cyclic_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "multiple of 16"):
+                run.prepare(256, Path(directory),
+                            block_cyclic_chunk_elements=17)
+
     def test_requires_robust_prerequisites(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
