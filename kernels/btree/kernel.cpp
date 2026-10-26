@@ -20,19 +20,34 @@ extern __global BTreePointOutput btree_point_outputs[];
 extern __global BTreeRangeOutput btree_range_outputs[];
 }
 
+// Keep all SIMD lanes on one control-flow path while traversing a node.  The
+// taped-out Muon path can lose lanes under the deeply nested, data-dependent
+// early exits used by the direct OpenCL translation.  Bit selection preserves
+// the first-match semantics without changing the tree, queries, or outputs.
+static uint32_t select_u32(uint32_t take, uint32_t yes, uint32_t no) {
+  const uint32_t mask = 0u - (take & 1u);
+  return (yes & mask) | (no & ~mask);
+}
+
 static uint32_t descend_to_leaf(int32_t search_key) {
   uint32_t node_index = 0u;
   for (uint32_t level = 0u; level < BTREE_HEIGHT; ++level) {
     const __global BTreeNode* node = &btree_nodes[node_index];
     uint32_t next = node_index;
+    uint32_t found = 0u;
     for (uint32_t slot = 0u; slot < BTREE_ORDER; ++slot) {
-      if (node->keys[slot] <= search_key &&
-          node->keys[slot + 1u] > search_key) {
-        const int32_t candidate = node->indices[slot];
-        if (candidate >= 0 && (uint32_t)candidate < BTREE_NODE_COUNT)
-          next = (uint32_t)candidate;
-        break;
-      }
+      const uint32_t interval =
+          (uint32_t)(node->keys[slot] <= search_key) &
+          (uint32_t)(node->keys[slot + 1u] > search_key);
+      const int32_t candidate = node->indices[slot];
+      const uint32_t candidate_u = (uint32_t)candidate;
+      const uint32_t valid = (uint32_t)(candidate >= 0) &
+                             (uint32_t)(candidate_u < BTREE_NODE_COUNT);
+      const uint32_t take = interval & valid & (found ^ 1u);
+      next = select_u32(take, candidate_u, next);
+      // The original traversal breaks on the first matching interval even if
+      // its child index is invalid, so later intervals must remain ignored.
+      found |= interval;
     }
     node_index = next;
   }
@@ -41,26 +56,38 @@ static uint32_t descend_to_leaf(int32_t search_key) {
 
 static int32_t point_lookup(int32_t search_key) {
   const __global BTreeNode* leaf = &btree_nodes[descend_to_leaf(search_key)];
+  uint32_t result = 0xffffffffu;
+  uint32_t found = 0u;
   for (uint32_t slot = 0u; slot < BTREE_ORDER; ++slot) {
-    if (leaf->keys[slot] == search_key) {
-      const int32_t record_index = leaf->indices[slot];
-      if (record_index >= 0 && (uint32_t)record_index < BTREE_RECORD_COUNT)
-        return btree_records[(uint32_t)record_index];
-    }
+    const uint32_t key_match = (uint32_t)(leaf->keys[slot] == search_key);
+    const int32_t record_index = leaf->indices[slot];
+    const uint32_t record_u = (uint32_t)record_index;
+    const uint32_t valid = (uint32_t)(record_index >= 0) &
+                           (uint32_t)(record_u < BTREE_RECORD_COUNT);
+    const uint32_t take = key_match & valid & (found ^ 1u);
+    const uint32_t value = (uint32_t)btree_records[record_u &
+        (0u - valid)];
+    result = select_u32(take, value, result);
+    found |= key_match & valid;
   }
-  return -1;
+  return (int32_t)result;
 }
 
 static int32_t leaf_record_index(int32_t search_key) {
   const __global BTreeNode* leaf = &btree_nodes[descend_to_leaf(search_key)];
+  uint32_t result = 0xffffffffu;
+  uint32_t found = 0u;
   for (uint32_t slot = 0u; slot < BTREE_ORDER; ++slot) {
-    if (leaf->keys[slot] == search_key) {
-      const int32_t record_index = leaf->indices[slot];
-      if (record_index >= 0 && (uint32_t)record_index < BTREE_RECORD_COUNT)
-        return record_index;
-    }
+    const uint32_t key_match = (uint32_t)(leaf->keys[slot] == search_key);
+    const int32_t record_index = leaf->indices[slot];
+    const uint32_t record_u = (uint32_t)record_index;
+    const uint32_t valid = (uint32_t)(record_index >= 0) &
+                           (uint32_t)(record_u < BTREE_RECORD_COUNT);
+    const uint32_t take = key_match & valid & (found ^ 1u);
+    result = select_u32(take, record_u, result);
+    found |= key_match & valid;
   }
-  return -1;
+  return (int32_t)result;
 }
 
 static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
