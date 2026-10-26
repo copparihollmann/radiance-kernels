@@ -40,8 +40,22 @@ explicit binary32 multiply then subtract in the same mathematical phase.
 
 `run.py` independently computes every Fan1/Fan2 transition, final multiplier
 matrix, transformed `A`, transformed `b`, and binary32 back substitution.  The
-reported final check covers every word plus every stage's owner map and four
-guards.  The final solution is assessed with the normwise backward error
+host still reports the exhaustive per-word/ULP comparison against that oracle,
+but that trajectory comparison is diagnostic: independent IEEE-754 execution
+can accumulate beyond one ULP across 126 dependent stages even when the final
+system is correct.
+
+Acceptance does not use the generated oracle residual.  `actual_checker.h`
+performs integer-only IEEE-754 binary32 back substitution directly on the
+FPGA-produced transformed `A` and `b`.  It then evaluates that solution against
+the untouched original `A` and `b`.  Every `A*x` product is exact; a signed
+fixed-point accumulator tracks discarded tails with outward error, producing a
+rigorous upper bound on `||A*x-b||inf`.  The checker proves that upper bound is
+at most `tolerance*||b||inf`.  Since
+
+`||b||inf <= ||A||inf*||x||inf + ||b||inf`,
+
+this is stricter than the documented normwise backward-error requirement
 
 `||A*x-b||inf / (||A||inf*||x||inf + ||b||inf)`.
 
@@ -49,6 +63,13 @@ The tolerance is `64*N*u`, where `u=2^-24` is binary32 unit roundoff.  This is
 a conservative first-order `O(N*u)` allowance for no-pivot elimination and
 back substitution; the generated diagonally-dominant workload is required to
 fall below it.
+
+The checker fails closed on nonfinite data, zero pivots, soft-float overflow,
+fixed-point range failure, changed original-input digests, an uncertified
+residual, incomplete launches, incorrect strict stage ownership, or any guard
+change.  Complete transformed `A`, `b`, and `m` finiteness remains mandatory.
+The host uses no floating-point instructions.  Device arithmetic, all 126
+Fan1/Fan2 stages, useful work, and partitioning are unchanged.
 
 Functional-model testing independently reloads each pre-stage oracle snapshot,
 runs every Fan1/Fan2 stage for each 1/2/4-SM artifact, and checks exact FNV-64

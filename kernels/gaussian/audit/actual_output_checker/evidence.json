@@ -1,0 +1,78 @@
+{
+  "schema": "radiance-gaussian-actual-output-checker-evidence-v1",
+  "status": "passed-for-physical-canary",
+  "scope": "host-checker-and-build-only-no-fpga-no-firesim-no-timing-model",
+  "exact_parent": "7aae7e2dc2540e33b22a2ba79cdceb8cf6440c8c",
+  "worktree": "/scratch/agustin/radiance-fpga-1a/worktrees/gaussian-actual-residual-v1",
+  "workload_invariants": {
+    "size": 64,
+    "stages": 126,
+    "fan1_stages": 63,
+    "fan2_stages": 63,
+    "no_pivot": true,
+    "device_kernel_changed": false,
+    "device_kernel_sha256": "34921ff07a9175001ce30f18c8f0b252820b11555ba12573a3950111da234e47",
+    "device_arithmetic_changed": false,
+    "useful_work_changed": false,
+    "no_vpu": true,
+    "ownership_gate_retained": true,
+    "guard_gate_retained": true
+  },
+  "checker": {
+    "back_substitution": "integer-only-ieee754-binary32-rne-on-actual-transformed-A-b",
+    "residual_products": "exact-binary32-products",
+    "residual_accumulation": "signed-fixed-point-with-outward-discard-bound",
+    "acceptance_relation": "upper(||A*x-b||inf) <= 2^-tolerance_shift*||b||inf",
+    "implication": "strictly-implies-documented-normwise-backward-error-bound",
+    "meaningful_tolerance_shift": 12,
+    "oracle_trajectory": "exhaustive-diagnostic-not-acceptance-gate",
+    "full_output_finiteness_required": ["A", "b", "m"],
+    "original_input_digest_required": true
+  },
+  "tests": {
+    "command": "ulimit -v 4194304; python3 -m unittest -v kernels/gaussian/test_run.py",
+    "passed": 18,
+    "failed": 0,
+    "softfloat_native_rne_comparisons": 252704,
+    "exact_rational_python_edge_systems": 64,
+    "full_meaningful_oracle_size": 64,
+    "full_meaningful_solution_digest": "08ff382562d4b7c5",
+    "full_meaningful_residual_upper_coefficient": 15622038473,
+    "full_meaningful_residual_upper_exponent2": -55,
+    "full_meaningful_denominator_lower_word": "3f7d048b",
+    "finite_corruption_rejected": true,
+    "nan_rejected": true,
+    "zero_pivot_rejected": true,
+    "ubsan": "passed",
+    "asan": "not-run-because-shadow-address-reservation-conflicts-with-hard-vmem-cap"
+  },
+  "rv64_host": {
+    "floating_point_instruction_matches": 0,
+    "disassembly_sha256": "9d7e4368e753d38a7e7e9cb7288e04d1d259b83133b9041206b779400772ec57"
+  },
+  "direct_hashed_builds": {
+    "resource_cap_kib": 8388608,
+    "1sm": {
+      "soc_elf_sha256": "fcf0c39449c088c6fa0250b468c2d2a92e2b49be359ffb1f4a589d2badbca788",
+      "device_elf_sha256": "5da33671c38515cc515f2075f9fa064dce245562117aceaab4776fb5eb34a43f",
+      "result_sha256": "310b5c64fca0d3d6c4b3cef4e8f6baed003d4ecc33cc4bae4ffc22815618c33a"
+    },
+    "2sm": {
+      "soc_elf_sha256": "adae1db3df1985d45f2e3b82150415288d6f3ea46345f654c1e66af7698df1e1",
+      "device_elf_sha256": "30387e298b88d44321aeff07918d796c14b8a6d5ce9285c6038c65d24397d31a",
+      "result_sha256": "db3e7067edf13de880866dfae97f89a59e2aa8f2919cf4d6bb8ac47f02cf70e7"
+    },
+    "4sm": {
+      "soc_elf_sha256": "17fb8461edcd938b5387d1e923812e0c480d36f1a474769a39f9736a800eb60d",
+      "device_elf_sha256": "76d264cfd4074dca9e51b882ebbe3534f7ea7edc235ad2cd56fbfefe0b92761e",
+      "result_sha256": "256e55e9e8872f4d1b29f42744ee9bf35a78f51025fbf76acf08e370f1ce5f70"
+    },
+    "kernel_source_digest": "0be8af602fe29cd43276538696bc0625e273a161d4cd998a5b0ea9408e53eb0d"
+  },
+  "limitations": [
+    "No FPGA or FireSim command was run; physical behavior is not claimed.",
+    "The earlier rejected FPGA run did not preserve complete output arrays, so this checker has not been replayed on those exact words.",
+    "Using ||b||inf as the denominator lower bound is intentionally conservative and may reject a valid result that the documented normwise bound would accept.",
+    "The integer binary32 implementation is heavily differential-tested but is not a machine-checked formal proof."
+  ]
+}

@@ -273,9 +273,10 @@ def source_digest() -> str:
         ROOT.parent / "addr_hash_stamp.mk",
         ROOT.parents[1] / "lib/include/nightly/device.h",
         ROOT.parents[1] / "lib/include/nightly/host.h",
-        ROOT / "Makefile", ROOT / "README.md", ROOT / "emit_symbols.py",
-        ROOT / "host.cpp", ROOT / "kernel.cpp", ROOT / "model_check.py",
-        ROOT / "run.py", ROOT / "test_run.py",
+        ROOT / "Makefile", ROOT / "README.md", ROOT / "actual_checker.h",
+        ROOT / "emit_symbols.py", ROOT / "host.cpp", ROOT / "kernel.cpp",
+        ROOT / "model_check.py", ROOT / "native_checker_test.cpp",
+        ROOT / "run.py", ROOT / "softfloat_f32.h", ROOT / "test_run.py",
     )
     for path in paths:
         digest.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
@@ -326,6 +327,10 @@ def prepare(profile: str, sms: int, out: Path,
     if not math.isfinite(residual) or residual > residual_tolerance:
         raise ValueError(
             f"CPU oracle residual {residual} exceeds {residual_tolerance}")
+    tolerance_factor = 64 * size
+    if tolerance_factor & (tolerance_factor - 1) or tolerance_factor > (1 << 24):
+        raise ValueError("residual tolerance must be an exact power of two")
+    residual_tolerance_shift = 24 - (tolerance_factor.bit_length() - 1)
     stages = 2 * (size - 1)
     matrix_words = size * size
     updates = sum((size - 1 - t) +
@@ -336,7 +341,9 @@ def prepare(profile: str, sms: int, out: Path,
     binaries = {
         "original_a.bin": original_a, "original_b.bin": original_b,
         "expected_a.bin": expected["a"], "expected_b.bin": expected["b"],
-        "expected_m.bin": expected["m"], "model_a.bin": expected["model_a"],
+        "expected_m.bin": expected["m"],
+        "expected_solution.bin": solution,
+        "model_a.bin": expected["model_a"],
         "model_b.bin": expected["model_b"], "model_m.bin": expected["model_m"],
     }
     for name, values in binaries.items():
@@ -361,8 +368,11 @@ def prepare(profile: str, sms: int, out: Path,
         f"#define GAUSSIAN_MODEL_STAGE_FLAG 0x{MODEL_STAGE_FLAG:08x}u",
         f"#define GAUSSIAN_MAX_ULP {MAX_ULP}u",
         f"#define GAUSSIAN_OWNER_DIGEST 0x{owners['digest']}ULL",
-        f"#define GAUSSIAN_RESIDUAL_E18 {residual_e18}ULL",
+        f"#define GAUSSIAN_ORIGINAL_A_DIGEST 0x{fnv64(map(float_word, original_a)):016x}ULL",
+        f"#define GAUSSIAN_ORIGINAL_B_DIGEST 0x{fnv64(map(float_word, original_b)):016x}ULL",
+        f"#define GAUSSIAN_ORACLE_RESIDUAL_E18 {residual_e18}ULL",
         f"#define GAUSSIAN_RESIDUAL_TOLERANCE_E18 {tolerance_e18}ULL",
+        f"#define GAUSSIAN_RESIDUAL_TOLERANCE_SHIFT {residual_tolerance_shift}u",
     ]
     for name, pattern in GUARDS.items():
         config.append(f"#define GAUSSIAN_GUARD_{name.upper()}_PATTERN "
@@ -416,13 +426,37 @@ def prepare(profile: str, sms: int, out: Path,
         "partition": "absolute-16-row-cache-line-block-cyclic",
         "partition_exact_once": True, "partition_cache_line_safe": True,
         "owner_stride": owners["stride"], "owner_digest": owners["digest"],
-        "correctness": "complete-A-b-m-plus-stage-ownership-and-guards",
+        "correctness": (
+            "actual-A-b-software-binary32-back-substitution-plus-certified-"
+            "original-system-residual-and-complete-A-b-m-finiteness-stage-"
+            "ownership-original-integrity-and-guards"
+        ),
         "oracle": "independent-python-binary32-full-pivot-sequence",
-        "solution": "binary32-back-substitution-from-transformed-A-b",
+        "solution": (
+            "integer-software-binary32-back-substitution-from-actual-"
+            "FPGA-transformed-A-b"
+        ),
+        "oracle_trajectory_role": "exhaustive-diagnostic-not-acceptance-gate",
+        "actual_output_acceptance": (
+            "outward-fixed-point-exact-product-residual-certificate"
+        ),
         "relative_backward_error": residual,
+        "relative_backward_error_source": "CPU-oracle-diagnostic-only",
         "residual_norm": "||A*x-b||inf/(||A||inf*||x||inf+||b||inf)",
         "residual_tolerance": residual_tolerance,
         "residual_tolerance_justification": "64*n*binary32-unit-roundoff",
+        "residual_tolerance_power2_shift": residual_tolerance_shift,
+        "residual_certificate_denominator_lower_bound": "||b||inf",
+        "residual_certificate_relation": (
+            "certified-upper(||A*x-b||inf) <= tolerance*||b||inf; "
+            "strictly implies documented normwise bound"
+        ),
+        "expected_solution_digest":
+            f"{fnv64(map(float_word, solution)):016x}",
+        "original_digests": {
+            "a": f"{fnv64(map(float_word, original_a)):016x}",
+            "b": f"{fnv64(map(float_word, original_b)):016x}",
+        },
         "max_ulp": MAX_ULP, "scalar_only": True, "no_vpu": True,
         "vpu": False, "vector_isa": False, "gemmini": False, "mx": False,
         "muon_warps_per_core": warps_per_core,

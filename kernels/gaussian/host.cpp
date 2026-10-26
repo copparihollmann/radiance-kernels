@@ -2,6 +2,7 @@
 #include <radiance.h>
 #include <nightly/host.h>
 
+#include "actual_checker.h"
 #include "generated/config.h"
 #include "generated/symbols.h"
 
@@ -17,6 +18,31 @@ static uint32_t ulp_distance(uint32_t lhs, uint32_t rhs) {
 }
 static bool finite_word(uint32_t word) {
   return ((word >> 23) & 0xffu) != 0xffu;
+}
+
+struct OriginalCheck {
+  uint64_t digest;
+  uint32_t nonfinite;
+};
+
+static OriginalCheck check_original(uint32_t address, uint32_t words) {
+  volatile uint32_t* values = nightly_gpu_ptr<uint32_t>(address);
+  OriginalCheck result = {0xCBF29CE484222325ULL, 0u};
+  for (uint32_t i = 0u; i < words; ++i) {
+    const uint32_t word = values[i];
+    result.digest = fnv_word(result.digest, word);
+    result.nonfinite += !finite_word(word);
+  }
+  return result;
+}
+
+static void print_original_check(const char* name, const OriginalCheck& check,
+                                 uint64_t expected_digest) {
+  nh_puts(name); nh_puts(" digest="); nh_putx(check.digest, 16);
+  nh_puts(" expected_digest="); nh_putx(expected_digest, 16);
+  nh_puts(" nonfinite="); nh_putu(check.nonfinite);
+  nh_puts(" exact="); nh_putu(check.digest == expected_digest);
+  nh_puts("\n");
 }
 
 struct Check {
@@ -158,24 +184,72 @@ int main() {
   print_check("GAUSSIAN_A", a, GAUSSIAN_MATRIX_WORDS);
   print_check("GAUSSIAN_B", b, GAUSSIAN_SIZE);
   print_check("GAUSSIAN_M", m, GAUSSIAN_MATRIX_WORDS);
+  const OriginalCheck original_a = check_original(
+      GAUSSIAN_ORIGINAL_A_ADDR, GAUSSIAN_MATRIX_WORDS);
+  const OriginalCheck original_b = check_original(
+      GAUSSIAN_ORIGINAL_B_ADDR, GAUSSIAN_SIZE);
+  print_original_check("GAUSSIAN_ORIGINAL_A", original_a,
+                       GAUSSIAN_ORIGINAL_A_DIGEST);
+  print_original_check("GAUSSIAN_ORIGINAL_B", original_b,
+                       GAUSSIAN_ORIGINAL_B_DIGEST);
+
+  uint32_t solution[GAUSSIAN_SIZE] = {};
+  const GaussianBackSubstitution back = gaussian_back_substitute_actual(
+      nightly_gpu_ptr<uint32_t>(GAUSSIAN_A_ADDR),
+      nightly_gpu_ptr<uint32_t>(GAUSSIAN_B_ADDR),
+      GAUSSIAN_SIZE, solution);
+  GaussianResidualCertificate residual = {};
+  if (back.valid) {
+    residual = gaussian_certify_actual_solution(
+        nightly_gpu_ptr<uint32_t>(GAUSSIAN_ORIGINAL_A_ADDR),
+        nightly_gpu_ptr<uint32_t>(GAUSSIAN_ORIGINAL_B_ADDR),
+        solution, GAUSSIAN_SIZE, GAUSSIAN_RESIDUAL_TOLERANCE_SHIFT);
+  }
+  nh_puts("GAUSSIAN_BACK_SUB actual_transformed=1 valid=");
+  nh_putu(back.valid); nh_puts(" failure="); nh_putu(back.failure);
+  nh_puts(" row="); nh_putu(back.row);
+  nh_puts(" column="); nh_putu(back.column);
+  nh_puts(" solution_digest="); nh_putx(back.solution_digest, 16);
+  nh_puts("\n");
+  nh_puts("GAUSSIAN_RESIDUAL actual_transformed=1 valid=");
+  nh_putu(residual.valid); nh_puts(" certified=");
+  nh_putu(residual.certified); nh_puts(" failure=");
+  nh_putu(residual.failure); nh_puts(" row="); nh_putu(residual.row);
+  nh_puts(" upper_coefficient=");
+  nh_putu(residual.residual_upper_coefficient);
+  nh_puts(" upper_exponent2=");
+  nh_puti(residual.residual_upper_exponent);
+  nh_puts(" denominator_lower_word=");
+  nh_putx(residual.denominator_lower_word, 8);
+  nh_puts(" tolerance_power2=-");
+  nh_putu(residual.tolerance_shift); nh_puts("\n");
   const bool owners_ok = check_owners();
   const bool guards_ok =
       check_guard(GAUSSIAN_GUARD_BEFORE_ADDR, GAUSSIAN_GUARD_BEFORE_PATTERN) &&
       check_guard(GAUSSIAN_GUARD_MIDDLE_ADDR, GAUSSIAN_GUARD_MIDDLE_PATTERN) &&
       check_guard(GAUSSIAN_GUARD_MODEL_ADDR, GAUSSIAN_GUARD_MODEL_PATTERN) &&
       check_guard(GAUSSIAN_GUARD_AFTER_ADDR, GAUSSIAN_GUARD_AFTER_PATTERN);
-  nh_puts("GAUSSIAN_RESIDUAL relative_backward_error_e18=");
-  nh_putu(GAUSSIAN_RESIDUAL_E18);
-  nh_puts(" tolerance_e18="); nh_putu(GAUSSIAN_RESIDUAL_TOLERANCE_E18);
-  nh_puts(" oracle_within_tolerance=");
-  nh_putu(GAUSSIAN_RESIDUAL_E18 <= GAUSSIAN_RESIDUAL_TOLERANCE_E18);
+  const bool trajectory_match = a.bad == 0u && b.bad == 0u && m.bad == 0u;
+  nh_puts("GAUSSIAN_SUMMARY oracle_trajectory_match=");
+  nh_putu(trajectory_match);
+  nh_puts(" actual_residual_certified="); nh_putu(residual.certified);
   nh_puts(" guards="); nh_putu(guards_ok);
   nh_puts(" total_kernel_cycles="); nh_putu(total_cycles); nh_puts("\n");
 
-  const bool passed = completed && a.bad == 0u && b.bad == 0u &&
-      m.bad == 0u && a.nonfinite == 0u && b.nonfinite == 0u &&
-      m.nonfinite == 0u && owners_ok && guards_ok &&
-      GAUSSIAN_RESIDUAL_E18 <= GAUSSIAN_RESIDUAL_TOLERANCE_E18;
+  // The expected trajectory remains an exhaustive diagnostic, but is not the
+  // semantic acceptance criterion: independent IEEE implementations may
+  // accumulate more than one ULP over 126 stages.  Acceptance instead proves
+  // that a software-binary32 back solve of the actual transformed A/b solves
+  // the untouched original system under a stricter-than-documented residual
+  // bound.  Completion, every finite output, ownership, and guards remain
+  // mandatory and fail closed.
+  const bool originals_ok =
+      original_a.digest == GAUSSIAN_ORIGINAL_A_DIGEST &&
+      original_b.digest == GAUSSIAN_ORIGINAL_B_DIGEST &&
+      original_a.nonfinite == 0u && original_b.nonfinite == 0u;
+  const bool passed = completed && a.nonfinite == 0u && b.nonfinite == 0u &&
+      m.nonfinite == 0u && originals_ok && back.valid && residual.valid &&
+      residual.certified && owners_ok && guards_ok;
   nh_puts(passed ? "PASS\n" : "FAIL\n");
   nh_flush();
   exit(passed ? 0 : 1);

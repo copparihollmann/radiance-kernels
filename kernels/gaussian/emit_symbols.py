@@ -16,6 +16,7 @@ def main() -> None:
         if len(fields) == 3 and fields[2].startswith("gaussian_"):
             symbols[fields[2]] = int(fields[0], 16)
     required = (
+        "gaussian_original_a", "gaussian_original_b",
         "gaussian_a", "gaussian_b", "gaussian_m",
         "gaussian_expected_a", "gaussian_expected_b", "gaussian_expected_m",
         "gaussian_model_a", "gaussian_model_b", "gaussian_model_m",

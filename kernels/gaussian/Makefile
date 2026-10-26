@@ -15,6 +15,7 @@ MU_NM = $(LLVM_MUON)/bin/llvm-nm
 GAUSSIAN_GENERATED = generated/config.h generated/original_a.bin \
 	generated/original_b.bin generated/expected_a.bin \
 	generated/expected_b.bin generated/expected_m.bin \
+	generated/expected_solution.bin \
 	generated/model_a.bin generated/model_b.bin generated/model_m.bin
 
 data.S $(GAUSSIAN_GENERATED) &: run.py
@@ -28,7 +29,8 @@ kernel.mu.o: generated/config.h
 generated/symbols.h: kernel.radiance.elf generated/config.h emit_symbols.py
 	python3 emit_symbols.py $(MU_NM) $< $@
 
-host.host.o: generated/config.h generated/symbols.h
+host.host.o: generated/config.h generated/symbols.h actual_checker.h \
+	softfloat_f32.h
 
 .PHONY: test clean-generated
 test:
