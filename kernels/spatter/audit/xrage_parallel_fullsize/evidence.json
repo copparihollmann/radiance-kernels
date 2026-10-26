@@ -1,0 +1,480 @@
+{
+  "artifacts": [
+    {
+      "device_elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--1sm/device.radiance.elf",
+      "device_elf_bytes": 79997976,
+      "device_elf_sha256": "a98a382fd1d4970905e8ef6dfb1232ff429b66d02580a0a31daf210a60fa70d7",
+      "elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--1sm/kernel.soc.elf",
+      "elf_bytes": 80031856,
+      "elf_sha256": "f986ad5d0bd6244a7807765d7e04cf23e8289dce1d20f10175e3d9f3ddca89e2",
+      "kernel_revision": "8bf256a5406e749a6342522e398b468d56c1b5db",
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "loader": "logical",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--1sm/result.json",
+      "result_sha256": "454361df676832c01986c0616305b044eb8e0ffd97aad187bd39f6a208d102e8",
+      "sms": 1
+    },
+    {
+      "device_elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--2sm/device.radiance.elf",
+      "device_elf_bytes": 79997976,
+      "device_elf_sha256": "ca8d593270d18d456c64fd44f59c225c04d0cdedfc884784f791a2d3525f1b7e",
+      "elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--2sm/kernel.soc.elf",
+      "elf_bytes": 80031856,
+      "elf_sha256": "a7d05f947d318fd8f564347fbc960d1b41122f3435026514af6ce3659295bbfa",
+      "kernel_revision": "8bf256a5406e749a6342522e398b468d56c1b5db",
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "loader": "logical",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--2sm/result.json",
+      "result_sha256": "2632d06ba1b684af77389d148a6f15cc35a35901bf3d515c2f1b0b807e942abd",
+      "sms": 2
+    },
+    {
+      "device_elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--4sm/device.radiance.elf",
+      "device_elf_bytes": 79997976,
+      "device_elf_sha256": "a1e35c8475d3a2d002462628651c94d245227d7ce5d5ba68fa1efbe6d2d48dc4",
+      "elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--4sm/kernel.soc.elf",
+      "elf_bytes": 80031856,
+      "elf_sha256": "7da481b9f33abf5c40934ecd8c34b134c81eaede8c8c28c5883433bc2dca7d9a",
+      "kernel_revision": "8bf256a5406e749a6342522e398b468d56c1b5db",
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "loader": "logical",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical/xrage-parallel-winner-post20k--scatter-parallel--4sm/result.json",
+      "result_sha256": "4b8bc7c7be7530e8e6c5454980665f3021c966b9d4c5aeecaea501019d7c3aeb",
+      "sms": 4
+    },
+    {
+      "device_elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--1sm/device.radiance.elf",
+      "device_elf_bytes": 79997976,
+      "device_elf_sha256": "6c2dc781674d722a226d7e91dc9198e0038ee9a957d1f7025ad82c65989fe14a",
+      "elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--1sm/kernel.soc.elf",
+      "elf_bytes": 80044976,
+      "elf_sha256": "09c39fa216190936d16fa4f341b553be57f1aaa79ce2dab7d4beb72bd8d50800",
+      "kernel_revision": "8bf256a5406e749a6342522e398b468d56c1b5db",
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "loader": "direct-hashed",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--1sm/result.json",
+      "result_sha256": "cb532c87469ced528ea277f071fb2c7110b78c899d4411593081003ba8360410",
+      "sms": 1
+    },
+    {
+      "device_elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--2sm/device.radiance.elf",
+      "device_elf_bytes": 79997992,
+      "device_elf_sha256": "e9137f57c2fee2b51e6a574eca1ef184191d859363435e69965cf96b16ad54d8",
+      "elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--2sm/kernel.soc.elf",
+      "elf_bytes": 80044976,
+      "elf_sha256": "6e54dfd1b7f4e5e4f2d788b9461bda6b799b453ceb458b4e96beec2d47e8c0f0",
+      "kernel_revision": "8bf256a5406e749a6342522e398b468d56c1b5db",
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "loader": "direct-hashed",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--2sm/result.json",
+      "result_sha256": "6cac6b09c3f6374617f8b77b8134131fabf30a49e44c9b0dbbe2feb1465a22c8",
+      "sms": 2
+    },
+    {
+      "device_elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--4sm/device.radiance.elf",
+      "device_elf_bytes": 79997992,
+      "device_elf_sha256": "28705a4d78a0dffd2ac31a2427af21b024bcb0bd0e63886d6122481aca033143",
+      "elf": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--4sm/kernel.soc.elf",
+      "elf_bytes": 80044976,
+      "elf_sha256": "5a67834d76dd5f86980f172f478563d6b157aab26db11b496cb7730db762b1a7",
+      "kernel_revision": "8bf256a5406e749a6342522e398b468d56c1b5db",
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "loader": "direct-hashed",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--4sm/result.json",
+      "result_sha256": "1fa3e2d2cde608bcf520b203036e45f5b74aad28bf77d51c528385ea00e2f450",
+      "sms": 4
+    }
+  ],
+  "contract": {
+    "checker": "admissible-winner-set-checked",
+    "collision_policy": "parallel",
+    "cyclotron_shadow_limitation": "Cyclotron has no direct-loader address-hash model; logical shadows disable only address pre-hashing and FPGA-only spin-until-reset",
+    "device_task_partition": "task",
+    "final_output": "schedule-dependent-non-atomic",
+    "robust_completion": {
+      "direct_hashed_spin_until_reset": true,
+      "drain_passes": 3,
+      "end_drain": true,
+      "post_spin_cycles": 20000,
+      "serial_fence": true
+    }
+  },
+  "cyclotron_exact_winner": [
+    {
+      "checker_log": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--1sm/exact-check.log",
+      "checker_log_sha256": "bba85a6df170779b8d0ea8051c0e2d5d6e8f0fa4a12be1be4e3d4be2f6f7b0b2",
+      "exact_winner_diagnostic": "XRAGE_EXACT_WINNER_CHECK transfers=6664304 outputs=2051101 intended=1191878 admissible=1191878 missing=0 invalid_source=0 wrong_destination=0 unexpected_nonzero=0 illegal=0 PASS",
+      "output_dump": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--1sm/output.u64le",
+      "output_dump_bytes": 16408808,
+      "output_dump_sha256": "4f03c869ed1f717317d1181f5b16f99c1debb130759fbb52a1801d39365fbaa6",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--1sm/result.json",
+      "result_sha256": "f9ec0e9e2fca94159b5a87cdeda1566d13529a58f9595a4cce92487de3b38985",
+      "simulation_cycles": 513036,
+      "sms": 1
+    },
+    {
+      "checker_log": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--2sm/exact-check.log",
+      "checker_log_sha256": "bba85a6df170779b8d0ea8051c0e2d5d6e8f0fa4a12be1be4e3d4be2f6f7b0b2",
+      "exact_winner_diagnostic": "XRAGE_EXACT_WINNER_CHECK transfers=6664304 outputs=2051101 intended=1191878 admissible=1191878 missing=0 invalid_source=0 wrong_destination=0 unexpected_nonzero=0 illegal=0 PASS",
+      "output_dump": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--2sm/output.u64le",
+      "output_dump_bytes": 16408808,
+      "output_dump_sha256": "253d59942bf8e1863b443dcec343d9778060259d066ae18ef3e0c7753bcf024d",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--2sm/result.json",
+      "result_sha256": "fd4b301b1db1427e16b560227a8e40825fddd85e59a2a9a9ecd7a5da447c9796",
+      "simulation_cycles": 513064,
+      "sms": 2
+    },
+    {
+      "checker_log": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--4sm/exact-check.log",
+      "checker_log_sha256": "bba85a6df170779b8d0ea8051c0e2d5d6e8f0fa4a12be1be4e3d4be2f6f7b0b2",
+      "exact_winner_diagnostic": "XRAGE_EXACT_WINNER_CHECK transfers=6664304 outputs=2051101 intended=1191878 admissible=1191878 missing=0 invalid_source=0 wrong_destination=0 unexpected_nonzero=0 illegal=0 PASS",
+      "output_dump": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--4sm/output.u64le",
+      "output_dump_bytes": 16408808,
+      "output_dump_sha256": "8d9c654f632da0900e5a0e26a389fb943163cebe5dcae6197266eafe15525de4",
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-exact/xrage-parallel-winner-post20k--scatter-parallel--4sm/result.json",
+      "result_sha256": "9bcc0f871a029c2eff8ea89c19732d36d5778722025ac7d63f3362a234c7d59b",
+      "simulation_cycles": 343869,
+      "sms": 4
+    }
+  ],
+  "cyclotron_functional_coverage": [
+    {
+      "coverage_destinations": 1191878,
+      "kernel_cycles": 512958,
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-functional/jobs/xrage-parallel-winner-post20k--scatter-parallel--1sm/rep-0/result.json",
+      "result_sha256": "bfb1cb83f839b434b7e5a76a8daccc21ae75a1b5adde01f453f6bd1064df97f7",
+      "simulation_cycles": 513036,
+      "sms": 1,
+      "stdout": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-functional/jobs/xrage-parallel-winner-post20k--scatter-parallel--1sm/rep-0/stdout.log",
+      "stdout_sha256": "f17c113f183eef95055903cf12ae44b53bb288de6dcc2213415f8cc96f0daa4f"
+    },
+    {
+      "coverage_destinations": 1191878,
+      "kernel_cycles": 512986,
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-functional/jobs/xrage-parallel-winner-post20k--scatter-parallel--2sm/rep-0/result.json",
+      "result_sha256": "7d086772d11753f7815f9c7b5bfef28746f2beef69e728448dc0dbcc8d0653d5",
+      "simulation_cycles": 513064,
+      "sms": 2,
+      "stdout": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-functional/jobs/xrage-parallel-winner-post20k--scatter-parallel--2sm/rep-0/stdout.log",
+      "stdout_sha256": "9eee72237a0de53c2c1459b43a4cff131bcdf7a82aad8abdefecc9c3554e2df0"
+    },
+    {
+      "coverage_destinations": 1191878,
+      "kernel_cycles": 343791,
+      "result": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-functional/jobs/xrage-parallel-winner-post20k--scatter-parallel--4sm/rep-0/result.json",
+      "result_sha256": "7178cd66e7b8181617a7c7f5bd42782f634e4e080e83552a1233ae170a8062cc",
+      "simulation_cycles": 343869,
+      "sms": 4,
+      "stdout": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/cyclotron-functional/jobs/xrage-parallel-winner-post20k--scatter-parallel--4sm/rep-0/stdout.log",
+      "stdout_sha256": "06ca68cde6055d700db2f2980045b9c6c93e87a9f6a6aac289c00cc5dec098d6"
+    }
+  ],
+  "cyclotron_shadow_pairs": [
+    {
+      "byte_identical_device_elf_claimed": false,
+      "intentional_differences": [
+        "logical-vs-direct address encoding",
+        "FPGA-only spin-until-reset disabled in Cyclotron shadow"
+      ],
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "sms": 1
+    },
+    {
+      "byte_identical_device_elf_claimed": false,
+      "intentional_differences": [
+        "logical-vs-direct address encoding",
+        "FPGA-only spin-until-reset disabled in Cyclotron shadow"
+      ],
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "sms": 2
+    },
+    {
+      "byte_identical_device_elf_claimed": false,
+      "intentional_differences": [
+        "logical-vs-direct address encoding",
+        "FPGA-only spin-until-reset disabled in Cyclotron shadow"
+      ],
+      "kernel_source_sha256": "040d0ae75523fd3747f7d51cd6f295aedc26ca9f192018900f1d7e9e2beaa7fd",
+      "sms": 4
+    }
+  ],
+  "fixture": {
+    "pattern": "/scratch/agustin/radiance-fpga-1a/artifacts/xrage-inputs-v1/xrage-scatter.u32le",
+    "pattern_sha256": "283191aeb3d9750b4fb811851a7576c60110966adcbcda3e6fd917e5880545c3",
+    "repeated_transfers": 5472426,
+    "suite": "/scratch/agustin/radiance-fpga-1a/artifacts/xrage-inputs-v1/xrage-suite.json",
+    "suite_sha256": "deeecaffe7392f8f0aa881887ab804690e3c93248493a3effbc0e592f496569f",
+    "transfers": 6664304,
+    "written_destinations": 1191878
+  },
+  "fpga_plan": {
+    "asset_receipts": [
+      {
+        "bytes": 119156203,
+        "label": "firesim-1sm-dram.bitstream",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/firesim_radiance1SM_DRAM.tar.gz",
+        "sha256": "ff2a865b9434ff58ce5c3c0e8d454275340a0891cb7b76a58de4aa349927e8b9"
+      },
+      {
+        "bytes": 12420728,
+        "label": "firesim-1sm-dram.driver",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/FireSim-corigine_mimicturbo_gt-radiance1SM_DRAM",
+        "sha256": "0eb2def8ce269eaa0a8bc349aac001937323f7bb516d4211ed7656e1c59b1016"
+      },
+      {
+        "bytes": 760,
+        "label": "firesim-1sm-dram.hwdb_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/firesim-db.json",
+        "sha256": "a1aecc000c0fecde91af99805bde866810d886ff4eca73fcc70eec6af22fb87f"
+      },
+      {
+        "bytes": 12451,
+        "label": "firesim-1sm-dram.runner",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/run.sh",
+        "sha256": "93f0d2e66567b95d0fa06fbdbf1bfe13d6b175e2402e34a5980909f49569a0e3"
+      },
+      {
+        "bytes": 3295,
+        "label": "firesim-1sm-dram.runtime_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/sim-run.sh",
+        "sha256": "75aef72a3f1a7952975e814f692bee1b3a31a3210e8ae0a790d288200f938ba9"
+      },
+      {
+        "bytes": 168291895,
+        "label": "firesim-2sm-dram-baseline.bitstream",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/firesim_radiance2SM_DRAM_baseline.tar.gz",
+        "sha256": "e23b57d2d38ea0c42db33010b9cc5ec3ae29639bf655ef2fa19819e989c4d803"
+      },
+      {
+        "bytes": 12641096,
+        "label": "firesim-2sm-dram-baseline.driver",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/FireSim-corigine_mimicturbo_gt-radiance2SM_DRAM_baseline",
+        "sha256": "cccd3dc05ef472f32c6e80a38e24cd7856bf185990c17c9432f2b2ccb00f29a3"
+      },
+      {
+        "bytes": 760,
+        "label": "firesim-2sm-dram-baseline.hwdb_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/firesim-db.json",
+        "sha256": "a1aecc000c0fecde91af99805bde866810d886ff4eca73fcc70eec6af22fb87f"
+      },
+      {
+        "bytes": 12451,
+        "label": "firesim-2sm-dram-baseline.runner",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/run.sh",
+        "sha256": "93f0d2e66567b95d0fa06fbdbf1bfe13d6b175e2402e34a5980909f49569a0e3"
+      },
+      {
+        "bytes": 3295,
+        "label": "firesim-2sm-dram-baseline.runtime_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/sim-run.sh",
+        "sha256": "75aef72a3f1a7952975e814f692bee1b3a31a3210e8ae0a790d288200f938ba9"
+      },
+      {
+        "bytes": 178992725,
+        "label": "firesim-2sm-dram.bitstream",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/firesim_radiance2SM_DRAM.tar.gz",
+        "sha256": "9f81a334e18976f633c10aaf845d2f0a0d255c0c42f384f232f28bbef49ef20e"
+      },
+      {
+        "bytes": 12359120,
+        "label": "firesim-2sm-dram.driver",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/FireSim-corigine_mimicturbo_gt-radiance2SM_DRAM",
+        "sha256": "2c959de034f29f3e19507f17ed42a25b5618926f184de8ca4f4c89fb8217ed0a"
+      },
+      {
+        "bytes": 760,
+        "label": "firesim-2sm-dram.hwdb_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/firesim-db.json",
+        "sha256": "a1aecc000c0fecde91af99805bde866810d886ff4eca73fcc70eec6af22fb87f"
+      },
+      {
+        "bytes": 12451,
+        "label": "firesim-2sm-dram.runner",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/run.sh",
+        "sha256": "93f0d2e66567b95d0fa06fbdbf1bfe13d6b175e2402e34a5980909f49569a0e3"
+      },
+      {
+        "bytes": 3295,
+        "label": "firesim-2sm-dram.runtime_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/sim-run.sh",
+        "sha256": "75aef72a3f1a7952975e814f692bee1b3a31a3210e8ae0a790d288200f938ba9"
+      },
+      {
+        "bytes": 190439094,
+        "label": "firesim-2sm-hbm.bitstream",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/firesim_radiance2SM_HBM.tar.gz",
+        "sha256": "d5e696dd315024690ef1955b8cdd1c8794147a479c1ce74d61c6f72ea23724ff"
+      },
+      {
+        "bytes": 12599464,
+        "label": "firesim-2sm-hbm.driver",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/FireSim-corigine_mimicturbo_gt-radiance2SM_HBM",
+        "sha256": "ecd77257409ffbff2c7b2c970ba416f80a18cc3b10516d764c029d773d0bb4b7"
+      },
+      {
+        "bytes": 760,
+        "label": "firesim-2sm-hbm.hwdb_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/firesim-db.json",
+        "sha256": "a1aecc000c0fecde91af99805bde866810d886ff4eca73fcc70eec6af22fb87f"
+      },
+      {
+        "bytes": 12451,
+        "label": "firesim-2sm-hbm.runner",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/run.sh",
+        "sha256": "93f0d2e66567b95d0fa06fbdbf1bfe13d6b175e2402e34a5980909f49569a0e3"
+      },
+      {
+        "bytes": 3295,
+        "label": "firesim-2sm-hbm.runtime_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/sim-run.sh",
+        "sha256": "75aef72a3f1a7952975e814f692bee1b3a31a3210e8ae0a790d288200f938ba9"
+      },
+      {
+        "bytes": 270797318,
+        "label": "firesim-4sm-dram.bitstream",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/firesim_radiance4SM_DRAM.tar.gz",
+        "sha256": "2c7ef493875841e897c935cb211168aa2204b161d79f4c723650d6b25b825a1c"
+      },
+      {
+        "bytes": 12358736,
+        "label": "firesim-4sm-dram.driver",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/radiance-bitstreams/FireSim-corigine_mimicturbo_gt-radiance4SM_DRAM",
+        "sha256": "3b8db516ae644633af93337a6d4e29d9c713ad015c26c8e8b7bb6dd5fc466543"
+      },
+      {
+        "bytes": 760,
+        "label": "firesim-4sm-dram.hwdb_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/firesim-db.json",
+        "sha256": "a1aecc000c0fecde91af99805bde866810d886ff4eca73fcc70eec6af22fb87f"
+      },
+      {
+        "bytes": 12451,
+        "label": "firesim-4sm-dram.runner",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/run.sh",
+        "sha256": "93f0d2e66567b95d0fa06fbdbf1bfe13d6b175e2402e34a5980909f49569a0e3"
+      },
+      {
+        "bytes": 3295,
+        "label": "firesim-4sm-dram.runtime_config",
+        "path": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1/runtime/sim-run.sh",
+        "sha256": "75aef72a3f1a7952975e814f692bee1b3a31a3210e8ae0a790d288200f938ba9"
+      }
+    ],
+    "asset_root": "/scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v1",
+    "bdf": "1a:00.0",
+    "fpga_commands_executed": 0,
+    "fresh_programming": true,
+    "jobs": 5,
+    "path": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/fpga-plan/plan.json",
+    "run_argv": [
+      "timeout",
+      "--signal=TERM",
+      "--kill-after=30",
+      "1800",
+      "bash",
+      "{runner}",
+      "-b",
+      "{bitstream_config}",
+      "--bdf",
+      "{bdf}",
+      "--fastloadmem",
+      "{elf}"
+    ],
+    "sha256": "bb3b4d8618260d2979ef9ec6fa2f8bad590e1bdab04f54c750dea47d9937dc38",
+    "targets": [
+      "firesim-1sm-dram",
+      "firesim-2sm-dram",
+      "firesim-2sm-dram-baseline",
+      "firesim-2sm-hbm",
+      "firesim-4sm-dram"
+    ]
+  },
+  "isa": [
+    {
+      "gemmini": false,
+      "mx": false,
+      "path": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--1sm/device.radiance.elf",
+      "riscv_arch": "rv32i2p1_m2p0_zicsr2p0_zfinx1p0_zhinx1p0_zhinxmin1p0",
+      "scalar_no_vpu": true,
+      "sha256": "6c2dc781674d722a226d7e91dc9198e0038ee9a957d1f7025ad82c65989fe14a"
+    },
+    {
+      "gemmini": false,
+      "mx": false,
+      "path": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--2sm/device.radiance.elf",
+      "riscv_arch": "rv32i2p1_m2p0_zicsr2p0_zfinx1p0_zhinx1p0_zhinxmin1p0",
+      "scalar_no_vpu": true,
+      "sha256": "e9137f57c2fee2b51e6a574eca1ef184191d859363435e69965cf96b16ad54d8"
+    },
+    {
+      "gemmini": false,
+      "mx": false,
+      "path": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed/xrage-parallel-winner-post20k--scatter-parallel--4sm/device.radiance.elf",
+      "riscv_arch": "rv32i2p1_m2p0_zicsr2p0_zfinx1p0_zhinx1p0_zhinxmin1p0",
+      "scalar_no_vpu": true,
+      "sha256": "28705a4d78a0dffd2ac31a2427af21b024bcb0bd0e63886d6122481aca033143"
+    }
+  ],
+  "manifests": [
+    {
+      "loader": "logical",
+      "path": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/logical-manifest.json",
+      "rows": 3,
+      "sha256": "a90aad1b0e4a8e009d32009ea96685ae581ebb63217b72c270eee76cd798cad4"
+    },
+    {
+      "loader": "direct-hashed",
+      "path": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/build/direct-hashed-manifest.json",
+      "rows": 3,
+      "sha256": "d4850047dcf2de5921713f5e1311ef8a87b2d8d3394fe456ac569f91df7b5e75"
+    }
+  ],
+  "resource": {
+    "coverage_maximum_resident_kib": 11475684,
+    "exact_maximum_resident_kib": 11475316,
+    "execution_policy": "sequential Cyclotron rows; no FPGA process launched",
+    "mem_available_kib_after_coverage": 348621052,
+    "mem_available_kib_after_exact": 319630672,
+    "mem_available_kib_before": 360287112,
+    "resource_issue": null
+  },
+  "schema": "radiance-xrage-parallel-winner-fullsize-audit-v1",
+  "source": {
+    "artifact_revision": "8bf256a5406e749a6342522e398b468d56c1b5db",
+    "artifact_revision_protected_files_identical_to_base": true,
+    "audit_branch_descends_from_base": true,
+    "base_commit": "8bf256a5406e749a6342522e398b468d56c1b5db",
+    "protected_files_identical_to_base": [
+      "kernel.cpp",
+      "spatter_ops.hpp",
+      "plan.py",
+      "host.cpp",
+      "run.py",
+      "parallel_scatter_winner.hpp"
+    ]
+  },
+  "status": "passed",
+  "tests": {
+    "native": {
+      "log": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/tests/native-test.log",
+      "log_sha256": "e4034db0af86dc773cca298d9946918636adfc700e1c5db60cc8c160a2f1f677",
+      "repeated_transfers": 5472426,
+      "status": "passed",
+      "transfers": 6664304,
+      "written_destinations": 1191878
+    },
+    "python": {
+      "log": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/experiments/xrage-parallel-winner-fullsize-8bf256a-v1/tests/python-tests.log",
+      "log_sha256": "724cbc1f81b51f32ca2d3e6c216e2b585eb09b55d038744762a819387490a27f",
+      "status": "passed",
+      "tests": 26
+    }
+  },
+  "toolchain": {
+    "muon_compiler": "/scratch/agustin/radiance-fpga-1a/src/radiance-kernels/llvm/llvm-muon/bin/clang-18",
+    "muon_compiler_sha256": "b7c2078d5543e94b4c2e27b92d0ff1b784984af2fc26e7c395d49c65622d3a67",
+    "runtime_archive_copy": "/scratch/agustin/radiance-fpga-1a/worktrees/xrage-parallel-winner-fullsize-8bf256a-v1/lib/libmuonrt.a",
+    "runtime_archive_sha256": "5c85074f25fa38bb2660d5f4d11120a6fa1f34d05e28bf1e84613e5681135163",
+    "runtime_archive_source": "/scratch/agustin/radiance-fpga-1a/src/radiance-kernels/lib/libmuonrt.a"
+  }
+}
