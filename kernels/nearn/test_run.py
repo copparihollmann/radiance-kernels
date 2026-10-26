@@ -57,6 +57,13 @@ class NearnRunTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):
                 run.prepare(8, Path(directory), robust_spin_until_reset=True)
 
+    def test_host_checker_keeps_full_validation_in_one_record_pass(self):
+        host = RUN_PATH.with_name("host.cpp").read_text()
+        self.assertEqual(
+            host.count("for (uint32_t i = 0; i < NEARN_RECORDS; ++i)"), 1)
+        self.assertIn("distance < selected_distance[rank]", host)
+        self.assertIn("selected[rank] != expected_top[rank]", host)
+
 
 if __name__ == "__main__":
     unittest.main()

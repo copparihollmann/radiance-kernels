@@ -55,6 +55,12 @@ int main() {
   uint32_t bad = 0;
   uint32_t nonfinite = 0;
   uint32_t max_ulp = 0;
+  uint32_t selected[NEARN_TOP_K];
+  float selected_distance[NEARN_TOP_K];
+  for (uint32_t rank = 0; rank < NEARN_TOP_K; ++rank) {
+    selected[rank] = 0xffffffffu;
+    selected_distance[rank] = __builtin_inff();
+  }
   for (uint32_t i = 0; i < NEARN_RECORDS; ++i) {
     const uint32_t actual = got[i];
     const uint32_t reference = expected[i];
@@ -63,27 +69,32 @@ int main() {
     const uint32_t ulp = ulp_distance(actual, reference);
     if (ulp > max_ulp) max_ulp = ulp;
     bad += ulp > NEARN_MAX_ULP;
+
+    /* Maintain the same stable (distance, input-index) top-k order as the
+     * former rank-by-rank rescans.  Since i increases monotonically and the
+     * comparison is strict, equal distances retain ascending input order. */
+    const float distance = as_float(actual);
+    uint32_t insert = NEARN_TOP_K;
+    for (uint32_t rank = 0; rank < NEARN_TOP_K; ++rank) {
+      if (distance < selected_distance[rank]) {
+        insert = rank;
+        break;
+      }
+    }
+    if (insert < NEARN_TOP_K) {
+      for (uint32_t rank = NEARN_TOP_K - 1; rank > insert; --rank) {
+        selected_distance[rank] = selected_distance[rank - 1];
+        selected[rank] = selected[rank - 1];
+      }
+      selected_distance[insert] = distance;
+      selected[insert] = i;
+    }
   }
 
   const uint32_t expected_top[NEARN_TOP_K] = NEARN_EXPECTED_TOP;
-  uint32_t selected[NEARN_TOP_K] = {};
   uint32_t top_bad = 0;
-  for (uint32_t rank = 0; rank < NEARN_TOP_K; ++rank) {
-    uint32_t best_index = 0xffffffffu;
-    float best_distance = __builtin_inff();
-    for (uint32_t i = 0; i < NEARN_RECORDS; ++i) {
-      bool used = false;
-      for (uint32_t prior = 0; prior < rank; ++prior)
-        used |= selected[prior] == i;
-      const float distance = as_float(got[i]);
-      if (!used && distance < best_distance) {
-        best_distance = distance;
-        best_index = i;
-      }
-    }
-    selected[rank] = best_index;
-    top_bad += best_index != expected_top[rank];
-  }
+  for (uint32_t rank = 0; rank < NEARN_TOP_K; ++rank)
+    top_bad += selected[rank] != expected_top[rank];
 
   const bool guards_ok = guards_intact();
   nh_puts("NEARN_CHECK n="); nh_putu(NEARN_RECORDS);
