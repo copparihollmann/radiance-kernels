@@ -1,0 +1,182 @@
+{
+  "schema": "radiance-nearn-upstream-1m-differential-v1",
+  "status": "passed",
+  "generated_utc": "2026-10-26T16:34:01.680754+00:00",
+  "scope": "exact measured Radiance Nearn fixture",
+  "reference": {
+    "repository": "vortexgpgpu/vortex",
+    "revision": "b447578d9f3bb116d658c614cf3407153f0536da",
+    "path": "tests/opencl/nearn/kernel.cl",
+    "bytes": 662,
+    "sha256": "43d6322e0be3adddb4c060b05dcb77a2ffd489ccdd07a5c4294e2f5f7cc17b34",
+    "vendored_encoding": "kernels/nearn/upstream_diff/vortex-nearn-kernel.cl.b64",
+    "checkout_verification": {
+      "status": "passed",
+      "checkout": "/scratch/agustin/radiance-fpga-1a/reference/vortex",
+      "object_type": "commit",
+      "byte_exact": true,
+      "source_sha256": "43d6322e0be3adddb4c060b05dcb77a2ffd489ccdd07a5c4294e2f5f7cc17b34"
+    }
+  },
+  "source_execution": {
+    "kernel_embedded_byte_exactly_once": true,
+    "native_wrapper_sha256": "433d659eeb1897306869fe1490a0626c490487505a5c507afc2e80cac134fad4",
+    "opencl_attempt": {
+      "attempted": true,
+      "exit_code": 77,
+      "stderr": "OpenCL unavailable: no platform (status -1001)",
+      "status": "unavailable"
+    },
+    "spir_compilation": {
+      "status": "passed",
+      "target": "spir64-unknown-unknown",
+      "language": "OpenCL C 1.2",
+      "bitcode_sha256": "497a864edcfcbd572c55a1736819fde395c980955e5dbf71daa920ebe03a7294",
+      "bitcode_bytes": 3232,
+      "command": [
+        "clang",
+        "-x",
+        "cl",
+        "-cl-std=CL1.2",
+        "-target",
+        "spir64-unknown-unknown",
+        "-emit-llvm",
+        "-c",
+        "PINNED_KERNEL",
+        "-o",
+        "BITCODE"
+      ]
+    },
+    "selected_path": "cpu-mechanical-wrapper"
+  },
+  "fixture": {
+    "records": 1048576,
+    "seed": 0,
+    "input_layout": "packed little-endian pairs of float32 latitude/longitude",
+    "input_bytes": 8388608,
+    "input_sha256": "69edd36c8dbd9a94327bf6765867ece0823428be8e96f8da2dd0d1aaec4403b1",
+    "query_lat_word": "42a8e266",
+    "query_lng_word": "42979744",
+    "expected_bytes": 4194304,
+    "expected_sha256": "070b09a4b8de6a7cd60fa32f5548dd6c84c62587955503c2787b133acc29822b",
+    "expected_digest": "ce40a65c08c744c7",
+    "expected_top_five_indices": [
+      1045179,
+      524842,
+      895400,
+      816969,
+      497552
+    ],
+    "oracle": "Radiance measured-fixture fmaf/sqrtf binary32 oracle"
+  },
+  "contract": {
+    "distance_words": "all records compared",
+    "maximum_ulp": 1,
+    "top_five": "exact indices ordered by (float32 distance, original index)"
+  },
+  "executions": [
+    {
+      "name": "cpu-strict",
+      "method": "mechanically-wrapped-byte-exact-pinned-kernel-body",
+      "float_contract": "off",
+      "compiler_flags": [
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fno-fast-math",
+        "-ffp-contract=off",
+        "-fexcess-precision=standard"
+      ],
+      "output_sha256": "68081b5658b70730cb75fcfbc85097c4c864f53413774f33c4a1b427ea817ab4",
+      "output_digest": "462f2d1b2088e88c",
+      "comparison": {
+        "records_compared": 1048576,
+        "max_ulp_contract": 1,
+        "exact_word_matches": 963147,
+        "one_ulp_matches": 85429,
+        "over_one_ulp": 0,
+        "maximum_ulp_distance": 1,
+        "first_over_limit": [],
+        "actual_top_five_indices": [
+          1045179,
+          524842,
+          895400,
+          816969,
+          497552
+        ],
+        "expected_top_five_indices": [
+          1045179,
+          524842,
+          895400,
+          816969,
+          497552
+        ],
+        "stable_top_five_exact": true,
+        "passed": true
+      }
+    },
+    {
+      "name": "cpu-contracted",
+      "method": "mechanically-wrapped-byte-exact-pinned-kernel-body",
+      "float_contract": "fast",
+      "compiler_flags": [
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fno-fast-math",
+        "-ffp-contract=fast",
+        "-fexcess-precision=standard",
+        "-mfma"
+      ],
+      "output_sha256": "070b09a4b8de6a7cd60fa32f5548dd6c84c62587955503c2787b133acc29822b",
+      "output_digest": "ce40a65c08c744c7",
+      "comparison": {
+        "records_compared": 1048576,
+        "max_ulp_contract": 1,
+        "exact_word_matches": 1048576,
+        "one_ulp_matches": 0,
+        "over_one_ulp": 0,
+        "maximum_ulp_distance": 0,
+        "first_over_limit": [],
+        "actual_top_five_indices": [
+          1045179,
+          524842,
+          895400,
+          816969,
+          497552
+        ],
+        "expected_top_five_indices": [
+          1045179,
+          524842,
+          895400,
+          816969,
+          497552
+        ],
+        "stable_top_five_exact": true,
+        "passed": true
+      }
+    }
+  ],
+  "environment": {
+    "machine": "x86_64",
+    "python": "3.12.3",
+    "cc": {
+      "path": "/usr/bin/gcc",
+      "version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+    },
+    "clang": {
+      "path": "/usr/bin/clang",
+      "version": "Ubuntu clang version 18.1.3 (1ubuntu1)"
+    },
+    "byteorder": "little"
+  },
+  "limitations": [
+    "No OpenCL ICD/platform was available, so the pinned kernel was not executed by an OpenCL runtime on this host.",
+    "The CPU fallback executes the unchanged kernel body through macro definitions for OpenCL qualifiers/get_global_id and maps OpenCL sqrt to binary32 sqrtf; it is not evidence about a particular OpenCL device compiler or FPGA execution.",
+    "Both contraction-disabled and contraction-enabled builds are required to pass, bounding the material source-level float32 evaluation choice."
+  ]
+}
