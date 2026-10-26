@@ -29,7 +29,7 @@ PASSTHROUGH = (
     "accumulation", "partition", "reference_contract", "no_vpu",
     "benchmark_contract",
     "size", "stream_elements", "output_element_count", "expected_digest",
-    "expected_final_word", "max_ulp",
+    "expected_final_word", "host_final_reduction", "max_ulp",
     "reference_repository", "reference_revision", "reference_kernel",
     "reference_kernel_sha256", "reference_kernel_git_blob",
     "reference_main", "reference_main_sha256", "reference_converter",

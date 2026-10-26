@@ -2,6 +2,9 @@
 
 import importlib.util
 from pathlib import Path
+import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -39,6 +42,68 @@ class StreamDotRunTest(unittest.TestCase):
                 f"{run.float_word(run.expected_final_sum(run.expected_partials(256, 4, 2))):08x}",
             )
             self.assertLess(result["relative_error_vs_scalar_golden"], 1e-4)
+            self.assertEqual(
+                result["host_final_reduction"],
+                "integer-ieee754-binary32-rne-positive-finite",
+            )
+
+    def test_host_final_reduction_is_integer_only(self):
+        source = (RUN_PATH.parent / "host.cpp").read_text()
+        self.assertIn("add_positive_finite_f32_rne", source)
+        self.assertNotRegex(source, re.compile(r"\bfloat\b"))
+        self.assertNotIn("FloatWord", source)
+
+    def test_integer_binary32_adder_matches_native_rne(self):
+        compiler = shutil.which("g++") or shutil.which("clang++")
+        self.assertIsNotNone(compiler)
+        program = r'''
+#include <stdint.h>
+#include <stdio.h>
+#include "softfloat_positive_f32.h"
+
+union WordFloat { uint32_t word; float value; };
+
+static uint32_t native_add(uint32_t a, uint32_t b) {
+  WordFloat left = {.word = a};
+  WordFloat right = {.word = b};
+  volatile float sum = left.value + right.value;
+  WordFloat result = {.value = sum};
+  return result.word;
+}
+
+int main() {
+  uint32_t state = 0x6d2b79f5u;
+  for (uint32_t i = 0; i < 200000u; ++i) {
+    state = state * 1664525u + 1013904223u;
+    const uint32_t a = (((state >> 24u) % 250u) + 1u) << 23u |
+        (state & 0x007fffffu);
+    state = state * 1664525u + 1013904223u;
+    const uint32_t b = (((state >> 24u) % 250u) + 1u) << 23u |
+        (state & 0x007fffffu);
+    bool valid = true;
+    const uint32_t actual =
+        stream_dot_add_positive_finite_f32_rne(a, b, &valid);
+    const uint32_t expected = native_add(a, b);
+    if (!valid || actual != expected) {
+      fprintf(stderr, "%08x + %08x: actual=%08x expected=%08x valid=%d\n",
+              a, b, actual, expected, valid);
+      return 1;
+    }
+  }
+  return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "test.cpp"
+            binary = root / "test"
+            source.write_text(program)
+            subprocess.run(
+                [compiler, "-std=c++20", "-O2", "-fno-fast-math",
+                 "-I", str(RUN_PATH.parent), str(source), "-o", str(binary)],
+                check=True,
+            )
+            subprocess.run([str(binary)], check=True)
 
     def test_sm_count_changes_only_reduction_partition(self):
         one = run.expected_partials(1024, 1, 8)

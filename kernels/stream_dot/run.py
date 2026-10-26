@@ -171,7 +171,8 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         ROOT.parents[1] / "lib/include/nightly/device.h",
         ROOT.parents[1] / "lib/include/nightly/host.h",
         ROOT / "run.py", ROOT / "Makefile", ROOT / "kernel.cpp",
-        ROOT / "host.cpp", ROOT / "emit_symbols.py",
+        ROOT / "host.cpp", ROOT / "softfloat_positive_f32.h",
+        ROOT / "emit_symbols.py",
     ):
         source_hash.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
         source_hash.update(path.read_bytes())
@@ -193,6 +194,7 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         "reference_revision": UPSTREAM_REVISION,
         "reference_kernel": UPSTREAM_KERNEL,
         "reduction": "per-sm-strided-thread-partials-plus-shared-tree-host-final-sum",
+        "host_final_reduction": "integer-ieee754-binary32-rne-positive-finite",
         "partition": "disjoint-contiguous-64-byte-input-lines",
         "logical_payload_bytes": elements * 8,
         "muon_warps_per_core": warps_per_core,

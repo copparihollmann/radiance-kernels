@@ -224,6 +224,7 @@ class AssembleManifestTests(unittest.TestCase):
                 "kind": "stream-dot", "stream_elements": 1048576,
                 "output_element_count": 4, "expected_digest": "1234",
                 "expected_final_word": "46a3d79c",
+                "host_final_reduction": "integer-ieee754-binary32-rne-positive-finite",
                 "reference_repository": "UoB-HPC/BabelStream",
                 "reference_revision": "abc", "reference_kernel": "dot_kernel",
                 "correctness": "exact-device-order-partials-and-guards",
@@ -234,6 +235,10 @@ class AssembleManifestTests(unittest.TestCase):
             self.assertEqual(row["stream_elements"], 1048576)
             self.assertEqual(row["output_element_count"], 4)
             self.assertEqual(row["expected_final_word"], "46a3d79c")
+            self.assertEqual(
+                row["host_final_reduction"],
+                "integer-ieee754-binary32-rne-positive-finite",
+            )
             self.assertEqual(row["reference_repository"], "UoB-HPC/BabelStream")
 
     def test_streamcluster_dual_output_metadata_is_preserved(self):
