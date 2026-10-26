@@ -20,6 +20,12 @@ static float as_float(uint32_t bits) {
   return value.f;
 }
 
+static uint64_t host_hart_id() {
+  uint64_t id;
+  asm volatile("csrr %0, mhartid" : "=r"(id) :: "memory");
+  return id;
+}
+
 static bool guards_intact() {
   volatile uint32_t* before = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(NEARN_GUARD_BEFORE_ADDR));
@@ -33,6 +39,12 @@ static bool guards_intact() {
 }
 
 int main() {
+  /* The fused Rocket program is entered by every host hart.  Only hart 0 may
+   * own the launch/reset/check protocol; secondary harts otherwise clear the
+   * shared END slots and relaunch the GPU while hart 0 validates output. */
+  if (host_hart_id() != 0)
+    for (;;) asm volatile("wfi" ::: "memory");
+
   volatile uint32_t* before = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(NEARN_GUARD_BEFORE_ADDR));
   volatile uint32_t* after = reinterpret_cast<volatile uint32_t*>(

@@ -63,6 +63,7 @@ class NearnRunTest(unittest.TestCase):
             host.count("for (uint32_t i = 0; i < NEARN_RECORDS; ++i)"), 1)
         self.assertIn("distance < selected_distance[rank]", host)
         self.assertIn("selected[rank] != expected_top[rank]", host)
+        self.assertIn("if (host_hart_id() != 0)", host)
 
 
 if __name__ == "__main__":
