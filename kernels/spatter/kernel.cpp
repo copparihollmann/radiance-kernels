@@ -112,7 +112,7 @@ static inline void scatter_task(uint32_t task, uint32_t owned_destination) {
   const uint32_t i = task / length;
   const uint32_t j = task - i * length;
 #if SPATTER_KIND == 1
-#if SPATTER_ORDERED_COLLISIONS
+#if SPATTER_DESTINATION_OWNER_GROUPS
   const uint32_t dst = owned_destination;
 #else
   const uint32_t dst = spatter::affine_index(
@@ -121,7 +121,7 @@ static inline void scatter_task(uint32_t task, uint32_t owned_destination) {
   const uint32_t src = spatter::dense_index(j, length, i, SPATTER_WRAP);
   spatter::copy_value(spatter_sparse, dst, spatter_dense, src);
 #elif SPATTER_KIND == 2
-#if SPATTER_ORDERED_COLLISIONS
+#if SPATTER_DESTINATION_OWNER_GROUPS
   const uint32_t dst = owned_destination;
 #else
   const uint32_t dst = spatter::affine_index(
@@ -140,7 +140,7 @@ static inline void scatter_task(uint32_t task, uint32_t owned_destination) {
       source_iteration);
   spatter::copy_value(spatter_sparse_scatter, dst, spatter_sparse_gather, src);
 #elif SPATTER_KIND == 4
-#if SPATTER_ORDERED_COLLISIONS
+#if SPATTER_DESTINATION_OWNER_GROUPS
   const uint32_t dst = owned_destination;
 #else
   const uint32_t dst = spatter::affine_index(
@@ -231,9 +231,12 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
   }
 #endif
 #else
-#if SPATTER_ORDERED_COLLISIONS
+#if SPATTER_DESTINATION_OWNER_GROUPS
   // The host groups tasks by destination in their original order. One lane
-  // owns each destination, so colliding 64-bit stores cannot interleave.
+  // owns each destination, so colliding 64-bit stores cannot interleave. This
+  // is also used by the parallel-Scatter physical repair: destinations still
+  // run in parallel and every original transfer executes, but one destination
+  // cannot be written by two RV32 lanes at once.
   const MuPartition range = mu_contiguous_partition(
       SPATTER_GROUP_COUNT, NIGHTLY_CLUSTERS, block_id, 8u);
   for (uint32_t group = range.begin + tid; group < range.end;

@@ -422,7 +422,8 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
             robust_token_fence: bool = False,
             robust_drain_passes: int = 3,
             robust_post_spin: int = 500,
-            diagnostic_readback: bool = False) -> dict:
+            diagnostic_readback: bool = False,
+            parallel_destination_owner: bool = False) -> dict:
     if not 0 <= source_pad_lines < 64 or not 0 <= output_pad_lines < 64:
         raise ValueError("cache padding must be between 0 and 63 lines")
     if warps_per_core not in (1, 2, 4, 8):
@@ -449,14 +450,21 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
     write_u32(GENERATED / "pattern_scatter.bin", case["scatter"])
     write_source(GENERATED / "source.bin", case["src_length"],
                  case["payload_tag"], case.get("source_index_base", 0))
-    if case["collision_policy"] == "ordered":
+    expected, overlap = reference(case)
+    if parallel_destination_owner and (
+            case["collision_policy"] != "parallel" or
+            case["kind"] != "scatter" or not overlap):
+        raise ValueError(
+            "parallel destination ownership requires a colliding parallel Scatter")
+    destination_owner_groups = (
+        case["collision_policy"] == "ordered" or parallel_destination_owner)
+    if destination_owner_groups:
         destination_group_count = write_destination_groups(case)
     else:
         destination_group_count = 0
         write_u32(GENERATED / "group_destinations.bin", [])
         write_u32(GENERATED / "group_offsets.bin", [])
         write_u32(GENERATED / "group_tasks.bin", [])
-    expected, overlap = reference(case)
     pattern_digest = fnv32(case["pattern"])
     source_digest = fnv(
         payload(case["payload_tag"], case.get("source_index_base", 0) + i)
@@ -501,6 +509,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define SPATTER_DELTA_SCATTER {case['delta_scatter']}u",
         f"#define SPATTER_GATHER_FINAL_WRAP {case['gather_final_wrap']}u",
         f"#define SPATTER_ORDERED_COLLISIONS {int(case['collision_policy'] == 'ordered')}",
+        f"#define SPATTER_DESTINATION_OWNER_GROUPS {int(destination_owner_groups)}",
         f"#define SPATTER_GROUP_COUNT {destination_group_count}u",
         f"#define SPATTER_OUTPUT_LENGTH {case['dst_length']}u",
         f"#define SPATTER_EXPECTED_DIGEST 0x{(expected or 0):016x}ULL",
@@ -544,6 +553,8 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
     ])
     (ROOT / "data.S").write_text("\n".join(asm) + "\n")
     address_plan = case["_plan"].as_dict()
+    if parallel_destination_owner:
+        address_plan["schedule"] = "parallel_destination_owner"
     (GENERATED / "plan.json").write_text(json.dumps(address_plan, indent=2) + "\n")
     dataset_hash = hashlib.sha256(suite.read_bytes()).hexdigest()
     manifest = {
@@ -579,7 +590,10 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "expected_nonzero_outputs": expected_nonzero_outputs if exploratory else None,
         "admissible_winner_check": admissible_winner_check,
         "parallel_scatter_output": (
+            "owner-serialized-valid-winner" if parallel_destination_owner else
             "schedule-dependent-non-atomic" if admissible_winner_check else None),
+        "parallel_destination_owner": parallel_destination_owner,
+        "all_original_transfers_executed": True,
         "destination_overlap": overlap,
         "collision_policy": case["collision_policy"],
         "destination_group_count": destination_group_count,
@@ -667,6 +681,9 @@ def main() -> int:
                         help="start iteration for a wrap-1 Gather count chunk")
     parser.add_argument("--collision-policy", choices=("parallel", "ordered"),
                         help="ordered serializes transfers per destination for complete scatter checks")
+    parser.add_argument("--parallel-destination-owner", action="store_true",
+                        help=("for a colliding parallel Scatter, assign each destination "
+                              "to one lane while executing every original transfer"))
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--build-only", action="store_true")
@@ -721,6 +738,7 @@ def main() -> int:
             args.robust_drain_passes,
             args.robust_post_spin,
             args.diagnostic_readback,
+            args.parallel_destination_owner,
         )
         recorded = (
             manifest["sm_count"], manifest["loader"],
@@ -736,6 +754,7 @@ def main() -> int:
             manifest.get("robust_drain_passes", 3),
             manifest.get("robust_post_spin", 500),
             manifest.get("diagnostic_readback", False),
+            manifest.get("parallel_destination_owner", False),
         )
         if selected != recorded:
             parser.error("--sim-only build options must match the existing ELF manifest")
@@ -770,6 +789,7 @@ def main() -> int:
             args.robust_drain_passes,
             args.robust_post_spin,
             args.diagnostic_readback,
+            args.parallel_destination_owner,
         )
         manifest["original_count"] = original_count
         manifest["count_overridden"] = args.count is not None and args.count != original_count
