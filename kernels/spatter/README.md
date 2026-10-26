@@ -242,7 +242,13 @@ python3 run.py --suite exploratory-smoke.json --case 0 \
 The ordered path executes every transfer but adds a generated task schedule
 and serializes conflicts. Its cycles describe that mapping, not the upstream
 CUDA `atomicExch` implementation. The default parallel path retains its
-exploratory status when destinations overlap.
+original task partition and racing pair of 32-bit device stores. Its output is
+explicitly schedule-dependent and non-atomic. The RV64 host checks every
+written destination against the exact admissible set of complete source
+values: it rejects zero/missing destinations, values from another transfer,
+and torn/mixed words that are not themselves identical to a legitimate
+complete winner. This validation does not serialize the device and does not
+claim 64-bit store atomicity.
 
 The ordered schedule stores only occupied destination IDs plus compact group
 offsets; device lanes do not scan holes in a sparse output address range. Task
@@ -271,9 +277,11 @@ python3 run.py --suite /scratch/$USER/radiance-xrage/xrage-suite.json \
 The emitted suite uses `u32le` binary-pattern descriptors with byte count,
 length, and SHA-256 receipts. `run.py` validates all three before using a
 pattern and records the resolved input receipt in `result.json`.
-For xRAGE9, `--collision-policy ordered` creates a complete-output-checkable
-mapping of the repeated destinations. Keep its results separate from both the
-default parallel mapping and Spatter's CUDA atomic result.
+For xRAGE9, `--collision-policy ordered` creates a deterministic
+complete-output mapping of the repeated destinations. The default parallel
+mapping instead uses the admissible-winner-set check above and remains
+schedule-dependent and non-atomic. Keep both results separate from Spatter's
+CUDA atomic result.
 
 ## Simulate and validate
 

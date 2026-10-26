@@ -80,6 +80,44 @@ class SpatterMappingTest(unittest.TestCase):
                          (fnv([payload(2, 1)]), True))
         self.assertEqual(written_destination_count(colliding), 1)
 
+    def test_parallel_scatter_records_admissible_winner_contract(self):
+        raw = {"kernel": "Scatter", "pattern": [0, 0, 1, 0],
+               "count": 1, "delta": 8, "wrap": 1,
+               "source-tag": 2, "collision-policy": "parallel"}
+        case = normalize(raw)
+        original_transfers = [
+            (source_index(case, i, j), destination(case, i, j))
+            for i in range(case["count"])
+            for j in range(case["length"])
+        ]
+        result = prepare(case, Path(__file__).parent / "smoke.json", 0,
+                         sms=4)
+        self.assertEqual(case["_plan"].schedule, "task")
+        self.assertEqual(original_transfers, [(0, 0), (1, 0), (2, 1), (3, 0)])
+        self.assertTrue(result["destination_overlap"])
+        self.assertTrue(result["admissible_winner_check"])
+        self.assertEqual(result["parallel_scatter_output"],
+                         "schedule-dependent-non-atomic")
+        self.assertEqual(result["expected_nonzero_outputs"], 2)
+        config = GENERATED.joinpath("config.h").read_text()
+        self.assertIn("#define SPATTER_ADMISSIBLE_WINNER_CHECK 1", config)
+        self.assertIn("#define SPATTER_SOURCE_TAG 2u", config)
+        self.assertIn("#define SPATTER_SOURCE_INDEX_BASE 0ULL", config)
+
+        ordered = normalize({**raw, "collision-policy": "ordered"})
+        ordered_result = prepare(
+            ordered, Path(__file__).parent / "smoke.json", 0, sms=4)
+        self.assertFalse(ordered_result["admissible_winner_check"])
+        self.assertIsNone(ordered_result["parallel_scatter_output"])
+        self.assertEqual(ordered["_plan"].schedule, "destination_owner")
+
+        gather = normalize({"kernel": "Gather", "pattern": [0, 1],
+                            "count": 1})
+        gather_result = prepare(
+            gather, Path(__file__).parent / "smoke.json", 0, sms=4)
+        self.assertFalse(gather_result["admissible_winner_check"])
+        self.assertIsNone(gather_result["parallel_scatter_output"])
+
     def test_wrap_one_gather_final_chunk_matches_full_count(self):
         full = normalize({"kernel": "Gather", "pattern": [4, 1, 3],
                           "count": 5, "delta": 3, "wrap": 1})

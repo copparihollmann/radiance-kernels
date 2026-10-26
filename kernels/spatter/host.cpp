@@ -7,6 +7,7 @@
 #endif
 
 #include "generated/symbols.h"
+#include "parallel_scatter_winner.hpp"
 
 static uint64_t output_digest() {
   volatile uint32_t* words = reinterpret_cast<volatile uint32_t*>(
@@ -99,6 +100,71 @@ static void clear_output() {
   }
 }
 
+#if SPATTER_ADMISSIBLE_WINNER_CHECK
+static bool parallel_scatter_winners_admissible() {
+  volatile uint32_t* output = reinterpret_cast<volatile uint32_t*>(
+      rad_device_to_host_address(SPATTER_OUTPUT_ADDR));
+  const volatile uint32_t* pattern =
+      reinterpret_cast<const volatile uint32_t*>(
+          rad_device_to_host_address(SPATTER_PATTERN_ADDR));
+  uint32_t admissible = 0u;
+  uint32_t illegal = 0u;
+  for (uint32_t destination = 0; destination < SPATTER_OUTPUT_LENGTH;
+       ++destination) {
+    const uint64_t value =
+        static_cast<uint64_t>(output[2u * destination]) |
+        (static_cast<uint64_t>(output[2u * destination + 1u]) << 32u);
+    if (value == 0u)
+      continue;
+    const spatter::ParallelScatterWinner winner =
+        spatter::classify_parallel_scatter_winner(
+            value, destination, pattern, SPATTER_PATTERN_LENGTH,
+            SPATTER_COUNT, SPATTER_WRAP, SPATTER_DELTA,
+            SPATTER_SOURCE_TAG, SPATTER_SOURCE_INDEX_BASE);
+    if (winner.status ==
+        spatter::ParallelScatterWinnerStatus::kAdmissible) {
+      ++admissible;
+    } else {
+      ++illegal;
+#if SPATTER_DIAGNOSTIC_READBACK
+      if (illegal <= 16u) {
+        rad_puts("SPATTER_WINNER_DIAG destination=");
+        rad_putu(destination);
+        rad_puts(" value=");
+        rad_putx(static_cast<uint32_t>(value >> 32u));
+        rad_putx(static_cast<uint32_t>(value));
+        rad_puts(" decoded_source=");
+        rad_putx(static_cast<uint32_t>(winner.source_index >> 32u));
+        rad_putx(static_cast<uint32_t>(winner.source_index));
+        rad_puts(" reason=");
+        rad_putu(static_cast<uint32_t>(winner.status));
+        rad_putc('\n');
+      }
+#endif
+    }
+  }
+#if SPATTER_DIAGNOSTIC_READBACK
+  const uint32_t missing =
+      admissible < SPATTER_EXPECTED_NONZERO_OUTPUTS
+          ? SPATTER_EXPECTED_NONZERO_OUTPUTS - admissible
+          : 0u;
+  rad_puts("SPATTER_WINNER_DIAG contract=schedule-dependent-non-atomic");
+  rad_puts(" admissible="); rad_putu(admissible);
+  rad_puts(" expected="); rad_putu(SPATTER_EXPECTED_NONZERO_OUTPUTS);
+  rad_puts(" missing="); rad_putu(missing);
+  rad_puts(" illegal="); rad_putu(illegal);
+  rad_putc('\n');
+  rad_flush();
+#endif
+  // Every nonzero output was produced by a legitimate transfer, and the
+  // exact number of written destinations is present.  Together these imply
+  // that no written destination remains zero/missing and no extra output was
+  // fabricated.  No winner order or 64-bit store atomicity is assumed.
+  return illegal == 0u &&
+         admissible == SPATTER_EXPECTED_NONZERO_OUTPUTS;
+}
+#endif
+
 int main() {
   volatile uint32_t* before = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(SPATTER_GUARD_BEFORE_ADDR));
@@ -123,7 +189,9 @@ int main() {
 
   const bool guards_ok = guards_intact();
   bool passed = completed && guards_ok;
-#if SPATTER_EXPLORATORY
+#if SPATTER_ADMISSIBLE_WINNER_CHECK
+  passed = passed && parallel_scatter_winners_admissible();
+#elif SPATTER_EXPLORATORY
   // Collisions make the final values schedule-dependent, but every source
   // payload is nonzero. Check exact destination coverage, not one probe: a
   // wrong SM partition can otherwise skip half the tasks and still pass.

@@ -423,6 +423,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         for i in range(case["src_length"])
     )
     exploratory = overlap and case["collision_policy"] == "parallel"
+    admissible_winner_check = exploratory and case["kind"] == "scatter"
     gather_owners = case["length"] * case["wrap"]
     gather_block_cyclic = bool(gather_block_cyclic_16 or
                                gather_block_cyclic_elements)
@@ -447,6 +448,8 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "#define SPATTER_CHAIN 0",
         f"#define SPATTER_PATTERN_LENGTH {case['length']}u",
         f"#define SPATTER_SOURCE_LENGTH {case['src_length']}u",
+        f"#define SPATTER_SOURCE_TAG {case['payload_tag']}u",
+        f"#define SPATTER_SOURCE_INDEX_BASE {case.get('source_index_base', 0)}ULL",
         f"#define SPATTER_COUNT {case['count']}u",
         f"#define SPATTER_WRAP {case['wrap']}u",
         f"#define SPATTER_DELTA {case['delta']}u",
@@ -464,6 +467,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         f"#define SPATTER_EXPLORATORY_PROBE_INDEX {probe_index}u",
         f"#define SPATTER_EXPECTED_NONZERO_OUTPUTS {expected_nonzero_outputs}u",
         f"#define SPATTER_EXPLORATORY {int(exploratory)}",
+        f"#define SPATTER_ADMISSIBLE_WINNER_CHECK {int(admissible_winner_check)}",
         f"#define SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS {gather_block_cyclic_elements}u",
         f"#define SPATTER_GATHER_BLOCK_CYCLIC_16 {int(gather_block_cyclic_16)}",
         f"#define SPATTER_GATHER_OWNERS {gather_owners}u",
@@ -529,6 +533,9 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "readback_samples": readback_samples,
         "exploratory_probe_index": probe_index if overlap else None,
         "expected_nonzero_outputs": expected_nonzero_outputs if exploratory else None,
+        "admissible_winner_check": admissible_winner_check,
+        "parallel_scatter_output": (
+            "schedule-dependent-non-atomic" if admissible_winner_check else None),
         "destination_overlap": overlap,
         "collision_policy": case["collision_policy"],
         "destination_group_count": destination_group_count,
@@ -569,6 +576,7 @@ def source_hash() -> str:
         digest.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
         digest.update(path.read_bytes())
     for name in ("run.py", "plan.py", "Makefile", "kernel.cpp", "spatter_ops.hpp", "host.cpp",
+                 "parallel_scatter_winner.hpp",
                  "emit_symbols.py", "cyclotron-no-trace.patch"):
         digest.update(name.encode())
         digest.update((ROOT / name).read_bytes())
@@ -618,7 +626,7 @@ def main() -> int:
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--full-host-check", action="store_true",
-                        help="read and digest every output word on the RV64 host")
+                        help="fully validate every output word on the RV64 host")
     parser.add_argument("--host-timing", action="store_true",
                         help="print RV64 release-to-all-finished cycle interval")
     parser.add_argument("--sim-only", action="store_true",
@@ -733,16 +741,21 @@ def main() -> int:
         )
         manifest["simulator"] = "VCS" if args.simv else None
         manifest["cyclotron_trace_requested"] = args.record_trace
-        if args.full_host_check and manifest["destination_overlap"] and manifest["collision_policy"] == "parallel":
+        if (args.full_host_check and manifest["destination_overlap"] and
+                manifest["collision_policy"] == "parallel" and
+                not manifest.get("admissible_winner_check", False)):
             parser.error("a parallel collision case has no deterministic full-output digest")
         manifest["correctness"] = (
-            "guards-and-nonzero-exploratory" if manifest["destination_overlap"] and
+            "admissible-winner-set-checked" if
+            manifest.get("admissible_winner_check", False) else
+            "guards-and-nonzero-exploratory" if
+            manifest["destination_overlap"] and
             manifest["collision_policy"] == "parallel" else
             "digest-checked" if args.full_host_check else
             "sample-checked" if manifest["readback_samples"] else "digest-checked"
         )
         manifest["host_full_readback"] = bool(
-            args.full_host_check or
+            args.full_host_check or manifest.get("admissible_winner_check", False) or
             (not manifest["readback_samples"] and
              manifest["correctness"] == "digest-checked")
         )
@@ -810,7 +823,8 @@ def main() -> int:
             manifest["status"] = (
                 "failed" if not cycles or "*** FAILED ***" in log else
                 "exploratory" if manifest["destination_overlap"] and
-                manifest["collision_policy"] == "parallel" else "passed"
+                manifest["collision_policy"] == "parallel" and
+                not manifest.get("admissible_winner_check", False) else "passed"
             )
     except subprocess.CalledProcessError as error:
         manifest["status"] = "failed"

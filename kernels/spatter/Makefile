@@ -28,7 +28,7 @@ kernel.mu.o: generated/config.h spatter_ops.hpp
 generated/symbols.h: kernel.radiance.elf generated/config.h emit_symbols.py
 	python3 emit_symbols.py $(MU_NM) $< $@
 
-host.host.o: generated/config.h generated/symbols.h
+host.host.o: generated/config.h generated/symbols.h parallel_scatter_winner.hpp
 
 .PHONY: clean-generated
 clean-generated:
