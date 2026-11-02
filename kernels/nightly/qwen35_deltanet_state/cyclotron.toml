@@ -1,0 +1,15 @@
+[muon]
+num_lanes = 16
+num_warps = 1
+num_cores = 2
+num_regs = 256
+start_pc = 0x10000000
+
+[mem]
+io_cout_addr = 0xFF080000
+io_cout_size = 64
+
+[sim]
+elf = "test/isa-tests/rv32ui-p-add"
+timeout = 20000000
+trace = false
