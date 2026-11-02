@@ -296,11 +296,14 @@ def archive_incomplete_safety_attempt(result_dir: Path) -> Path | None:
         index += 1
     archived = attempts / f"safety-abort-{index:03d}"
     archived.mkdir()
-    for name in ("safety-abort.json", "request.json", "stdout.log", "stderr.log",
-                 "parser.stdout", "parser.stderr"):
-        path = result_dir / name
-        if path.exists():
-            path.replace(archived / name)
+    # Preserve every top-level artifact, including profiler subdirectories and
+    # stale launch markers.  Restricting this to the ordinary log names left a
+    # previous memory-profile/ tree in place, which could make a retry's
+    # counter provenance ambiguous even when its CSV files were overwritten.
+    for path in sorted(result_dir.iterdir()):
+        if path == attempts:
+            continue
+        path.replace(archived / path.name)
     return archived
 
 

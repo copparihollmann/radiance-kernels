@@ -45,10 +45,19 @@ class CampaignTest(unittest.TestCase):
                     ("stdout.log", "partial stdout\n"),
                     ("stderr.log", "partial stderr\n")):
                 (result_dir / name).write_text(contents)
+            profile = result_dir / "memory-profile"
+            profile.mkdir()
+            (profile / ".profile-start.123.marker").write_text("")
+            (profile / "partial.csv").write_text("cycle,value\n1,2\n")
             first = archive_incomplete_safety_attempt(result_dir)
             self.assertEqual(first.name, "safety-abort-001")
             self.assertFalse((result_dir / "safety-abort.json").exists())
+            self.assertFalse((result_dir / "memory-profile").exists())
             self.assertEqual((first / "stdout.log").read_text(), "partial stdout\n")
+            self.assertEqual(
+                (first / "memory-profile/partial.csv").read_text(),
+                "cycle,value\n1,2\n",
+            )
             (result_dir / "safety-abort.json").write_text("{}\n")
             second = archive_incomplete_safety_attempt(result_dir)
             self.assertEqual(second.name, "safety-abort-002")
