@@ -10,6 +10,9 @@
 #ifndef GMR_DIAG
 #define GMR_DIAG 0
 #endif
+#ifndef GMR_INJECT_ERROR
+#define GMR_INJECT_ERROR 0
+#endif
 
 static_assert(NIGHTLY_CLUSTERS == 1,
               "first Granite route milestone is a one-cluster correctness bring-up");
@@ -92,6 +95,16 @@ static void entry(void *, uint32_t tid, uint32_t tpb, uint32_t) {
     packed[packed_index] = assignment;
     inverse[assignment] = packed_index;
   }
+#if GMR_INJECT_ERROR
+  // Negative-control build only: wait until the correct complete routing
+  // structure has been produced, then corrupt exactly one checked inverse-map
+  // word.  Production builds compile this entire block out.
+  mu_fence();
+  mu_barrier(4, tpb / MU_NUM_THREADS);
+  if (tid == 0) inverse[0] ^= 1u;
+  mu_fence();
+  mu_barrier(5, tpb / MU_NUM_THREADS);
+#endif
 #if GMR_DIAG
   mu_fence();
   mu_barrier(4, tpb / MU_NUM_THREADS);

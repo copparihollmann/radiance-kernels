@@ -70,5 +70,13 @@ the device source but does not launch, program, or otherwise access an FPGA.
 The vectors are deterministic and synthetic; this first milestone does not
 claim coverage of extreme-value or long-sequence numerical behavior.
 
+For a software-only checker negative control, build the unscrumbled device ELF
+with `DEFS=-DMSS_INJECT_ERROR=1` and `MU_ADDR_HASH=0`. That build corrupts one
+checked output after computing the correct recurrence. Cyclotron checks the
+complete output digest directly and also rejects the run through the full
+per-element tolerance-status region, where exactly one status becomes nonzero;
+the unchanged complete final state still passes. `MSS_INJECT_ERROR` is compiled
+out of ordinary production and FPGA images.
+
 The usual nightly `make` can build a fused image for a later simulator or FPGA
 run, but no hardware execution is part of this milestone.

@@ -31,3 +31,9 @@ make SMS=1 RISCV64_TOOLCHAIN_PATH=/path/to/riscv-tools
 The CPU oracle tests are in `kernels/granite_moe_reference`. Cyclotron must use
 the unscrumbled `build/1sm/granite_moe_route.radiance.elf`; the fused
 `*.soc.elf` is address-hashed for the matching FPGA configuration.
+
+For a software-only checker negative control, build the unscrumbled device ELF
+with `DEFS=-DGMR_INJECT_ERROR=1` and `MU_ADDR_HASH=0`. After all correct routing
+phases finish, that build flips exactly one checked inverse-map word and the
+complete 3,137-word Cyclotron digest check must fail. `GMR_INJECT_ERROR` is
+compiled out of ordinary production and FPGA images.
