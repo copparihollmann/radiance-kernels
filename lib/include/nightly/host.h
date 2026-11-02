@@ -288,6 +288,50 @@ static inline int nightly_host_check(const char *name, uint32_t n_clusters, uint
   return pass;
 }
 
+/* Exact uint32_t counterpart for routing indices, offsets, IDs and other structural data. */
+static inline uint32_t nightly_host_spot_check_u32(uint32_t out_dev, uint32_t gold_dev,
+                                                   uint32_t n, uint32_t samples) {
+  const volatile uint32_t *o = nightly_gpu_ptr<uint32_t>(out_dev);
+  const volatile uint32_t *g = nightly_gpu_ptr<uint32_t>(gold_dev);
+  uint32_t same = 0;
+  const uint32_t step = n / samples ? n / samples : 1;
+  for (uint32_t k = 0, i = 7 % step; k < samples && i < n;
+       k++, i += step)
+    same += o[i] == g[i];
+  return same;
+}
+
+static inline int nightly_host_check_u32(const char *name, uint32_t n_clusters,
+                                         uint32_t out_dev, uint32_t gold_dev,
+                                         uint32_t n) {
+  int pass = 1;
+  NhVerify v0 = {};
+  for (uint32_t cl = 0; cl < n_clusters; cl++)
+    nightly_pb_write(cl, NV_GO, NV_GO_MAGIC);
+  for (uint32_t cl = 0; cl < n_clusters; cl++) {
+    if (!nightly_host_wait_verify(cl)) {
+      nh_puts(name); nh_puts(": GPU exact-u32 verify timeout\n");
+      return 0;
+    }
+    const NhVerify v = nightly_host_read_verify(cl);
+    nightly_host_print_verify(name, cl, v);
+    if (cl == 0) v0 = v;
+    else if (v.n != v0.n || v.exact != v0.exact || v.bad != v0.bad ||
+             v.poison != v0.poison) {
+      nh_puts("  clusters disagree\n");
+      pass = 0;
+    }
+  }
+  const uint32_t samples = n < 128 ? n : 128;
+  const uint32_t same = nightly_host_spot_check_u32(out_dev, gold_dev, n, samples);
+  nh_puts(name); nh_puts(" (host u32 spot check): exact "); nh_putu(same);
+  nh_puts("/"); nh_putu(samples); nh_puts("\n");
+  if (v0.n != n || v0.exact != n || v0.bad || v0.poison || same != samples)
+    pass = 0;
+  nh_flush();
+  return pass;
+}
+
 /* Host spot check: `samples` evenly spaced elements, count exact matches (integer compare). */
 static inline uint32_t nightly_host_spot_check(uint32_t out_dev, uint32_t gold_dev, uint32_t n,
                                                uint32_t samples) {
