@@ -128,6 +128,8 @@ class CampaignTest(unittest.TestCase):
         self.assertTrue(is_firesim_hardware_process(
             ["./FireSim-corigine_xb10", "+bus=0x1b"]))
         self.assertTrue(is_firesim_hardware_process(
+            ["/generated-src/design/VFireSim", "+permissive"]))
+        self.assertTrue(is_firesim_hardware_process(
             ["vivado", "-source", "/usr/local/bin/program_fpga.tcl"]))
         self.assertTrue(is_firesim_hardware_process(
             ["bash", "/other/firesim-rundir/run.sh", "-b", "1SM_DRAM",

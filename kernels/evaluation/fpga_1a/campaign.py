@@ -105,7 +105,11 @@ def is_firesim_hardware_process(argv: list[str]) -> bool:
     """Identify runtime/programming commands, excluding unrelated text searches."""
     basenames = [Path(arg).name for arg in argv]
     executable = basenames[0]
-    if executable.startswith("FireSim-corigine"):
+    # Recent generated FireSim drivers may retain the generic Verilator
+    # executable name ``VFireSim`` instead of the older packaged
+    # ``FireSim-corigine*`` name.  Both own live FPGA state and must block a
+    # competing programming/runtime operation.
+    if executable.startswith("FireSim-corigine") or executable == "VFireSim":
         return True
     if (any(name.startswith("firesim-fpga-util") for name in basenames) or
             "program_fpga.tcl" in basenames):
