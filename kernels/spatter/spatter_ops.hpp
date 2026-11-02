@@ -7,6 +7,17 @@
 // same two 32-bit reads and two 32-bit writes on Muon.
 namespace spatter {
 
+// One transfer moves a 64-bit payload as two non-atomic 32-bit stores, so a
+// 64-byte cache line holds eight payloads.  A destination line is torn unless
+// every payload in it is written by a single SM.
+static constexpr uint32_t kPayloadBytes = 8u;
+static constexpr uint32_t kLineBytes = 64u;
+static constexpr uint32_t kLineElements = kLineBytes / kPayloadBytes;
+
+static inline uint32_t destination_line(uint32_t destination) {
+  return destination / kLineElements;
+}
+
 static inline uint32_t pattern_index(const __global uint32_t* pattern,
                                      uint32_t j) {
   return pattern[j];

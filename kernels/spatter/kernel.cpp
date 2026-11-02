@@ -21,6 +21,34 @@ extern __global uint32_t spatter_group_offsets[];
 extern __global uint32_t spatter_group_tasks[];
 }
 
+#if SPATTER_DESTINATION_OWNER_GROUPS || (SPATTER_CHAIN && SPATTER_CHAIN_ORDERED_COLLISIONS)
+// mu_contiguous_partition splits the compacted destination-group list by RANK.
+// spatter_group_destinations is an indirection: the list holds only the
+// *occupied* destinations, so eight adjacent ranks are not eight adjacent
+// addresses and a rank-aligned boundary can land inside a 64-byte destination
+// line.  Two SMs would then issue the non-atomic 32-bit halves of different
+// payloads into the same line, which is the tearing the destination-owner
+// repair exists to prevent.  Derive the boundary from the destination itself:
+// advance a candidate rank until it is the first rank of a new destination
+// line.  The map is monotone and every SM computes it identically, so
+// partition p's end is still partition p+1's begin and the groups stay
+// contiguous, disjoint and exhaustive.  It walks at most kLineElements - 1
+// entries because a line holds at most that many occupied destinations.
+static inline uint32_t spatter_destination_line_boundary(uint32_t rank,
+                                                         uint32_t total) {
+  if (rank >= total)
+    return total;
+  while (rank != 0u &&
+         spatter::destination_line(spatter_group_destinations[rank]) ==
+             spatter::destination_line(spatter_group_destinations[rank - 1u])) {
+    ++rank;
+    if (rank >= total)
+      return total;
+  }
+  return rank;
+}
+#endif
+
 #if SPATTER_CHAIN
 static void gather_stage(void*, uint32_t tid, uint32_t threads_per_block,
                          uint32_t block_id) {
@@ -60,8 +88,13 @@ static inline void scatter_chain_task(uint32_t task, uint32_t owned_destination)
 static void scatter_stage(void*, uint32_t tid, uint32_t threads_per_block,
                           uint32_t block_id) {
 #if SPATTER_CHAIN_ORDERED_COLLISIONS
-  const MuPartition range = mu_contiguous_partition(
+  const MuPartition ranks = mu_contiguous_partition(
       SPATTER_GROUP_COUNT, NIGHTLY_CLUSTERS, block_id, 8u);
+  // Snap both rank boundaries onto destination-line boundaries so no 64-byte
+  // destination line is written by two SMs.
+  const MuPartition range = {
+      spatter_destination_line_boundary(ranks.begin, SPATTER_GROUP_COUNT),
+      spatter_destination_line_boundary(ranks.end, SPATTER_GROUP_COUNT)};
   for (uint32_t group = range.begin + tid; group < range.end;
        group += threads_per_block) {
     const uint32_t end = spatter_group_offsets[group + 1u];
@@ -237,8 +270,13 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
   // is also used by the parallel-Scatter physical repair: destinations still
   // run in parallel and every original transfer executes, but one destination
   // cannot be written by two RV32 lanes at once.
-  const MuPartition range = mu_contiguous_partition(
+  const MuPartition ranks = mu_contiguous_partition(
       SPATTER_GROUP_COUNT, NIGHTLY_CLUSTERS, block_id, 8u);
+  // Snap both rank boundaries onto destination-line boundaries so no 64-byte
+  // destination line is written by two SMs.
+  const MuPartition range = {
+      spatter_destination_line_boundary(ranks.begin, SPATTER_GROUP_COUNT),
+      spatter_destination_line_boundary(ranks.end, SPATTER_GROUP_COUNT)};
   for (uint32_t group = range.begin + tid; group < range.end;
        group += threads_per_block) {
     const uint32_t end = spatter_group_offsets[group + 1u];
