@@ -371,6 +371,46 @@ def write_destination_groups(case: dict) -> int:
     return len(occupied)
 
 
+def block_cyclic_schedule_receipt(owners: int, block_elements: int,
+                                  sms: int) -> dict | None:
+    """Describe and prove the owner partition implemented by kernel.cpp.
+
+    The device loop assigns chunk ``c`` to SM ``c % sms`` and clips only the
+    final chunk to ``owners``.  Recording the closed-form element counts makes
+    a missing tail or duplicate owner visible in build metadata without
+    materializing a multi-million-element owner bitmap.
+    """
+    if block_elements == 0:
+        return None
+    if owners <= 0 or block_elements <= 0 or sms <= 0:
+        raise ValueError("block-cyclic schedule dimensions must be positive")
+    chunks = (owners + block_elements - 1) // block_elements
+    tail_elements = owners - (chunks - 1) * block_elements
+    elements_by_sm = []
+    chunks_by_sm = []
+    for sm in range(sms):
+        sm_chunks = ((chunks - 1 - sm) // sms + 1) if sm < chunks else 0
+        sm_elements = sm_chunks * block_elements
+        if sm_chunks and (chunks - 1) % sms == sm:
+            sm_elements -= block_elements - tail_elements
+        chunks_by_sm.append(sm_chunks)
+        elements_by_sm.append(sm_elements)
+    if sum(chunks_by_sm) != chunks or sum(elements_by_sm) != owners:
+        raise AssertionError("block-cyclic owner partition is not exhaustive")
+    return {
+        "owners": owners,
+        "block_elements": block_elements,
+        "chunks": chunks,
+        "tail_begin": (chunks - 1) * block_elements,
+        "tail_elements": tail_elements,
+        "tail_sm": (chunks - 1) % sms,
+        "chunks_by_sm": chunks_by_sm,
+        "elements_by_sm": elements_by_sm,
+        "covered_elements": sum(elements_by_sm),
+        "coverage": "complete-disjoint-chunks",
+    }
+
+
 def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
             loader: str = "logical", source_pad_lines: int = 0,
             output_pad_lines: int = 0, warps_per_core: int = 4,
@@ -429,6 +469,10 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
                                gather_block_cyclic_elements)
     if gather_block_cyclic and case["kind"] not in ("gather", "multigather"):
         raise ValueError("gather block-cyclic scheduling requires Gather or MultiGather")
+    block_elements = (gather_block_cyclic_elements or
+                      (16 if gather_block_cyclic_16 else 0))
+    gather_schedule = block_cyclic_schedule_receipt(
+        gather_owners, block_elements, sms)
     probe_index = destination(case, 0, 0) if exploratory else 0
     expected_nonzero_outputs = written_destination_count(case) if exploratory else 0
     readback_samples = min(64, case["dst_length"]) if case["dst_length"] > 1024 and not exploratory else 0
@@ -542,6 +586,7 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "gather_iteration_partition": False,
         "gather_block_cyclic_16": gather_block_cyclic_16,
         "gather_block_cyclic_elements": gather_block_cyclic_elements,
+        "gather_block_cyclic_schedule": gather_schedule,
         "gather_scratch_elements": 0,
         "pattern_inputs": case.get("_pattern_inputs", []),
         "status": "prepared",

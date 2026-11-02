@@ -10,8 +10,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import run as run_module
-from run import (GENERATED, destination, fnv, normalize, parse_pattern, payload,
-                 prepare, reference, sample_digest, source_index, source_tag,
+from run import (GENERATED, block_cyclic_schedule_receipt, destination, fnv,
+                 normalize, parse_pattern, payload, prepare, reference,
+                 sample_digest, source_index, source_tag,
                  write_destination_groups, write_source,
                  written_destination_count)
 from plan import execute_reference, fuse_gather_scatter, stitch_reference
@@ -333,6 +334,69 @@ class SpatterMappingTest(unittest.TestCase):
                              "count": 1})
         with self.assertRaisesRegex(ValueError, "requires Gather"):
             prepare(scatter, suite, 0, gather_block_cyclic_elements=1024)
+
+    def test_xrage5_full_tail_coverage_and_three_pass_candidate_metadata(self):
+        # Full xRAGE5 has 8,368,968 owners, which is not divisible by 1024.
+        # This checks the exact closed-form partition used by kernel.cpp,
+        # including the old failure's four indices and the 840-owner tail.
+        receipt = block_cyclic_schedule_receipt(8_368_968, 1024, 2)
+        self.assertEqual(receipt, {
+            "owners": 8_368_968,
+            "block_elements": 1024,
+            "chunks": 8173,
+            "tail_begin": 8_368_128,
+            "tail_elements": 840,
+            "tail_sm": 0,
+            "chunks_by_sm": [4087, 4086],
+            "elements_by_sm": [4_184_904, 4_184_064],
+            "covered_elements": 8_368_968,
+            "coverage": "complete-disjoint-chunks",
+        })
+        for owner in range(5_632_092, 5_632_096):
+            chunk = owner // receipt["block_elements"]
+            self.assertEqual(chunk, 5500)
+            self.assertEqual(chunk % 2, 0)
+            self.assertLess(owner, min((chunk + 1) * 1024,
+                                       receipt["owners"]))
+
+        case = normalize({"kernel": "Gather", "pattern": list(range(1041)),
+                          "count": 1, "wrap": 1})
+        suite = Path(__file__).parent / "smoke.json"
+        result = prepare(
+            case, suite, 0, sms=2, loader="direct-hashed",
+            warps_per_core=8, gather_block_cyclic_elements=1024,
+            robust_end_drain=True, robust_spin_until_reset=True,
+            robust_serial_fence=True, robust_drain_passes=3,
+            robust_post_spin=20000, diagnostic_readback=True)
+        self.assertEqual(result["gather_block_cyclic_schedule"]["tail_elements"],
+                         17)
+        self.assertEqual(result["gather_block_cyclic_schedule"]["covered_elements"],
+                         1041)
+        expected = {
+            "sm_count": 2,
+            "loader": "direct-hashed",
+            "muon_warps_per_core": 8,
+            "gather_block_cyclic_elements": 1024,
+            "robust_end_drain": True,
+            "robust_spin_until_reset": True,
+            "robust_serial_fence": True,
+            "robust_drain_passes": 3,
+            "robust_post_spin": 20_000,
+            "diagnostic_readback": True,
+        }
+        for key, value in expected.items():
+            self.assertEqual(result[key], value)
+        config = GENERATED.joinpath("config.h").read_text()
+        for define in (
+                "#define NIGHTLY_CLUSTERS 2",
+                "#define NIGHTLY_OCC 8",
+                "#define SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS 1024u",
+                "#define NIGHTLY_ROBUST_GMEM_END 1",
+                "#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET 1",
+                "#define NIGHTLY_ROBUST_SERIAL_FENCE 1",
+                "#define NIGHTLY_ROBUST_DRAIN_PASSES 3",
+                "#define NIGHTLY_ROBUST_POST_SPIN 20000u"):
+            self.assertIn(define, config)
 
     def test_records_opt_in_robust_end_drain(self):
         case = normalize({"kernel": "Gather", "pattern": [0, 1], "count": 1})
