@@ -339,6 +339,18 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
   }
 #endif
   mu_barrier(NIGHTLY_BAR_END - 1u, warps);
+#if MU_L1_BANKS > 0
+  /* New incoherent-L1 configurations provide an explicit writeback and
+   * invalidate operation.  Keep the capacity drains required by existing
+   * FPGA images above, then use the hardware operation when it exists so END
+   * has upstream's stronger GPU-L2 visibility guarantee. */
+  if (tid_in_threadblock == 0u) {
+    mu_l1_flush();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_END - 1u, warps);
+#endif
   if (warp < MU_NUM_CORES && lane == 0u) {
     nightly_pb_put(NIGHTLY_PB_END + (uint32_t)vx_core_id(), nightly_mcycle());
   } else {
@@ -356,13 +368,19 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
 #endif
 #else
   /* threadblock warp w runs on core (w % MU_NUM_CORES): warps 0..MU_NUM_CORES-1 cover each core once */
-  if (tid_in_threadblock < MU_NUM_CORES * MU_NUM_THREADS) {
-    mu_fence();
-    if ((tid_in_threadblock % MU_NUM_THREADS) == 0)
-      nightly_pb_put(NIGHTLY_PB_END + (uint32_t)vx_core_id(), nightly_mcycle());
-  } else {
-    asm volatile("nop");
-  }
+  if (tid_in_threadblock < MU_NUM_CORES * MU_NUM_THREADS) mu_fence();
+  else asm volatile("nop");
+#if MU_L1_BANKS > 0
+  /* incoherent cluster L1: once every core's L0d is written back into it, write it back too, so the
+   * END stamp means the results are in the GPU L2 (mu_l1_flush) */
+  mu_barrier(NIGHTLY_BAR_END, warps);
+  if (tid_in_threadblock == 0) mu_l1_flush();
+  else asm volatile("nop");
+  mu_barrier(NIGHTLY_BAR_END, warps);
+#endif
+  if (tid_in_threadblock < MU_NUM_CORES * MU_NUM_THREADS && (tid_in_threadblock % MU_NUM_THREADS) == 0)
+    nightly_pb_put(NIGHTLY_PB_END + (uint32_t)vx_core_id(), nightly_mcycle());
+  else asm volatile("nop");
 #endif
 }
 
