@@ -9,12 +9,24 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from campaign import (SafetyAbort, archive_incomplete_safety_attempt,
+from campaign import (SafetyAbort, archive_prior_attempt,
                       descendant_pids, exclusive_host_lock, execute,
                       external_firesim_activity, inventory,
                       is_firesim_hardware_process, load_assets, make_plan,
                       process_table, sha256, summarize,
                       target_execution_order, update_owned_pids)
+
+
+def coordination_ack(root: Path, host_lock: Path) -> Path:
+    path = root / "host-coordination.json"
+    path.write_text(json.dumps({
+        "schema": "firesim-host-wide-lock-coordination-v1",
+        "host_lock": str(host_lock.resolve()),
+        "programming_rescans_host_pcie": True,
+        "complete_driver_lifetime_locked": True,
+        "acknowledged_users": ["test-user-a", "test-user-b"],
+    }))
+    return path
 
 
 class CampaignTest(unittest.TestCase):
@@ -49,8 +61,8 @@ class CampaignTest(unittest.TestCase):
             profile.mkdir()
             (profile / ".profile-start.123.marker").write_text("")
             (profile / "partial.csv").write_text("cycle,value\n1,2\n")
-            first = archive_incomplete_safety_attempt(result_dir)
-            self.assertEqual(first.name, "safety-abort-001")
+            first = archive_prior_attempt(result_dir)
+            self.assertEqual(first.name, "attempt-001")
             self.assertFalse((result_dir / "safety-abort.json").exists())
             self.assertFalse((result_dir / "memory-profile").exists())
             self.assertEqual((first / "stdout.log").read_text(), "partial stdout\n")
@@ -59,8 +71,8 @@ class CampaignTest(unittest.TestCase):
                 "cycle,value\n1,2\n",
             )
             (result_dir / "safety-abort.json").write_text("{}\n")
-            second = archive_incomplete_safety_attempt(result_dir)
-            self.assertEqual(second.name, "safety-abort-002")
+            second = archive_prior_attempt(result_dir)
+            self.assertEqual(second.name, "attempt-002")
 
     def test_process_table_tolerates_disappearing_proc_entry(self):
         with patch.object(Path, "read_bytes", side_effect=ProcessLookupError):
@@ -233,6 +245,7 @@ class CampaignTest(unittest.TestCase):
             plan_path = run_root / "plan.json"
             host_lock = root / "host.lock"
             host_lock.write_bytes(b"")
+            ack = coordination_ack(root, host_lock)
             with self.assertRaisesRegex(SafetyAbort, "require --host-lock"):
                 execute(plan_path, rerun_failed=False)
             with self.assertRaisesRegex(ValueError, "selection produced no jobs"):
@@ -243,6 +256,7 @@ class CampaignTest(unittest.TestCase):
                         include_jobs={"not-a-real-job"})
             selected_id = plan["jobs"][0]["id"]
             execute(plan_path, rerun_failed=False, host_lock=host_lock,
+                    host_coordination_ack=ack,
                     include_jobs={selected_id})
             self.assertTrue(
                 Path(plan["jobs"][0]["result_dir"], "result.json").is_file()
@@ -250,8 +264,10 @@ class CampaignTest(unittest.TestCase):
             self.assertFalse(
                 Path(plan["jobs"][1]["result_dir"], "result.json").exists()
             )
-            execute(plan_path, rerun_failed=False, host_lock=host_lock)
-            execute(plan_path, rerun_failed=False, host_lock=host_lock)
+            execute(plan_path, rerun_failed=False, host_lock=host_lock,
+                    host_coordination_ack=ack)
+            execute(plan_path, rerun_failed=False, host_lock=host_lock,
+                    host_coordination_ack=ack)
             report = summarize(plan_path, root / "summary.json")
             self.assertFalse(report["missing_jobs"])
             self.assertEqual(report["rows"][0]["measure_passes"], 3)
@@ -300,9 +316,10 @@ class CampaignTest(unittest.TestCase):
                              warmups=0, repetitions=1, allow_incomplete=True)
             host_lock = root / "host.lock"
             host_lock.write_bytes(b"")
+            ack = coordination_ack(root, host_lock)
             with self.assertRaisesRegex(SafetyAbort, "failed; stopping"):
                 execute(run_root / "plan.json", rerun_failed=False,
-                        host_lock=host_lock)
+                        host_lock=host_lock, host_coordination_ack=ack)
             first = Path(plan["jobs"][0]["result_dir"])
             second = Path(plan["jobs"][1]["result_dir"])
             self.assertEqual(json.loads((first / "result.json").read_text())["status"],
@@ -310,7 +327,7 @@ class CampaignTest(unittest.TestCase):
             self.assertFalse((second / "request.json").exists())
             with self.assertRaisesRegex(SafetyAbort, "prior failed result"):
                 execute(run_root / "plan.json", rerun_failed=False,
-                        host_lock=host_lock)
+                        host_lock=host_lock, host_coordination_ack=ack)
 
     def test_rejects_omitted_bitstream(self):
         with tempfile.TemporaryDirectory() as directory:

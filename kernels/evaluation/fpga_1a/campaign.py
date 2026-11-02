@@ -38,7 +38,7 @@ ROLES = {
     ".py": "script", ".sh": "script", ".pl": "script",
 }
 PATH_FIELDS = ("bitstream", "driver", "runtime_config", "hwdb_config",
-               "model_config", "runner", "parser")
+               "model_config", "runner", "launcher", "parser")
 
 
 class SafetyAbort(RuntimeError):
@@ -278,23 +278,21 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
-def archive_incomplete_safety_attempt(result_dir: Path) -> Path | None:
-    """Preserve an interrupted safety attempt before a deliberate retry.
+def archive_prior_attempt(result_dir: Path) -> Path | None:
+    """Preserve every prior attempt before a deliberate retry.
 
-    Safety aborts intentionally do not create result.json, so ordinary resume
-    is allowed.  Without an archive, however, request/stdout/stderr and the
-    abort record would be overwritten by that retry and the concurrency event
-    would disappear from the provenance trail.
+    This covers both interrupted safety attempts and ordinary failed results.
+    A retry must never overwrite the evidence needed to diagnose the failure.
     """
-    safety = result_dir / "safety-abort.json"
-    if not safety.is_file():
+    if not result_dir.is_dir() or not any(
+            path.name != "attempts" for path in result_dir.iterdir()):
         return None
     attempts = result_dir / "attempts"
     attempts.mkdir(parents=True, exist_ok=True)
     index = 1
-    while (attempts / f"safety-abort-{index:03d}").exists():
+    while (attempts / f"attempt-{index:03d}").exists():
         index += 1
-    archived = attempts / f"safety-abort-{index:03d}"
+    archived = attempts / f"attempt-{index:03d}"
     archived.mkdir()
     # Preserve every top-level artifact, including profiler subdirectories and
     # stale launch markers.  Restricting this to the ordinary log names left a
@@ -553,24 +551,11 @@ def expand(argv: list[str], values: dict[str, object]) -> list[str]:
 
 
 def execute_job(job: dict, asset_root: Path, receipts: dict,
-                rerun_failed: bool, reuse_loaded: bool) -> tuple[bool, bool]:
+                rerun_failed: bool, reuse_loaded: bool,
+                host_lock: Path | None) -> tuple[bool, bool]:
     """Execute one job; FireSim images are always reprogrammed between jobs."""
     result_dir = Path(job["result_dir"])
     result_file = result_dir / "result.json"
-    if result_file.is_file():
-        old = json.loads(result_file.read_text())
-        if old.get("status") == "passed":
-            return False, reuse_loaded
-        if not rerun_failed:
-            raise SafetyAbort(
-                f"{job['id']}: prior failed result requires inspection; "
-                "resume with --rerun-failed only after the cause is understood"
-            )
-    archived = archive_incomplete_safety_attempt(result_dir)
-    if archived is not None:
-        print(f"{job['id']}: archived prior safety attempt at {archived}",
-              flush=True)
-    result_dir.mkdir(parents=True, exist_ok=True)
     values = context(job, asset_root, result_dir)
     target = job["target"]
     # Reusing a programmed Corigine image across independent FireSim processes
@@ -580,6 +565,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
     # reuse_argv field.
     argv_template = target["run_argv"]
     argv = expand(argv_template, values)
+    guard_host = target.get("kind") == "firesim" and bool(target.get("bdf"))
     if target.get("kind") == "firesim" and "--no-program" in argv:
         raise SafetyAbort(
             f"{job['id']}: refusing unsafe FireSim --no-program reuse; "
@@ -590,12 +576,51 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
         env = os.environ.copy()
         env.update({key: str(value).format_map(values)
                     for key, value in target["env"].items()})
+    if guard_host:
+        if host_lock is None:
+            raise SafetyAbort("FireSim job is missing its host-wide lock")
+        if env is None:
+            env = os.environ.copy()
+        env.update({
+            "RADIANCE_PLAN_LAUNCH": "1",
+            "RADIANCE_CAMPAIGN_PID": str(os.getpid()),
+            "RADIANCE_CAMPAIGN_CONTROLLER": str(Path(__file__).resolve()),
+            "RADIANCE_HOST_LOCK": str(host_lock.resolve()),
+        })
     request = {"job": job, "argv": argv, "asset_receipts": receipts,
                "reused_loaded_bitstream": False}
+    request_digest = hashlib.sha256(
+        json.dumps(request, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+    if result_file.is_file():
+        old = json.loads(result_file.read_text())
+        if old.get("status") == "passed":
+            request_file = result_dir / "request.json"
+            prior_request = (json.loads(request_file.read_text())
+                             if request_file.is_file() else None)
+            if (old.get("id") != job["id"] or prior_request != request or
+                    old.get("request_sha256", request_digest) != request_digest):
+                raise SafetyAbort(
+                    f"{job['id']}: refusing to skip a passed result whose job, "
+                    "request, configuration, or artifact receipts do not match"
+                )
+            return False, reuse_loaded
+        if not rerun_failed:
+            raise SafetyAbort(
+                f"{job['id']}: prior failed result requires inspection; "
+                "resume with --rerun-failed only after the cause is understood"
+            )
+    archived = archive_prior_attempt(result_dir)
+    if archived is not None:
+        print(f"{job['id']}: archived prior attempt at {archived}", flush=True)
+    result_dir.mkdir(parents=True, exist_ok=True)
     write_json(result_dir / "request.json", request)
-    guard_host = target.get("kind") == "firesim" and bool(target.get("bdf"))
     if guard_host:
-        activity = external_firesim_activity(target_bdf=target["bdf"])
+        # Every job fresh-programs, and the programming utility performs a
+        # host-wide PCIe rescan.  Activity on another BDF is therefore just as
+        # conflicting as activity on this target.
+        activity = external_firesim_activity()
         if activity:
             record = {
                 "schema": "radiance-fpga-host-safety-abort-v1",
@@ -622,7 +647,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
                 rows = process_table()
                 owned_pids = update_owned_pids(rows, owned_pids)
                 activity = external_firesim_activity(
-                    rows, owned_pids, target_bdf=target["bdf"]
+                    rows, owned_pids
                 )
                 if activity:
                     stop_process_group(process)
@@ -671,6 +696,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
         "core_kernel_cycles": core_cycles,
         "per_sm_timing_complete": timing_complete,
         "reused_loaded_bitstream": False,
+        "request_sha256": request_digest,
         "wall_seconds": round(time.time() - started, 6),
     }
     parser_argv = target.get("parser_argv")
@@ -697,6 +723,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
 
 def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
             host_lock: Path | None = None,
+            host_coordination_ack: Path | None = None,
             exclude_families: set[str] | None = None,
             include_jobs: set[str] | None = None) -> None:
     plan = json.loads(plan_path.read_text())
@@ -752,6 +779,24 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
             "FireSim plans require --host-lock PATH; process polling alone cannot "
             "prevent a racing host-wide PCIe rescan"
         )
+    if has_firesim:
+        if host_coordination_ack is None or not host_coordination_ack.is_file():
+            raise SafetyAbort(
+                "FireSim plans require --host-coordination-ack PATH proving that "
+                "all host users serialize complete driver lifetimes"
+            )
+        acknowledgement = json.loads(host_coordination_ack.read_text())
+        if not (
+                acknowledgement.get("schema") ==
+                "firesim-host-wide-lock-coordination-v1" and
+                acknowledgement.get("host_lock") == str(host_lock.resolve()) and
+                acknowledgement.get("programming_rescans_host_pcie") is True and
+                acknowledgement.get("complete_driver_lifetime_locked") is True and
+                len(acknowledgement.get("acknowledged_users", [])) >= 2):
+            raise SafetyAbort(
+                f"invalid or incomplete host coordination acknowledgement: "
+                f"{host_coordination_ack}"
+            )
 
     # Corigine programming disconnects a card and performs a host-wide PCIe
     # rescan.  A second target must not be programmed while a FireSim driver is
@@ -768,7 +813,8 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
         image_loaded = False
         for job in jobs:
             _, image_loaded = execute_job(
-                job, asset_root, plan["asset_receipts"], rerun_failed, image_loaded)
+                job, asset_root, plan["asset_receipts"], rerun_failed,
+                image_loaded, host_lock)
 
     with exclusive_host_lock(host_lock):
         if parallel_targets and len(grouped) > 1:
@@ -843,6 +889,11 @@ def main() -> None:
              "the entire campaign (the file is opened read-only and never modified)",
     )
     running.add_argument(
+        "--host-coordination-ack", type=Path,
+        help="JSON acknowledgement that all host FireSim users hold --host-lock "
+             "for each complete driver lifetime",
+    )
+    running.add_argument(
         "--exclude-family", action="append", default=[],
         choices=("stream", "spatter", "xrage", "fp8_gemm", "gemv_bf16"),
         help="skip a quarantined workload family; may be specified more than once",
@@ -867,7 +918,8 @@ def main() -> None:
             print(f"planned {len(plan['jobs'])} runs under {args.out.resolve()}")
         elif args.command == "run":
             execute(args.plan.resolve(), args.rerun_failed, args.parallel_targets,
-                    args.host_lock, set(args.exclude_family), set(args.include_job))
+                    args.host_lock, args.host_coordination_ack,
+                    set(args.exclude_family), set(args.include_job))
         else:
             summarize(args.plan.resolve(), args.out.resolve())
     except (ValueError, SafetyAbort) as error:
