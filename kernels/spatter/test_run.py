@@ -105,20 +105,25 @@ class SpatterMappingTest(unittest.TestCase):
         self.assertIn("#define SPATTER_SOURCE_TAG 2u", config)
         self.assertIn("#define SPATTER_SOURCE_INDEX_BASE 0ULL", config)
 
+        ordered = normalize({**raw, "collision-policy": "ordered"})
         owner_result = prepare(
             case, Path(__file__).parent / "smoke.json", 0, sms=4,
             parallel_destination_owner=True)
-        self.assertTrue(owner_result["admissible_winner_check"])
+        self.assertFalse(owner_result["admissible_winner_check"])
         self.assertTrue(owner_result["parallel_destination_owner"])
         self.assertTrue(owner_result["all_original_transfers_executed"])
+        self.assertEqual(owner_result["expected_digest"],
+                         f"{reference(ordered)[0]:016x}")
+        self.assertIsNone(owner_result["expected_nonzero_outputs"])
         self.assertEqual(owner_result["destination_group_count"], 2)
         self.assertEqual(owner_result["address_plan"]["schedule"],
                          "parallel_destination_owner")
         self.assertEqual(owner_result["parallel_scatter_output"],
-                         "owner-serialized-valid-winner")
+                         "serial-last-writer-equivalent")
         owner_config = GENERATED.joinpath("config.h").read_text()
         self.assertIn("#define SPATTER_ORDERED_COLLISIONS 0", owner_config)
         self.assertIn("#define SPATTER_DESTINATION_OWNER_GROUPS 1", owner_config)
+        self.assertIn("#define SPATTER_ADMISSIBLE_WINNER_CHECK 0", owner_config)
         grouped_tasks = struct.unpack(
             "<4I", GENERATED.joinpath("group_tasks.bin").read_bytes())
         self.assertEqual(sorted(grouped_tasks), list(range(4)))
@@ -128,7 +133,6 @@ class SpatterMappingTest(unittest.TestCase):
                     Path(__file__).parent / "smoke.json", 0,
                     parallel_destination_owner=True)
 
-        ordered = normalize({**raw, "collision-policy": "ordered"})
         ordered_result = prepare(
             ordered, Path(__file__).parent / "smoke.json", 0, sms=4)
         self.assertFalse(ordered_result["admissible_winner_check"])

@@ -456,6 +456,15 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
             case["kind"] != "scatter" or not overlap):
         raise ValueError(
             "parallel destination ownership requires a colliding parallel Scatter")
+    if parallel_destination_owner:
+        # The destination-owner schedule retains the original task order
+        # within every destination.  Its final value must therefore equal the
+        # serial last-writer result, not merely an arbitrary admissible winner.
+        ordered_case = dict(case)
+        ordered_case["collision_policy"] = "ordered"
+        expected, ordered_overlap = reference(ordered_case)
+        if not ordered_overlap or expected is None:
+            raise AssertionError("destination-owner serial oracle is unavailable")
     destination_owner_groups = (
         case["collision_policy"] == "ordered" or parallel_destination_owner)
     if destination_owner_groups:
@@ -470,7 +479,8 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         payload(case["payload_tag"], case.get("source_index_base", 0) + i)
         for i in range(case["src_length"])
     )
-    exploratory = overlap and case["collision_policy"] == "parallel"
+    exploratory = (overlap and case["collision_policy"] == "parallel" and
+                   not parallel_destination_owner)
     admissible_winner_check = exploratory and case["kind"] == "scatter"
     gather_owners = case["length"] * case["wrap"]
     gather_block_cyclic = bool(gather_block_cyclic_16 or
@@ -586,11 +596,11 @@ def prepare(case: dict, suite: Path, case_id: int, sms: int = 1,
         "expected_source_digest": f"{source_digest:016x}",
         "expected_sample_digest": f"{expected_sample:016x}" if readback_samples else None,
         "readback_samples": readback_samples,
-        "exploratory_probe_index": probe_index if overlap else None,
+        "exploratory_probe_index": probe_index if exploratory else None,
         "expected_nonzero_outputs": expected_nonzero_outputs if exploratory else None,
         "admissible_winner_check": admissible_winner_check,
         "parallel_scatter_output": (
-            "owner-serialized-valid-winner" if parallel_destination_owner else
+            "serial-last-writer-equivalent" if parallel_destination_owner else
             "schedule-dependent-non-atomic" if admissible_winner_check else None),
         "parallel_destination_owner": parallel_destination_owner,
         "all_original_transfers_executed": True,
@@ -808,6 +818,7 @@ def main() -> int:
         manifest["cyclotron_trace_requested"] = args.record_trace
         if (args.full_host_check and manifest["destination_overlap"] and
                 manifest["collision_policy"] == "parallel" and
+                not manifest.get("parallel_destination_owner", False) and
                 not manifest.get("admissible_winner_check", False)):
             parser.error("a parallel collision case has no deterministic full-output digest")
         manifest["correctness"] = (
@@ -815,7 +826,8 @@ def main() -> int:
             manifest.get("admissible_winner_check", False) else
             "guards-and-nonzero-exploratory" if
             manifest["destination_overlap"] and
-            manifest["collision_policy"] == "parallel" else
+            manifest["collision_policy"] == "parallel" and
+            not manifest.get("parallel_destination_owner", False) else
             "digest-checked" if args.full_host_check else
             "sample-checked" if manifest["readback_samples"] else "digest-checked"
         )
@@ -889,6 +901,7 @@ def main() -> int:
                 "failed" if not cycles or "*** FAILED ***" in log else
                 "exploratory" if manifest["destination_overlap"] and
                 manifest["collision_policy"] == "parallel" and
+                not manifest.get("parallel_destination_owner", False) and
                 not manifest.get("admissible_winner_check", False) else "passed"
             )
     except subprocess.CalledProcessError as error:

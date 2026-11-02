@@ -13,6 +13,8 @@ import subprocess
 REPO = Path(__file__).resolve().parents[3]
 PASSTHROUGH = (
     "case", "collision_policy", "destination_group_count",
+    "parallel_destination_owner", "all_original_transfers_executed",
+    "parallel_scatter_output",
     "muon_warps_per_core", "robust_end_drain", "robust_spin_until_reset",
     "robust_serial_fence", "robust_token_fence", "robust_drain_passes",
     "robust_post_spin",
