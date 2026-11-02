@@ -40,6 +40,13 @@ ROLES = {
 PATH_FIELDS = ("bitstream", "driver", "runtime_config", "hwdb_config",
                "model_config", "runner", "launcher", "parser")
 
+# The only two cards this campaign owns.  60:00.0/61:00.0 belong to another
+# host user and b1:00.0 is not part of this study; a plan that names anything
+# else is a typo, not a request.
+FPGA_BDF_ALLOWLIST = frozenset({"1a:00.0", "1b:00.0"})
+# One concurrent execution group per owned card, and no more.
+MAX_PARALLEL_FPGA_GROUPS = 2
+
 
 class SafetyAbort(RuntimeError):
     """The run stopped before another FireSim process could rescan host PCIe."""
@@ -561,8 +568,12 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
     # Reusing a programmed Corigine image across independent FireSim processes
     # is unsafe on harp.  Three isolated campaigns passed exactly three runs and
     # reset the host while the fourth --no-program run polled ZERO_FINISHED.
-    # Always take the full run_argv path, even when a historical plan includes a
-    # reuse_argv field.
+    # Every job therefore fresh-programs: always take the full run_argv path,
+    # even when a historical plan includes a reuse_argv field, and assert below
+    # that the resolved argv cannot smuggle --no-program past that decision.
+    # The hardened runner rejects --no-program as well, so this is belt and
+    # braces, and reused_loaded_bitstream is recorded false everywhere to let
+    # the report state plainly that every cell was independently programmed.
     argv_template = target["run_argv"]
     argv = expand(argv_template, values)
     guard_host = target.get("kind") == "firesim" and bool(target.get("bdf"))
@@ -571,6 +582,19 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
             f"{job['id']}: refusing unsafe FireSim --no-program reuse; "
             "every job must reprogram its selected bitstream"
         )
+    # The host-activity guard is scoped to the card this job owns, which needs a
+    # BDF we can actually parse.  A FireSim target that declares a BDF we cannot
+    # parse stops the job outright instead of silently widening or dropping the
+    # guard: we cannot prove which card it would touch, so we must not run it
+    # alongside another user's FPGA work.
+    guard_bdf = None
+    if guard_host:
+        guard_bdf = normalize_bdf(str(target["bdf"]))
+        if guard_bdf is None:
+            raise SafetyAbort(
+                f"{job['id']}: unparseable FPGA BDF {target['bdf']!r}; refusing "
+                "to run without a card-scoped host-activity guard"
+            )
     env = None
     if target.get("env"):
         env = os.environ.copy()
@@ -618,9 +642,14 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
     write_json(result_dir / "request.json", request)
     if guard_host:
         # Every job fresh-programs, and the programming utility performs a
-        # host-wide PCIe rescan.  Activity on another BDF is therefore just as
-        # conflicting as activity on this target.
-        activity = external_firesim_activity()
+        # host-wide PCIe rescan -- but that rescan is now serialized host-wide
+        # by the shared program mutex the runner takes
+        # (scripts/hostwide_flash_lock.py), so another user's *driver* on a
+        # different card is no longer a conflict.  Scope the guard to this
+        # job's card: FireSim hardware activity whose own-or-ancestor command
+        # line resolves to exactly one other BDF is ignored, while activity
+        # with no resolvable BDF or with ambiguous BDFs still blocks.
+        activity = external_firesim_activity(target_bdf=guard_bdf)
         if activity:
             record = {
                 "schema": "radiance-fpga-host-safety-abort-v1",
@@ -647,7 +676,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
                 rows = process_table()
                 owned_pids = update_owned_pids(rows, owned_pids)
                 activity = external_firesim_activity(
-                    rows, owned_pids
+                    rows, owned_pids, guard_bdf
                 )
                 if activity:
                     stop_process_group(process)
@@ -719,6 +748,59 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
             f"{job['id']}: failed; stopping the campaign before another FPGA job"
         )
     return True, False
+
+
+def parallel_execution_groups(selected_jobs: list[dict]) -> dict[str, list[dict]]:
+    """Split selected jobs into groups that are safe to run concurrently.
+
+    Parallelism is no longer refused outright.  Programming -- the only step
+    that performs a host-wide PCIe remove+rescan -- is serialized host-wide by
+    the shared program mutex the runner acquires
+    (scripts/hostwide_flash_lock.py), so concurrency is bounded by *card
+    ownership* rather than by the rescan.  Running drivers side by side on
+    different cards is routine on this host.
+
+    FireSim jobs are therefore grouped by the card they own, not by target_id:
+    a plan may hold many more target configurations than cards.  Each card
+    runs its own jobs sequentially in plan order, reprogramming between them;
+    only different cards run at the same time.  Non-FireSim targets keep their
+    per-target grouping.  Every FireSim job must name an allowlisted card, and
+    at most two cards may be driven, so a stray BDF fails closed here --
+    before any job starts.
+    """
+    groups: dict[str, list[dict]] = {}
+    ordered_bdfs: list[str] = []
+    for job in selected_jobs:
+        target = job["target"]
+        if target.get("kind") != "firesim":
+            groups.setdefault(f"target:{job['target_id']}", []).append(job)
+            continue
+        raw = target.get("bdf")
+        if not raw:
+            raise ValueError(
+                "parallel FireSim execution requires every FireSim job to name "
+                f"its FPGA: {job['id']} declares no bdf"
+            )
+        canonical = normalize_bdf(str(raw))
+        if canonical is None:
+            raise ValueError(
+                f"{job['id']}: unparseable FPGA BDF {raw!r}"
+            )
+        if canonical not in FPGA_BDF_ALLOWLIST:
+            raise ValueError(
+                f"{job['id']}: FPGA {canonical} is outside the campaign "
+                "allowlist " + ", ".join(sorted(FPGA_BDF_ALLOWLIST))
+            )
+        key = f"fpga:{canonical}"
+        if key not in groups:
+            ordered_bdfs.append(canonical)
+        groups.setdefault(key, []).append(job)
+    if len(ordered_bdfs) > MAX_PARALLEL_FPGA_GROUPS:
+        raise ValueError(
+            f"parallel FireSim execution is limited to {MAX_PARALLEL_FPGA_GROUPS} "
+            "concurrent FPGAs; plan uses " + ", ".join(sorted(ordered_bdfs))
+        )
+    return groups
 
 
 def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
@@ -799,17 +881,30 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
             )
 
     # Corigine programming disconnects a card and performs a host-wide PCIe
-    # rescan.  A second target must not be programmed while a FireSim driver is
-    # active on an already-programmed card: the rescan can invalidate the live
-    # driver's mappings and destabilize the host.  Keep model-only campaigns
-    # parallel-capable, but make FPGA target groups strictly sequential.
-    if parallel_targets and has_firesim:
-        raise ValueError(
-            "parallel FireSim targets are unsafe: Corigine programming performs "
-            "a host-wide PCIe rescan; run target groups sequentially"
+    # remove+rescan, so it must never overlap another program event anywhere on
+    # the host.  That serialization is now enforced where it belongs -- in the
+    # shared host-wide program mutex the runner takes around the flash itself
+    # (scripts/hostwide_flash_lock.py) -- instead of by refusing to drive two
+    # cards at once.  Concurrent *drivers* on distinct cards are safe and other
+    # host users do it routinely, so the remaining invariant is card ownership:
+    # one execution group per card, each card's jobs sequential, at most the
+    # two allowlisted cards.  Validate the whole selection up front so a bad
+    # plan fails before any job starts and before the host lock is taken.
+    parallel_groups = (parallel_execution_groups(selected_jobs)
+                       if parallel_targets else None)
+    if parallel_groups is not None and len(parallel_groups) > 1:
+        print(
+            "running {} groups concurrently: {}".format(
+                len(parallel_groups),
+                ", ".join(f"{key} ({len(jobs)} jobs)"
+                          for key, jobs in parallel_groups.items()),
+            ),
+            flush=True,
         )
 
     def run_target(jobs: list[dict]) -> None:
+        # image_loaded stays local to one group so a card never inherits
+        # another card's resident-image assumption.
         image_loaded = False
         for job in jobs:
             _, image_loaded = execute_job(
@@ -817,13 +912,10 @@ def execute(plan_path: Path, rerun_failed: bool, parallel_targets: bool = False,
                 image_loaded, host_lock)
 
     with exclusive_host_lock(host_lock):
-        if parallel_targets and len(grouped) > 1:
-            bdfs = [jobs[0]["target"].get("bdf") for jobs in grouped.values()
-                    if jobs[0]["target"].get("kind") == "firesim"]
-            if any(not bdf for bdf in bdfs) or len(bdfs) != len(set(bdfs)):
-                raise ValueError("parallel FireSim targets require distinct nonempty BDFs")
-            with ThreadPoolExecutor(max_workers=len(grouped)) as pool:
-                futures = [pool.submit(run_target, jobs) for jobs in grouped.values()]
+        if parallel_groups is not None and len(parallel_groups) > 1:
+            with ThreadPoolExecutor(max_workers=len(parallel_groups)) as pool:
+                futures = [pool.submit(run_target, jobs)
+                           for jobs in parallel_groups.values()]
                 for future in futures:
                     future.result()
         else:
@@ -881,8 +973,10 @@ def main() -> None:
     running.add_argument("--plan", type=Path, required=True)
     running.add_argument("--rerun-failed", action="store_true")
     running.add_argument("--parallel-targets", action="store_true",
-                         help="run non-FireSim target groups concurrently; FPGA targets "
-                              "are rejected because programming rescans host PCIe")
+                         help="run one execution group per FPGA concurrently (FireSim "
+                              "jobs are grouped by --bdf, each card sequential); "
+                              "programming is serialized host-wide by the runner's "
+                              "shared program mutex")
     running.add_argument(
         "--host-lock", type=Path,
         help="existing cooperative lock honored by every FireSim user; hold it for "
