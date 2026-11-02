@@ -96,6 +96,36 @@ class CampaignTest(unittest.TestCase):
         activity = external_firesim_activity(rows, {10})
         self.assertEqual([row["pid"] for row in activity], [20])
 
+    def test_external_activity_is_scoped_to_target_bdf_and_fails_closed(self):
+        rows = [
+            {"pid": 20, "ppid": 1, "uid": 2000,
+             "argv": ["bash", "/other/run.sh", "-b", "2SM_HBM",
+                      "--bdf", "1b:00.0"]},
+            {"pid": 21, "ppid": 20, "uid": 0,
+             "argv": ["vivado", "-source", "program_fpga.tcl"]},
+            {"pid": 30, "ppid": 1, "uid": 3000,
+             "argv": ["bash", "/target/run.sh", "-b", "4SM_DRAM",
+                      "--bdf=0000:1a:00.0"]},
+            {"pid": 31, "ppid": 30, "uid": 0,
+             "argv": ["vivado", "-source", "program_fpga.tcl"]},
+            {"pid": 40, "ppid": 1, "uid": 4000,
+             "argv": ["python3", "/deploy/firesim", "runworkload"]},
+            {"pid": 50, "ppid": 1, "uid": 5000,
+             "argv": ["/generated/VFireSim", "+bus=0x60", "+device=0"]},
+        ]
+        self.assertEqual(
+            [row["pid"] for row in
+             external_firesim_activity(rows, {10}, "1a:00.0")],
+            [30, 31, 40],
+        )
+        self.assertEqual(
+            [row["pid"] for row in
+             external_firesim_activity(rows, {10}, "1b:00.0")],
+            [20, 21, 40],
+        )
+        with self.assertRaises(ValueError):
+            external_firesim_activity(rows, {10}, "not-a-bdf")
+
     def test_owned_pid_history_survives_reparenting_but_not_exit(self):
         initial = [
             {"pid": 10, "ppid": 1, "uid": 1000,

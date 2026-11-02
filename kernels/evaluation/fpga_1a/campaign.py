@@ -129,6 +129,66 @@ def is_firesim_hardware_process(argv: list[str]) -> bool:
     return False
 
 
+def normalize_bdf(value: str) -> str | None:
+    """Return a canonical bus:device.function PCI BDF, or None if invalid."""
+    match = re.fullmatch(
+        r"(?i)(?:[0-9a-f]{4}:)?([0-9a-f]{1,2}):([0-9a-f]{2})\.([0-7])",
+        value.strip(),
+    )
+    if match is None:
+        return None
+    return f"{int(match[1], 16):02x}:{int(match[2], 16):02x}.{int(match[3])}"
+
+
+def argv_bdf(argv: list[str]) -> str | None:
+    """Extract an explicit BDF from runner options or FireSim PCI plusargs."""
+    for index, argument in enumerate(argv):
+        if argument == "--bdf" and index + 1 < len(argv):
+            return normalize_bdf(argv[index + 1])
+        if argument.startswith("--bdf="):
+            return normalize_bdf(argument.split("=", 1)[1])
+
+    plusargs = {
+        argument.split("=", 1)[0]: argument.split("=", 1)[1]
+        for argument in argv if argument.startswith("+") and "=" in argument
+    }
+    if "+bus" not in plusargs:
+        return None
+
+    def plusarg_int(name: str, default: int) -> int:
+        text = plusargs.get(name)
+        if text is None:
+            return default
+        try:
+            return int(text, 0)
+        except ValueError:
+            return int(text, 16)
+
+    try:
+        bus = plusarg_int("+bus", 0)
+        device = plusarg_int("+device", 0)
+        function = plusarg_int("+function", 0)
+    except ValueError:
+        return None
+    if not (0 <= bus <= 0xFF and 0 <= device <= 0x1F and 0 <= function <= 7):
+        return None
+    return f"{bus:02x}:{device:02x}.{function}"
+
+
+def process_bdfs(row: dict, by_pid: dict[int, dict]) -> set[str]:
+    """Collect explicit BDFs from a hardware process and its live ancestors."""
+    bdfs = set()
+    seen = set()
+    current = row
+    while current is not None and current["pid"] not in seen:
+        seen.add(current["pid"])
+        bdf = argv_bdf(current["argv"])
+        if bdf is not None:
+            bdfs.add(bdf)
+        current = by_pid.get(current["ppid"])
+    return bdfs
+
+
 def descendant_pids(rows: list[dict], roots: set[int]) -> set[int]:
     owned = set(roots)
     changed = True
@@ -157,12 +217,31 @@ def update_owned_pids(rows: list[dict], owned: set[int]) -> set[int]:
 
 
 def external_firesim_activity(rows: list[dict] | None = None,
-                              owned_roots: set[int] | None = None) -> list[dict]:
-    """Return FireSim hardware processes outside this campaign's process tree."""
+                              owned_roots: set[int] | None = None,
+                              target_bdf: str | None = None) -> list[dict]:
+    """Return conflicting FireSim processes outside this campaign's tree.
+
+    When a target BDF is supplied, a process is ignored only when its own or
+    its live ancestor's command line identifies exactly one different BDF.
+    Hardware activity with no resolvable BDF, or with ambiguous BDFs, still
+    fails closed.
+    """
     rows = process_table() if rows is None else rows
     owned = descendant_pids(rows, owned_roots or {os.getpid()})
-    return [row for row in rows
-            if row["pid"] not in owned and is_firesim_hardware_process(row["argv"])]
+    target = normalize_bdf(target_bdf) if target_bdf is not None else None
+    if target_bdf is not None and target is None:
+        raise ValueError(f"invalid target BDF: {target_bdf!r}")
+    by_pid = {row["pid"]: row for row in rows}
+    activity = []
+    for row in rows:
+        if row["pid"] in owned or not is_firesim_hardware_process(row["argv"]):
+            continue
+        if target is not None:
+            bdfs = process_bdfs(row, by_pid)
+            if len(bdfs) == 1 and target not in bdfs:
+                continue
+        activity.append(row)
+    return activity
 
 
 def activity_record(rows: list[dict]) -> list[dict]:
@@ -513,7 +592,7 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
     write_json(result_dir / "request.json", request)
     guard_host = target.get("kind") == "firesim" and bool(target.get("bdf"))
     if guard_host:
-        activity = external_firesim_activity()
+        activity = external_firesim_activity(target_bdf=target["bdf"])
         if activity:
             record = {
                 "schema": "radiance-fpga-host-safety-abort-v1",
@@ -539,7 +618,9 @@ def execute_job(job: dict, asset_root: Path, receipts: dict,
             if guard_host:
                 rows = process_table()
                 owned_pids = update_owned_pids(rows, owned_pids)
-                activity = external_firesim_activity(rows, owned_pids)
+                activity = external_firesim_activity(
+                    rows, owned_pids, target_bdf=target["bdf"]
+                )
                 if activity:
                     stop_process_group(process)
                     break
