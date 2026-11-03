@@ -295,6 +295,11 @@ int main() {
   nh_puts("== model (first phase after init to the end of the LM head)\n");
   nh_puts("model_cycles="); nh_putu(total); nh_puts(" phase_cycles="); nh_putu(busy);
   nh_puts(" handshake_cycles="); nh_putu(total - busy); nh_puts("\n");
+  // Report-only alias for the fpga_1a campaign harness, whose result contract scrapes
+  // `kernel_cycles=` as the region of interest.  Identical to model_cycles above (first
+  // phase after init to the end of the LM head); printed after every measurement, so it
+  // cannot influence any counter.  Nothing else in llama_e2e reads it.
+  nh_puts("kernel_cycles="); nh_putu(total); nh_puts("\n");
   // per layer: without final, lmhead and softcap (ops 13, 14, 20)
 #ifdef LL_STEPS
   // decode (gen_decode.py): LL_M = steps x sequences; a layer is counted once per step
