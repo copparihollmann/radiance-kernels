@@ -106,3 +106,54 @@ coverage for parallel overlapping scatter), checks GEMM's device verifier, and r
 nightly START-to-END kernel span. It deliberately records `is_hbm: false`;
 HBM results must come from Nicolas's copied model/configuration assets through
 `campaign.py`.
+
+## Destination cache-line ownership
+
+Radiance SMs have private L1s with line-granularity writeback, so a 64-byte
+line written by two SMs can lose or tear words even when every byte written is
+individually correct. A digest over the result cannot see that: the line is
+shared on every run and happens to hold the right bytes on the run you
+measured. That is exactly how the xRAGE Scatter defect survived
+(`reports/DEFECT-xrage-4sm-cache-line-2026-11-02.md`), and why manifest fields
+such as `"partition": "disjoint-contiguous-64-byte-output-lines"` are an
+assertion, not evidence.
+
+Four scripts compute the invariant instead. Each builds an owner map over
+*every* work item, maps each item to its real address, and then independently
+collects the set of SMs that write each 64-byte line. `cache_line_exclusive`
+and `coverage_exactly_once` are computed values in their output, never
+literals. Each also has an unsafe mode that reproduces the schedule the repair
+replaced and must still fail: a detector that cannot fail proves nothing.
+
+| script | covers | unsafe mode |
+| --- | --- | --- |
+| `audit_dense_contiguous_line_ownership.py` | any dense, directly indexed output: STREAM, stencil3d, nearn, hotspot3d, gemv, pathfinder, btree, spmv-jds, dot inputs | `--schedule round-robin` |
+| `audit_spatter_gather_output_line_ownership.py` | Spatter/xRAGE Gather and MultiGather dense output, all three compiled schedules, plus transfer coverage | `--schedule round-robin` |
+| `audit_spatter_scatter_task_line_ownership.py` | the parallel-collision Scatter/GS/MultiScatter task partition, resolving each task through the pattern indirection | `--schedule round-robin` |
+| `audit_xrage_destination_line_ownership.py` | the ordered destination-owner Scatter group list | `--boundary-mode rank` |
+
+`audit_hpc_v2_line_ownership.py` runs all of them over the 21 HPC workloads in
+`runs/hpc-v2-memory-models-dual-1a1b-v1/plan.json` at 1, 2 and 4 SMs, pairs each
+with its unsafe control, and emits one matrix. It exits non-zero if any kernel
+shares a line.
+
+```sh
+ROOT=/scratch/agustin/radiance-fpga-1a
+python3 audit_hpc_v2_line_ownership.py \
+  --xrage-suite "$ROOT/artifacts/xrage-inputs-v1/xrage-suite.json" \
+  --xrage-destinations "$ROOT/artifacts/xrage-inputs-v1/xrage-scatter.u32le" \
+  --out "$ROOT/runs/hpc-v2-line-ownership-audit-v1/matrix.json"
+```
+
+Two rows do not pass:
+
+- `dot-1m-partials` is a **defect**. `kernels/stream_dot/kernel.cpp:63` writes
+  `stream_dot_partial[block_id]` into the 16-byte array that
+  `kernels/stream_dot/run.py` emits as `.zero 16`, so at 2 SMs SM0 writes bytes
+  0-3 and SM1 bytes 4-7 of one 64-byte line, and at 4 SMs all four SMs write
+  that same line. Unlike xRAGE this is one naturally aligned 32-bit store per
+  SM, so there is no multi-store payload to tear; the exposure is line-granular
+  writeback. The 1/2/4-SM FPGA runs all pass with every partial word checked
+  exactly, which is evidence that this memory system tolerates the sharing --
+  not that the invariant holds.
+- `gemm-bf16-512` is **undetermined**, not safe. See the row's `missing` field.
