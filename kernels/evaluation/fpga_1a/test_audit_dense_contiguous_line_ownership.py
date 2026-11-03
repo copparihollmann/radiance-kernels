@@ -98,10 +98,12 @@ class UnsafeScheduleTests(unittest.TestCase):
             self.assertTrue(check["coverage_exactly_once"])
 
     def test_per_sm_scalar_output_array_shares_one_line(self):
-        """stream_dot writes `partial[block_id]` into a 16-byte array.
+        """The packed stream_dot partial array, now the unsafe control.
 
-        One naturally aligned 32-bit store per SM, every store into the same
-        64-byte line.
+        `partial[block_id]` into a 16-byte array: one naturally aligned 32-bit
+        store per SM, every store into the same 64-byte line.  This is the
+        layout the padded one replaced, and it must still fail -- a control
+        that cannot fire proves nothing about the layout that replaced it.
         """
         for sms in (2, 4):
             report = AUDIT.audit(sms, 4, (sms,), schedule="round-robin")
@@ -109,6 +111,24 @@ class UnsafeScheduleTests(unittest.TestCase):
             split = report["checks"][0]["split_lines"][0]
             self.assertEqual(split["line"], 0)
             self.assertEqual(split["writer_sms"], list(range(sms)))
+
+    def test_line_padded_per_sm_scalar_array_is_exclusive(self):
+        """The deployed stream_dot partial array: one 64-byte line per SM.
+
+        `kernels/stream_dot/run.py` emits `.zero 64 * sms` and the device
+        writes `stream_dot_partial[block_id * 16]`, so SM n owns floats
+        [16n, 16n + 16) -- exactly one line each, at every deployed SM count.
+        """
+        stride = 16
+        for sms in (1, 2, 4):
+            report = AUDIT.audit(sms * stride, 4, (sms,), granule=stride,
+                                 label="dot-1m-partials")
+            self.assertEqual(report["status"], "pass")
+            check = report["checks"][0]
+            self.assertTrue(check["cache_line_exclusive"])
+            self.assertTrue(check["coverage_exactly_once"])
+            self.assertEqual(check["split_line_count"], 0)
+            self.assertEqual(check["elements_per_sm"], [stride] * sms)
 
 
 class RepeatStrideTests(unittest.TestCase):

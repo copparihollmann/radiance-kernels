@@ -145,15 +145,24 @@ python3 audit_hpc_v2_line_ownership.py \
   --out "$ROOT/runs/hpc-v2-line-ownership-audit-v1/matrix.json"
 ```
 
-Two rows do not pass:
+One row does not pass:
 
-- `dot-1m-partials` is a **defect**. `kernels/stream_dot/kernel.cpp:63` writes
-  `stream_dot_partial[block_id]` into the 16-byte array that
-  `kernels/stream_dot/run.py` emits as `.zero 16`, so at 2 SMs SM0 writes bytes
-  0-3 and SM1 bytes 4-7 of one 64-byte line, and at 4 SMs all four SMs write
-  that same line. Unlike xRAGE this is one naturally aligned 32-bit store per
-  SM, so there is no multi-store payload to tear; the exposure is line-granular
-  writeback. The 1/2/4-SM FPGA runs all pass with every partial word checked
-  exactly, which is evidence that this memory system tolerates the sharing --
-  not that the invariant holds.
 - `gemm-bf16-512` is **undetermined**, not safe. See the row's `missing` field.
+
+`dot-1m-partials` used to be the other one. `kernels/stream_dot/kernel.cpp`
+wrote `stream_dot_partial[block_id]` into the 16-byte array that
+`kernels/stream_dot/run.py` emitted as `.zero 16`, so at 2 SMs SM0 wrote bytes
+0-3 and SM1 bytes 4-7 of one 64-byte line, and at 4 SMs all four SMs wrote that
+same line. Unlike xRAGE that was one naturally aligned 32-bit store per SM, so
+there was no multi-store payload to tear and no value could be corrupted
+mid-store; the exposure was line-granular only. The 1/2/4-SM FPGA runs all
+passed with every partial word checked exactly, so the hardware demonstrably
+tolerated it -- the repair is correctness hygiene against a latent hazard, not
+a fix for observed corruption.
+
+The array is now padded to one 64-byte line per SM (`.zero 64 * sms`, written
+as `stream_dot_partial[block_id * 16]`), so the row is audited as a contiguous
+partition at a granule of one line and passes at 1, 2 and 4 SMs, against the
+old packed array as its unsafe control. Because the layout change changes the
+ELF, any dot-1m FPGA result measured before it is stale with respect to source
+and would have to be re-measured on hardware to match again.

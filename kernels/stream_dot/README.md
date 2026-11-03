@@ -16,6 +16,12 @@ Only ownership and each thread's legal reduction order change; the Dot
 equation, full input size, shared-memory tree, exact generated partial oracle,
 integer-only host final sum, and guard checks remain intact.
 
+The per-SM reduction partials are padded to one 64-byte cache line each
+(`.zero 64 * sms`, indexed `stream_dot_partial[block_id * 16]`) rather than
+packed one float32 per SM, so no two SMs write the same destination line. Only
+addresses change: every partial value, the digest and the final scalar are
+identical to the packed layout.
+
 The input length is not reduced for performance runs. Every partial and the
 ordered host final sum are checked bit-for-bit against an independent
 emulation of the device's float32 operation order, and both surrounding guards

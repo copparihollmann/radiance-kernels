@@ -147,6 +147,54 @@ int main() {
                 run.prepare(256, Path(directory),
                             block_cyclic_chunk_elements=17)
 
+    def test_partials_get_one_cache_line_each(self):
+        """The device, the emitted layout and the host must share one stride.
+
+        A packed float-per-SM array put every SM in one 64-byte line.  The
+        three sites that have to agree are kernel.cpp's store index, data.S's
+        reservation and host.cpp's read index; if any one of them drifts the
+        host silently checks the wrong addresses.
+        """
+        self.assertEqual(run.PARTIAL_STRIDE_FLOATS * 4, run.LINE_BYTES)
+        for sms in (1, 2, 4):
+            with tempfile.TemporaryDirectory() as directory:
+                run.prepare(256, Path(directory), sms=sms, warps_per_core=2)
+                asm = (RUN_PATH.parent / "data.S").read_text()
+                self.assertIn(
+                    f"stream_dot_partial:\n.zero {run.LINE_BYTES * sms}\n", asm)
+                config = (run.GENERATED / "config.h").read_text()
+                self.assertIn(
+                    "#define STREAM_DOT_PARTIAL_STRIDE_FLOATS "
+                    f"{run.PARTIAL_STRIDE_FLOATS}u", config)
+        kernel = (RUN_PATH.parent / "kernel.cpp").read_text()
+        self.assertIn(
+            "stream_dot_partial[block_id * STREAM_DOT_PARTIAL_STRIDE_FLOATS]",
+            kernel)
+        host = (RUN_PATH.parent / "host.cpp").read_text()
+        self.assertIn("partial[sm * STREAM_DOT_PARTIAL_STRIDE_FLOATS]", host)
+        self.assertNotIn("partial[sm]", host)
+
+    def test_layout_change_does_not_move_any_partial_value(self):
+        """Padding is addresses only: every expected word must be unchanged.
+
+        The oracle is a pure function of (elements, sms, warps, schedule), so
+        it cannot see the layout -- which is the point.  Pin the deployed
+        dot-1m words so a future layout edit that did perturb arithmetic, or a
+        stride that overlapped a neighbour, would show up here.
+        """
+        deployed = {
+            1: (0x46A3D627, "0f359ab682d35266", 0x46A3D627),
+            2: (0x4623D7CE, "c8eb6d25dcfd422d", 0x46A3D7CE),
+            4: (0x45A3D79C, "025818571ba57725", 0x46A3D79C),
+        }
+        for sms, (word, expected_digest, final) in deployed.items():
+            partials = run.expected_partials(1 << 20, sms, 8, 2048)
+            words = [run.float_word(value) for value in partials]
+            self.assertEqual(words, [word] * sms)
+            self.assertEqual(f"{run.digest(words):016x}", expected_digest)
+            self.assertEqual(
+                run.float_word(run.expected_final_sum(partials)), final)
+
     def test_requires_robust_prerequisites(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "requires robust_end_drain"):

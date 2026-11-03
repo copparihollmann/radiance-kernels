@@ -22,6 +22,12 @@ START_A = 0.1
 START_B = 0.2
 MU_NUM_CORES = 2
 MU_NUM_THREADS = 16
+LINE_BYTES = 64
+# The reduction emits one float32 partial per SM.  Pack them one per 64-byte
+# line instead of one per 4 bytes, so no two SMs ever write the same line.
+# 16 float32 = 64 bytes = one line; the device and the RV64 host both index
+# stream_dot_partial at this stride (STREAM_DOT_PARTIAL_STRIDE_FLOATS).
+PARTIAL_STRIDE_FLOATS = LINE_BYTES // 4
 FNV_OFFSET = 0xCBF29CE484222325
 FNV_PRIME = 0x100000001B3
 MASK64 = (1 << 64) - 1
@@ -162,6 +168,7 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         f"#define NIGHTLY_ROBUST_POST_SPIN {robust_post_spin}u",
         f"#define STREAM_DOT_ELEMENTS {elements}u",
         f"#define STREAM_DOT_BLOCK_CYCLIC_CHUNK_ELEMENTS {block_cyclic_chunk_elements}u",
+        f"#define STREAM_DOT_PARTIAL_STRIDE_FLOATS {PARTIAL_STRIDE_FLOATS}u",
         f"#define STREAM_DOT_EXPECTED_WORDS {{{expected_words}}}",
         f"#define STREAM_DOT_EXPECTED_DIGEST 0x{expected_digest:016x}ULL",
         f"#define STREAM_DOT_EXPECTED_FINAL_WORD 0x{float_word(expected_final):08x}u",
@@ -175,7 +182,11 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         '.incbin "generated/b.bin"',
         '.section .bss,"aw",@nobits', '.balign 64',
         '.globl stream_dot_guard_before', 'stream_dot_guard_before:', '.zero 64',
-        '.globl stream_dot_partial', 'stream_dot_partial:', '.zero 16',
+        # One 64-byte line per SM, not one float per SM: the array starts
+        # line-aligned and each SM's only store lands at byte 0 of its own
+        # line, so the destination lines are exclusive at every SM count.
+        '.globl stream_dot_partial', 'stream_dot_partial:',
+        f'.zero {LINE_BYTES * sms}',
         '.balign 64',
         '.globl stream_dot_guard_after', 'stream_dot_guard_after:', '.zero 64',
     ]
@@ -201,6 +212,8 @@ def prepare(elements: int, out: Path, *, sms: int = 1,
         "family": "stream_dot", "sm_count": sms, "loader": loader,
         "gpu_address_hash": loader == "direct-hashed",
         "stream_elements": elements, "output_element_count": sms,
+        "output_partial_stride_bytes": PARTIAL_STRIDE_FLOATS * 4,
+        "output_partial_array_bytes": LINE_BYTES * sms,
         "element_format": "float32", "input_a": f32(START_A),
         "input_b": f32(START_B), "expected_partial_words": words,
         "expected_digest": f"{expected_digest:016x}",

@@ -34,6 +34,8 @@ int main() {
   nightly_host_report(NIGHTLY_CLUSTERS);
   asm volatile("fence rw, rw" ::: "memory");
 
+  // One partial per SM, one 64-byte line per partial: SM n's word is at
+  // element n * STREAM_DOT_PARTIAL_STRIDE_FLOATS, not element n.
   volatile uint32_t* partial = reinterpret_cast<volatile uint32_t*>(
       rad_device_to_host_address(STREAM_DOT_PARTIAL_ADDR));
   static const uint32_t expected[HPC_SM_COUNT] = STREAM_DOT_EXPECTED_WORDS;
@@ -45,7 +47,7 @@ int main() {
   uint32_t final_word = 0u;
   bool final_inputs_valid = true;
   for (uint32_t sm = 0; sm < HPC_SM_COUNT; ++sm) {
-    const uint32_t word = partial[sm];
+    const uint32_t word = partial[sm * STREAM_DOT_PARTIAL_STRIDE_FLOATS];
     partials_ok &= word == expected[sm];
     final_word = stream_dot_add_positive_finite_f32_rne(
         final_word, word, &final_inputs_valid);
@@ -67,7 +69,8 @@ int main() {
     rad_putc('\n');
     for (uint32_t sm = 0; sm < HPC_SM_COUNT; ++sm) {
       rad_puts("STREAM_DOT_DIAG sm="); rad_putu(sm);
-      rad_puts(" actual="); rad_putx(partial[sm]);
+      rad_puts(" actual=");
+      rad_putx(partial[sm * STREAM_DOT_PARTIAL_STRIDE_FLOATS]);
       rad_puts(" expected="); rad_putx(expected[sm]);
       rad_putc('\n');
     }

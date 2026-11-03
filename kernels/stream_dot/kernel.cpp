@@ -60,7 +60,12 @@ static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
     mu_fence_smem();
   }
   mu_barrier(1u, threads_per_block / MU_NUM_THREADS);
-  if (tid == 0u) stream_dot_partial[block_id] = scratch[0];
+  // stream_dot_partial is padded to one 64-byte line per SM, so this single
+  // naturally aligned 32-bit store is the only write to its line.  The packed
+  // float-per-SM array it replaces put every SM in one line.
+  if (tid == 0u)
+    stream_dot_partial[block_id * STREAM_DOT_PARTIAL_STRIDE_FLOATS] =
+        scratch[0];
   nightly_kernel_end(tid, threads_per_block);
 }
 

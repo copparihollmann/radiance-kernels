@@ -94,12 +94,17 @@ DENSE_KERNELS = {
                           output="stream_dot_a/b[i] (read-only chunks)"),
 }
 
-# stream_dot is listed separately: its reduction output is one float per SM in
-# a 16-byte array (kernels/stream_dot/run.py emits `.zero 16`), so the schedule
-# IS the unsafe one and there is no safe variant to compare against.
+# stream_dot is listed separately because its output array is sized by the SM
+# count rather than fixed: the reduction emits one float32 partial per SM.  It
+# used to be a packed `.zero 16` array written as `stream_dot_partial[block_id]`
+# -- every SM in one 64-byte line, which this driver reported as a defect.  The
+# array is now padded to one 64-byte line per SM (`.zero 64 * sms`) and written
+# as `stream_dot_partial[block_id * 16]`, so the owner map is `stride_floats`
+# elements per SM under a contiguous partition at that same granule.  The
+# unsafe control is the old packed array, which must still fail at 2 and 4 SMs.
 PER_SM_SCALAR = {
-    "dot-1m-partials": dict(element_bytes=4,
-                            output="stream_dot_partial[block_id]"),
+    "dot-1m-partials": dict(element_bytes=4, stride_floats=16,
+                            output="stream_dot_partial[block_id * 16]"),
 }
 
 # LBM does not use mu_contiguous_partition: it reads a build-time
@@ -147,6 +152,23 @@ def lbm_write_addresses() -> list[int]:
             for entry in range(entries):
                 addresses.append(LBM["margin_floats"] + entry + entries * base)
     return addresses
+
+
+def _combine(checks: list[dict]) -> dict:
+    """Fold per-SM-count checks from separate audits into one report.
+
+    Kernels whose output array is sized by the SM count need one audit per SM
+    count, so their checks arrive as several single-check reports.
+    """
+    return {
+        "status": "pass" if all(c["status"] == "pass" for c in checks)
+                  else "fail",
+        "checks": checks,
+        "partition_cache_line_safe":
+            all(c["cache_line_exclusive"] for c in checks),
+        "partition_complete": all(c["coverage_exactly_once"] for c in checks),
+        "partition_overlap": sum(c["doubly_owned_elements"] for c in checks),
+    }
 
 
 def _verdict(safe: dict, unsafe: dict | None) -> str:
@@ -199,21 +221,23 @@ def run(spatter_suite: Path, xrage_suite: Path | None,
                          safe, unsafe))
 
     for name, spec in PER_SM_SCALAR.items():
-        checks = []
+        stride = spec["stride_floats"]
+        checks, control_checks = [], []
         for sms in SM_COUNTS:
-            checks.extend(DENSE.audit(sms, spec["element_bytes"], (sms,),
-                                      "round-robin", label=name)["checks"])
-        safe = {
-            "status": "pass" if all(c["status"] == "pass" for c in checks)
-                      else "fail",
-            "checks": checks,
-            "partition_cache_line_safe":
-                all(c["cache_line_exclusive"] for c in checks),
-            "partition_complete": all(c["coverage_exactly_once"] for c in checks),
-            "partition_overlap": sum(c["doubly_owned_elements"] for c in checks),
-        }
-        rows.append(_row(name, spec["output"], "one float per SM in one line",
-                         safe, None))
+            # The padded device array: stride floats per SM, owned contiguously
+            # at a granule of exactly one 64-byte line.
+            checks.extend(DENSE.audit(sms * stride, spec["element_bytes"],
+                                      (sms,), "contiguous", granule=stride,
+                                      label=name)["checks"])
+            # The control is the packed array this replaced: one float per SM,
+            # all in line 0.  It must still fail at 2 and 4 SMs.
+            control_checks.extend(
+                DENSE.audit(sms, spec["element_bytes"], (sms,), "round-robin",
+                            label=f"{name}-unsafe-control")["checks"])
+        rows.append(_row(name, spec["output"],
+                         f"one 64-byte line per SM "
+                         f"(contiguous, granule={stride} floats)",
+                         _combine(checks), _combine(control_checks)))
 
     for name, spec in SPATTER_GATHER.items():
         sys.path.insert(0, str(REPO / "kernels" / "spatter"))
