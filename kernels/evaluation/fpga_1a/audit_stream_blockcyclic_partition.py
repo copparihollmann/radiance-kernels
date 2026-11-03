@@ -33,11 +33,32 @@ def audit(elements: int, sm_counts: tuple[int, ...], chunk_lines: int = 1) -> di
                 seen[index] += 1
                 element_counts[owner] += 1
         complete = all(count == 1 for count in seen)
+        # Cache-line exclusivity must be DERIVED from the element->owner map, not asserted.
+        # Asserting it as a literal cannot fail, so it would keep reporting True if the
+        # partition were ever changed to element granularity. Here we rebuild the owner of
+        # every element independently and require that all elements of a 64-byte line share
+        # one owner -- a check that genuinely fails for a line-straddling partition.
+        element_owner = [-1] * elements
+        for line in range(lines):
+            owner = (line // chunk_lines) % sms
+            for index in range(line * LINE_ELEMENTS,
+                               min((line + 1) * LINE_ELEMENTS, elements)):
+                element_owner[index] = owner
+        split_lines = []
+        for line in range(lines):
+            begin = line * LINE_ELEMENTS
+            end = min(begin + LINE_ELEMENTS, elements)
+            owners = {element_owner[i] for i in range(begin, end)}
+            if len(owners) != 1 or -1 in owners:
+                split_lines.append(line)
+        exclusive = not split_lines
         checks.append({
             "sm_count": sms,
-            "status": "pass" if complete else "fail",
+            "status": "pass" if (complete and exclusive) else "fail",
             "coverage_exactly_once": complete,
-            "cache_line_exclusive": True,
+            "cache_line_exclusive": exclusive,
+            "split_line_count": len(split_lines),
+            "split_lines_sample": split_lines[:8],
             "line_counts": line_counts,
             "element_counts": element_counts,
             "total_elements": sum(element_counts),

@@ -102,7 +102,27 @@ def audit_case(case_id: int, case: dict, sms: int) -> dict:
             "work_items_per_sm": [end - begin for begin, end in ranges],
         })
 
-    result["status"] = "pass"
+    # The status must be derived, not assigned. A `status = "pass"` literal gives an auditor
+    # no failure path at all, so it certifies nothing. Require that the proven ranges cover
+    # every work item exactly once and that each range starts and ends on a granule boundary
+    # (the property that makes two SMs unable to share a 64-byte destination line).
+    ranges = result.get("ranges") or []
+    granule = result.get("partition_granule") or 1
+    covered, overlapped, misaligned = set(), 0, []
+    for begin, end in ranges:
+        if begin % granule or (end % granule and end != (ranges[-1][1] if ranges else end)):
+            misaligned.append([begin, end])
+        for item in range(begin, end):
+            if item in covered:
+                overlapped += 1
+            covered.add(item)
+    expected = max((end for _, end in ranges), default=0)
+    complete = len(covered) == expected and overlapped == 0
+    result["coverage_exactly_once"] = complete
+    result["range_overlap_count"] = overlapped
+    result["granule_misaligned_ranges"] = misaligned
+    result["cache_line_exclusive"] = not misaligned
+    result["status"] = "pass" if (complete and not misaligned) else "fail"
     return result
 
 
