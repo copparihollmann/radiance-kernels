@@ -43,7 +43,7 @@ int main() {
   // The chunk loop's `end = min(begin + chunk, N)` clamp means every element is touched
   // exactly once, so the whole executed/useful gap is the reduction tree, not padding.
   // The final cross-SM combination is HPC_SM_COUNT-1 adds done on the host in software
-  // float, not on the device, and is reported separately rather than folded in.
+  // binary32, not on the device, and is reported separately rather than folded in.
   {
     const uint64_t n = (uint64_t)STREAM_DOT_ELEMENTS;
     const uint64_t threads_per_block = NIGHTLY_MUON_CORES_PER_CLUSTER *
