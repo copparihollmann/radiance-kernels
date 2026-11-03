@@ -57,7 +57,27 @@ int main() {
 
   nightly_host_launch(NIGHTLY_CLUSTERS);
   const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis, from this build's own fixture shape (generated/config.h).  The scan is
+  // branchless: every lookup compares all BTREE_ORDER slots at every level whatever the key
+  // is, so there is no data-dependent work and executed == useful by construction, not by
+  // assumption.  Per lookup: 4 comparisons per slot at each of BTREE_HEIGHT internal levels
+  // plus 3 per leaf slot.  A point query adds 2 validity comparisons; a range adds 2 validity
+  // comparisons and one subtract + one add for its length.  Address/control/bitwise excluded,
+  // matching analysis/hpc-op-byte-model-compute-v1's counting rule.
+  {
+    const uint64_t points = (uint64_t)BTREE_POINT_QUERY_COUNT;
+    const uint64_t ranges = (uint64_t)BTREE_RANGE_QUERY_COUNT;
+    const uint64_t lookups = points + 2ull * ranges;
+    const uint64_t cmp_per_lookup =
+        (uint64_t)BTREE_HEIGHT * BTREE_ORDER * 4ull + (uint64_t)BTREE_ORDER * 3ull;
+    const uint64_t useful_ops =
+        lookups * cmp_per_lookup + points * 2ull + ranges * 2ull + ranges * 2ull;
+    nh_puts("btree_lookups="); nh_putu(lookups); nh_puts("\n");
+    nh_puts("btree_comparisons_per_lookup="); nh_putu(cmp_per_lookup); nh_puts("\n");
+    nightly_report_compute_scalar("integer-compare-add", useful_ops, useful_ops, 0,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
 
   volatile int32_t* point_expected = reinterpret_cast<volatile int32_t*>(

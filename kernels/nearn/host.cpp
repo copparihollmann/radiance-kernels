@@ -64,7 +64,20 @@ int main() {
   asm volatile("fence rw, rw" ::: "memory");
   nightly_host_launch(NIGHTLY_CLUSTERS);
   const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis: one Euclidean distance per record = 2 subtracts + 2 multiplies + 1 add +
+  // 1 square root.  The square root is one transcendental operation, not expanded into
+  // FLOPs.  Every record is visited unconditionally, so executed == useful; the top-K
+  // selection is control flow and is excluded by the same rule that excludes addressing.
+  {
+    const uint64_t records = (uint64_t)NEARN_RECORDS;
+    const uint64_t ops_per_record = 6ull;   // 2 sub + 2 mul + 1 add + 1 sqrt
+    const uint64_t useful_ops = records * ops_per_record;
+    nh_puts("nearn_records="); nh_putu(records); nh_puts("\n");
+    nh_puts("nearn_ops_per_record="); nh_putu(ops_per_record); nh_puts("\n");
+    nightly_report_compute_scalar("flop-with-sqrt-as-one-op", useful_ops, useful_ops, 0,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
 
   volatile uint32_t* got = reinterpret_cast<volatile uint32_t*>(

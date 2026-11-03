@@ -108,6 +108,15 @@ int main() {
   int completed = 1;
   uint64_t total_cycles = 0u;
   uint64_t per_core_cycles[NIGHTLY_CLUSTERS][NIGHTLY_CORES_PER_CLUSTER] = {};
+  // Compute axis, per launch.  The four iterations are separate host-sequenced launches that
+  // the aggregate kernel_cycles= line fuses into one number; the host owns each boundary, so
+  // reporting them separately needs no device change.  Each cell update is 9 coefficient
+  // products + 8 ordered adds; the contracting-cone optimisation is disabled in this build,
+  // so every launch updates every cell exactly once and executed == useful per launch.
+  const uint64_t updates_per_launch = (uint64_t)HOTSPOT3D_ELEMENTS;
+  const uint64_t ops_per_update = 9ull + 8ull;
+  const uint64_t ops_per_launch = updates_per_launch * ops_per_update;
+  uint64_t launch_cycles[HOTSPOT3D_ITERATIONS] = {};
   for (uint32_t iteration = 0u; iteration < HOTSPOT3D_ITERATIONS;
        ++iteration) {
 #if !NIGHTLY_ROBUST_SPIN_UNTIL_RESET
@@ -115,7 +124,9 @@ int main() {
 #endif
     nightly_host_launch(NIGHTLY_CLUSTERS, iteration);
     completed &= nightly_host_wait(NIGHTLY_CLUSTERS);
-    total_cycles += accumulate_stage_cycles(per_core_cycles);
+    const uint64_t stage = accumulate_stage_cycles(per_core_cycles);
+    launch_cycles[iteration] = stage;
+    total_cycles += stage;
 #if NIGHTLY_ROBUST_SPIN_UNTIL_RESET
     // Robust kernels deliberately keep `finished` low after publishing END.
     // Reset immediately after every completed launch, including the final
@@ -125,6 +136,23 @@ int main() {
     if (!completed) break;
   }
   report_aggregate_cycles(per_core_cycles, total_cycles);
+  {
+    nh_puts("hotspot3d_launches="); nh_putu(HOTSPOT3D_ITERATIONS); nh_puts("\n");
+    nh_puts("hotspot3d_updates_per_launch="); nh_putu(updates_per_launch); nh_puts("\n");
+    nh_puts("hotspot3d_ops_per_update="); nh_putu(ops_per_update); nh_puts("\n");
+    for (uint32_t iteration = 0u; iteration < HOTSPOT3D_ITERATIONS; ++iteration) {
+      nightly_report_launch(iteration, launch_cycles[iteration], ops_per_launch,
+                            ops_per_launch);
+      nh_puts("launch_"); nh_putu(iteration); nh_puts("_compute_util_bp=");
+      nh_putu(nightly_util_bp(ops_per_launch,
+                             nightly_peak_scalar_ops_per_cycle(NIGHTLY_CLUSTERS),
+                             launch_cycles[iteration]));
+      nh_puts("\n");
+    }
+    const uint64_t useful_ops = ops_per_launch * (uint64_t)HOTSPOT3D_ITERATIONS;
+    nightly_report_compute_scalar("flop", useful_ops, useful_ops, 0,
+                                  NIGHTLY_CLUSTERS, total_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
 
   volatile uint32_t* expected = nightly_gpu_ptr<uint32_t>(

@@ -54,7 +54,20 @@ int main() {
   asm volatile("fence rw, rw" ::: "memory");
   nightly_host_launch(NIGHTLY_CLUSTERS);
   const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis: 27 ordered adds + 1 divide per output element, over the whole
+  // STENCIL3D_SIZE^3 volume.  Boundaries are replicated rather than skipped, so every element
+  // runs the identical 27-point gather and there is no interior/exterior split: executed ==
+  // useful by construction.  The divide counts as one operation, not expanded into FLOPs.
+  {
+    const uint64_t elements = (uint64_t)STENCIL3D_ELEMENTS;
+    const uint64_t ops_per_element = 27ull + 1ull;
+    const uint64_t useful_ops = elements * ops_per_element;
+    nh_puts("stencil3d_output_elements="); nh_putu(elements); nh_puts("\n");
+    nh_puts("stencil3d_ops_per_element="); nh_putu(ops_per_element); nh_puts("\n");
+    nightly_report_compute_scalar("flop-with-divide-as-one-op", useful_ops, useful_ops, 0,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
 
   volatile uint32_t* expected = reinterpret_cast<volatile uint32_t*>(

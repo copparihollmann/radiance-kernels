@@ -15,6 +15,10 @@ for line in subprocess.check_output([nm, "-n", elf], text=True).splitlines():
 required = (
     "spmv_jds_output", "spmv_jds_expected",
     "spmv_jds_guard_before", "spmv_jds_guard_after",
+    # Host-only: the RV64 checker counts the executed multiply-accumulates from the
+    # per-32-row group bounds.  generated/symbols.h is included from host.cpp and from
+    # nothing else, so exporting this cannot reach the Muon/RV32 compile.
+    "spmv_jds_group_bounds",
 )
 for name in required:
     if name not in symbols:
@@ -25,4 +29,5 @@ Path(output).write_text(
     f"#define SPMV_JDS_EXPECTED_ADDR 0x{symbols['spmv_jds_expected']:08x}u\n"
     f"#define SPMV_JDS_GUARD_BEFORE_ADDR 0x{symbols['spmv_jds_guard_before']:08x}u\n"
     f"#define SPMV_JDS_GUARD_AFTER_ADDR 0x{symbols['spmv_jds_guard_after']:08x}u\n"
+    f"#define SPMV_JDS_GROUP_BOUNDS_ADDR 0x{symbols['spmv_jds_group_bounds']:08x}u\n"
 )

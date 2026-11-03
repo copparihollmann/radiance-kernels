@@ -140,7 +140,46 @@ int main() {
 
   nightly_host_launch(NIGHTLY_CLUSTERS);
   const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis.  The cell census is read from the device's own grid rather than assumed:
+  // entry LBM_POPULATIONS of every active cell is the flags word, which the one-step kernel
+  // never writes (it stores only entries 0..LBM_POPULATIONS-1), so it still holds the
+  // fixture's value here.  That is 8192 reads, one per active cell.
+  //
+  // A fluid cell runs 84 multiplies + 116 adds/subtracts + 3 divides = 203 operations.  An
+  // obstacle cell is pure bounce-back: nine register swaps, not one floating-point multiply,
+  // add, subtract or divide.  So executed == useful by the counting convention, and every
+  // active cell is visited exactly once (LBM_GROUP_COUNT groups of LBM_GROUP_CELLS split
+  // disjointly across SMs).
+  //
+  // Honest caveat, reported as its own counter rather than silently folded in: an
+  // accelerated cell computes ux, uy, uz (27 add/sub) and divides them by rho (3 div) before
+  // the lid-velocity assignment overwrites all three.  Those 30 operations per accelerated
+  // cell are dead work that the pinned model nonetheless counts as useful.
+  {
+    uint32_t fluid_cells = 0u, obstacle_cells = 0u, accelerated_cells = 0u;
+    for (uint32_t z = 0; z < LBM_SIZE_Z; ++z)
+      for (uint32_t y = 0; y < LBM_SIZE_Y; ++y)
+        for (uint32_t x = 0; x < LBM_SIZE_X; ++x) {
+          const uint32_t flags = output[grid_index(x, y, z, LBM_POPULATIONS)];
+          if (flags & 1u) {
+            ++obstacle_cells;
+          } else {
+            ++fluid_cells;
+            if (flags & 2u) ++accelerated_cells;
+          }
+        }
+    const uint64_t ops_per_fluid_cell = 84ull + 116ull + 3ull;
+    const uint64_t useful_ops = ops_per_fluid_cell * (uint64_t)fluid_cells;
+    nh_puts("lbm_fluid_cells="); nh_putu(fluid_cells); nh_puts("\n");
+    nh_puts("lbm_obstacle_cells="); nh_putu(obstacle_cells); nh_puts("\n");
+    nh_puts("lbm_accelerated_cells="); nh_putu(accelerated_cells); nh_puts("\n");
+    nh_puts("lbm_ops_per_fluid_cell="); nh_putu(ops_per_fluid_cell); nh_puts("\n");
+    nh_puts("lbm_overwritten_velocity_ops="); nh_putu(30ull * accelerated_cells);
+    nh_puts("\n");
+    nightly_report_compute_scalar("flop-with-divide-as-one-op", useful_ops, useful_ops, 0,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
 
   volatile uint32_t* expected = reinterpret_cast<volatile uint32_t*>(

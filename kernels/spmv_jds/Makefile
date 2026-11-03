@@ -16,8 +16,10 @@ MU_NM = $(LLVM_MUON)/bin/llvm-nm
 SPMV_GENERATED = generated/config.h generated/data.bin \
 	generated/indices.bin generated/row_to_jds.bin generated/x.bin \
 	generated/jds_ptr.bin generated/group_bounds.bin generated/expected.bin
+# Host-only operation-count header; never included by kernel.cpp.
+SPMV_HOST_GENERATED = generated/ops.h
 
-data.S $(SPMV_GENERATED) &: run.py
+data.S $(SPMV_GENERATED) $(SPMV_HOST_GENERATED) &: run.py
 	python3 run.py --fixture-rows 257 --fixture-seed 7 \
 		--out runs/default --prepare-only
 
@@ -29,7 +31,7 @@ kernel.mu.o: generated/config.h
 generated/symbols.h: kernel.radiance.elf generated/config.h emit_symbols.py
 	python3 emit_symbols.py $(MU_NM) $< $@
 
-host.host.o: generated/config.h generated/symbols.h
+host.host.o: generated/config.h generated/symbols.h $(SPMV_HOST_GENERATED)
 
 .PHONY: test clean-generated
 test:

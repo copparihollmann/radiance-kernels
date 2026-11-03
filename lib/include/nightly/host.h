@@ -155,6 +155,98 @@ static inline uint64_t nightly_util_bp(uint64_t useful_ops, uint64_t peak_per_cy
   return (useful_ops * 10000ull) / (peak_per_cycle * cycles);
 }
 
+/* ---- compute-axis self-report ------------------------------------------------------------
+ *
+ * This is HOST-ONLY.  nightly/host.h is included from host.cpp and from nothing else, so
+ * nothing here can reach a Muon/RV32 compile: the device ELF is untouched.
+ *
+ * What the numbers are, stated exactly so they are not over-claimed:
+ *
+ *   useful_ops     the operation count of the workload the kernel was BUILT for, computed in
+ *                  host.cpp from that build's own generated/config.h -- the same header the
+ *                  device compile consumed.  It is authoritative for the shape that actually
+ *                  ran, and it is independent of any external spreadsheet, but it is NOT a
+ *                  sampled hardware counter: there is no compute counter in this RTL.
+ *   executed_ops   the operations the kernel's own partitioning makes the device execute,
+ *                  including halo recomputation, zero padding and redundant traffic.  Where
+ *                  the kernel cannot distinguish the two, executed_ops == useful_ops and
+ *                  executed_ops_distinguished=0 says so rather than implying a measurement.
+ *   peak_ops_per_cycle   the datapath ceiling, from the RTL configuration (see below).
+ *   compute_util_bp      nightly_util_bp(useful_ops, peak, cycles), 0.01 % units.
+ *
+ * Emitted one key=value per line, the same shape the campaign harness already scrapes for
+ * kernel_cycles=.  Nothing here prints "kernel_cycles" or a "cluster N core M:" row, so the
+ * harness's cycle scrape and its per-SM timing completeness check are unaffected.
+ */
+
+/* RadianceConfigs.scala:21  WithSIMTConfig(numWarps = 8, numLanes = 16, numLsuLanes = 16, ...) */
+#define NIGHTLY_SIMT_LANES_PER_CORE 16ull
+/* RadianceConfigs.scala  WithMuonCores(2, location = InCluster(n), ...), one per cluster */
+#define NIGHTLY_MUON_CORES_PER_CLUSTER 2ull
+/* RadianceConfigs.scala  WithRadianceE4M3MxGemmini(..., dim = 16, ...) -> a 16x16 MAC mesh */
+#define NIGHTLY_MX_MACS_PER_CLUSTER 256ull
+
+/* Scalar SIMT ceiling: clusters x Muon cores/cluster x lanes/core, one issue per lane per
+ * cycle.  A strict upper bound: it assumes perfect occupancy, no divergence and no
+ * multi-cycle divide/sqrt. */
+static inline uint64_t nightly_peak_scalar_ops_per_cycle(uint64_t n_clusters) {
+  return n_clusters * NIGHTLY_MUON_CORES_PER_CLUSTER * NIGHTLY_SIMT_LANES_PER_CORE;
+}
+/* MX/Gemmini ceiling in MACs per cycle (one 16x16 mesh per cluster).  FLOP = 2 x MAC. */
+static inline uint64_t nightly_peak_mx_macs_per_cycle(uint64_t n_clusters) {
+  return n_clusters * NIGHTLY_MX_MACS_PER_CLUSTER;
+}
+
+static inline void nightly_report_compute(const char *op_unit, const char *datapath,
+                                          uint64_t useful_ops, uint64_t executed_ops,
+                                          int executed_distinguished,
+                                          uint64_t peak_per_cycle, uint64_t cycles) {
+  nh_puts("compute_op_unit="); nh_puts(op_unit); nh_puts("\n");
+  nh_puts("compute_datapath="); nh_puts(datapath); nh_puts("\n");
+  nh_puts("useful_ops="); nh_putu(useful_ops); nh_puts("\n");
+  nh_puts("executed_ops="); nh_putu(executed_ops); nh_puts("\n");
+  nh_puts("executed_ops_distinguished="); nh_putu(executed_distinguished ? 1u : 0u); nh_puts("\n");
+  nh_puts("peak_ops_per_cycle="); nh_putu(peak_per_cycle); nh_puts("\n");
+  nh_puts("compute_util_bp="); nh_putu(nightly_util_bp(useful_ops, peak_per_cycle, cycles)); nh_puts("\n");
+  nh_puts("executed_util_bp="); nh_putu(nightly_util_bp(executed_ops, peak_per_cycle, cycles)); nh_puts("\n");
+  nh_puts("compute_window_cycles="); nh_putu(cycles); nh_puts("\n");
+  nh_flush();
+}
+
+/* Convenience wrapper for the 20 kernels that run on the scalar SIMT lanes. */
+static inline void nightly_report_compute_scalar(const char *op_unit, uint64_t useful_ops,
+                                                 uint64_t executed_ops,
+                                                 int executed_distinguished,
+                                                 uint64_t n_clusters, uint64_t cycles) {
+  nightly_report_compute(op_unit, "scalar-simt", useful_ops, executed_ops,
+                         executed_distinguished,
+                         nightly_peak_scalar_ops_per_cycle(n_clusters), cycles);
+}
+
+/* Per-phase device cycle stamps, in the same key=value form.  The stamps are written by the
+ * DEVICE (nightly_phase(), nightly/device.h): a kernel whose device code never calls
+ * nightly_phase() has no stamps to publish and must not call this, because the slots would
+ * read back as whatever the launch left in them. */
+static inline void nightly_report_phases(uint32_t n_clusters, uint32_t n) {
+  for (uint32_t cl = 0; cl < n_clusters; cl++) {
+    nightly_host_phases(cl, n);
+    for (uint32_t i = 0; i < n && i < 8; i++) {
+      nh_puts("phase_stamp_c"); nh_putu(cl); nh_putc('_'); nh_putu(i); nh_putc('=');
+      nh_putu(nightly_pb_read(cl, NIGHTLY_PB_PHASE + i)); nh_puts("\n");
+    }
+  }
+  nh_flush();
+}
+
+/* One host-sequenced launch out of several (hotspot3d's four iterations): the host owns the
+ * boundary, so this separates launches without any device change. */
+static inline void nightly_report_launch(uint32_t index, uint64_t cycles, uint64_t useful_ops,
+                                         uint64_t executed_ops) {
+  nh_puts("launch_"); nh_putu(index); nh_puts("_cycles="); nh_putu(cycles); nh_puts("\n");
+  nh_puts("launch_"); nh_putu(index); nh_puts("_useful_ops="); nh_putu(useful_ops); nh_puts("\n");
+  nh_puts("launch_"); nh_putu(index); nh_puts("_executed_ops="); nh_putu(executed_ops); nh_puts("\n");
+}
+
 /* ---- bf16 comparison (integer-only) ----------------------------------------------------- */
 /* bf16 -> signed fixed point value * 2^scale_log2 as int64 (truncating), for error sums. */
 static inline int64_t nh_bf16_to_fix(uint16_t b, int scale_log2) {

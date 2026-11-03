@@ -60,7 +60,33 @@ int main() {
 #ifdef RAD_HOST_TIMING
   const uint64_t completion_cycle = nightly_rdcycle();
 #endif
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis.  STREAM's headline unit is the element update, and STREAM Copy performs
+  // ZERO arithmetic operations, so for copy the "compute" roof is not a physically meaningful
+  // ceiling at all -- it is reported here as a data-movement rate and labelled as such.
+  //
+  // executed == useful, and that is a property of the partitioning rather than an assumption:
+  // mu_contiguous_partition clamps to STREAM_ELEMENTS and the grid-stride loop bound is a
+  // strict `< range.end`, so the SM ranges are disjoint, contiguous and exhaustive.  The
+  // chunk-cyclic and line-cyclic branches clip their tails the same way.
+  {
+    const uint64_t elements = (uint64_t)STREAM_ELEMENTS;
+    // Source-level FP ops, STREAM 5.10 convention: copy 0, scale 1 mul, add 1 add,
+    // triad 1 mul + 1 add.  The Muon back end fuses triad into one FMADD_S_INX, so the
+    // executed FP *instruction* count for triad is half this; the source-level count is what
+    // the pinned model counts and what is reported as useful_ops.
+    const uint64_t fp_per_element =
+        STREAM_KIND == 0 ? 0ull : STREAM_KIND == 3 ? 2ull : 1ull;
+    const uint64_t fp_ops = elements * fp_per_element;
+    const uint64_t payload_mem_ops_32bit = elements * (STREAM_KIND >= 2 ? 3ull : 2ull);
+    nh_puts("stream_element_updates="); nh_putu(elements); nh_puts("\n");
+    nh_puts("stream_fp_ops="); nh_putu(fp_ops); nh_puts("\n");
+    nh_puts("stream_fp_instructions=");
+    nh_putu(STREAM_KIND == 3 ? elements : fp_ops); nh_puts("\n");
+    nh_puts("payload_mem_ops_32bit="); nh_putu(payload_mem_ops_32bit); nh_puts("\n");
+    nightly_report_compute_scalar("element-update", elements, elements, 0,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
   const bool guards_ok = guards_intact();
   const uint64_t actual_digest = digest_output();

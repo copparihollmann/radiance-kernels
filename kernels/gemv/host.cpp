@@ -40,7 +40,24 @@ int main() {
   asm volatile("fence rw, rw" ::: "memory");
   nightly_host_launch(NIGHTLY_CLUSTERS);
   const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis: GEMV_ROWS * GEMV_COLS BF16 fused multiply-adds (2 FLOP each) plus one
+  // (lanes - 1) tree reduction per row.  GEMV_COLS is a whole multiple of the lane x unroll
+  // step here, so no lane is masked off on a tail and executed == useful; the assert below
+  // makes that a checked property of the build rather than an assumption.
+  {
+    const uint64_t rows = (uint64_t)GEMV_ROWS;
+    const uint64_t cols = (uint64_t)GEMV_COLS;
+    const uint64_t lanes = NIGHTLY_SIMT_LANES_PER_CORE;
+    const uint64_t step = lanes * (uint64_t)GEMV_UNROLL * (uint64_t)GEMV_ILP;
+    const int exact_tiling = (cols % step) == 0u;
+    const uint64_t useful_ops = 2ull * rows * cols + rows * (lanes - 1ull);
+    nh_puts("gemv_fma_count="); nh_putu(rows * cols); nh_puts("\n");
+    nh_puts("gemv_lane_tree_adds="); nh_putu(rows * (lanes - 1ull)); nh_puts("\n");
+    nh_puts("gemv_exact_lane_tiling="); nh_putu(exact_tiling ? 1u : 0u); nh_puts("\n");
+    nightly_report_compute_scalar("flop", useful_ops, useful_ops, 0,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
   const bool passed = completed && guards_intact() &&
       digest_output() == GEMV_EXPECTED_DIGEST;

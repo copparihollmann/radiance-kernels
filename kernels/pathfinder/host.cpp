@@ -54,7 +54,43 @@ int main() {
 
   nightly_host_launch(NIGHTLY_CLUSTERS);
   const int completed = nightly_host_wait(NIGHTLY_CLUSTERS);
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis.  Each dynamic-programming cell update is 2 signed compares + 1 add.
+  //
+  // useful   = the semantic DP: (ROWS-1) * COLS updates, each counted once.
+  // executed = what this partitioning actually runs.  Every SM owns a cache-line aligned
+  //            column range widened by the remaining row count, so its contracting cone never
+  //            needs a neighbour's value; the overlap between adjacent cones is recomputed by
+  //            both SMs.  The loop below replays the generator's own recurrence
+  //            (kernels/pathfinder/run.py partition_boundaries) and costs ROWS*SMS host
+  //            iterations, so the overhead is counted, not predicted.
+  {
+    const uint64_t rows = (uint64_t)PATHFINDER_ROWS;
+    const uint64_t cols = (uint64_t)PATHFINDER_COLS;
+    const uint32_t chunks = PATHFINDER_COLS / PATHFINDER_INTS_PER_LINE;
+    const uint32_t base = chunks / NIGHTLY_CLUSTERS;
+    const uint32_t extra = chunks % NIGHTLY_CLUSTERS;
+    uint64_t executed_updates = 0u;
+    uint32_t cursor = 0u;
+    for (uint32_t sm = 0u; sm < NIGHTLY_CLUSTERS; ++sm) {
+      const uint64_t begin = (uint64_t)cursor * PATHFINDER_INTS_PER_LINE;
+      cursor += base + (sm < extra ? 1u : 0u);
+      const uint64_t end = (uint64_t)cursor * PATHFINDER_INTS_PER_LINE;
+      for (uint64_t row = 1u; row < rows; ++row) {
+        const uint64_t remaining = rows - 1u - row;
+        const uint64_t lo = begin > remaining ? begin - remaining : 0u;
+        const uint64_t hi = end + remaining < cols ? end + remaining : cols;
+        executed_updates += hi - lo;
+      }
+    }
+    const uint64_t useful_updates = (rows - 1u) * cols;
+    const uint64_t ops_per_update = 3u;   // 2 signed compares + 1 add
+    nh_puts("pathfinder_useful_updates="); nh_putu(useful_updates); nh_puts("\n");
+    nh_puts("pathfinder_executed_updates="); nh_putu(executed_updates); nh_puts("\n");
+    nightly_report_compute_scalar("integer-compare-add", useful_updates * ops_per_update,
+                                  executed_updates * ops_per_update, 1,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
 
   volatile int32_t* expected = reinterpret_cast<volatile int32_t*>(

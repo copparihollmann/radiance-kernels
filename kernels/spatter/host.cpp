@@ -184,7 +184,49 @@ int main() {
 #ifdef RAD_HOST_TIMING
   const uint64_t completion_cycle = nightly_rdcycle();
 #endif
-  nightly_host_report(NIGHTLY_CLUSTERS);
+  const uint32_t kernel_cycles = nightly_host_report(NIGHTLY_CLUSTERS);
+  // Compute axis.  Spatter and xRAGE perform ZERO arithmetic operations: their unit is the
+  // 64-bit payload transfer, so "% of the compute roof" is a data-movement rate here, not a
+  // compute rate.  spatter_ops.hpp's copy_value is the single payload primitive and is
+  // exactly 2 x 32-bit loads + 2 x 32-bit stores per transfer.
+  //
+  // executed == useful for every kind, and that is derived rather than assumed:
+  //  - gather kinds: owner o runs i = o/length, o/length + WRAP, ...; each i in [0, COUNT)
+  //    lands in exactly one residue class, so the body runs length*COUNT times exactly.
+  //  - scatter/gs/multi kinds: mu_contiguous_partition over length*COUNT tasks is disjoint
+  //    and exhaustive.
+  //  - the ordered collision policy reorders writes into destination groups, it does not add
+  //    transfers: the CSR offsets sum to length*COUNT.
+  // What the ordered build does add is metadata reads, and those are reported separately.
+  {
+    const uint64_t transfers =
+        (uint64_t)SPATTER_PATTERN_LENGTH * (uint64_t)SPATTER_COUNT;
+#if SPATTER_DESTINATION_OWNER_GROUPS
+    const uint64_t metadata_reads =
+        transfers * 2ull + (uint64_t)SPATTER_GROUP_COUNT * 2ull;
+    const uint64_t collision_writes = transfers - (uint64_t)SPATTER_GROUP_COUNT;
+#elif SPATTER_KIND == 2 || SPATTER_KIND == 3 || SPATTER_KIND == 4
+    const uint64_t metadata_reads = transfers * 2ull;   // gs / nested indirection
+    const uint64_t collision_writes = 0ull;
+#else
+    const uint64_t metadata_reads = transfers;          // plain gather / scatter
+    const uint64_t collision_writes = 0ull;
+#endif
+    nh_puts("spatter_kind="); nh_putu(SPATTER_KIND); nh_puts("\n");
+    nh_puts("spatter_transfers_64bit="); nh_putu(transfers); nh_puts("\n");
+    nh_puts("payload_mem_ops_32bit="); nh_putu(transfers * 4ull); nh_puts("\n");
+    // Source-level metadata reads, not a hardware event count: the compiler may hoist the
+    // loop-invariant group_destinations[] read, and the destination-line boundary scan adds a
+    // handful of reads per partition edge that this does not count.
+    nh_puts("spatter_source_metadata_reads="); nh_putu(metadata_reads); nh_puts("\n");
+    nh_puts("spatter_destination_collision_writes="); nh_putu(collision_writes); nh_puts("\n");
+#if SPATTER_DESTINATION_OWNER_GROUPS
+    nh_puts("spatter_distinct_destinations="); nh_putu((uint64_t)SPATTER_GROUP_COUNT);
+    nh_puts("\n");
+#endif
+    nightly_report_compute_scalar("transfer-64bit", transfers, transfers, 0,
+                                  NIGHTLY_CLUSTERS, kernel_cycles);
+  }
   asm volatile("fence rw, rw" ::: "memory");
 
   const bool guards_ok = guards_intact();

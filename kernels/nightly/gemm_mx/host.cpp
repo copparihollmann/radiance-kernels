@@ -18,6 +18,24 @@ int main() {
   nh_puts("mesh_util_kernel="); nh_putfix(nightly_util_bp(macs, peak * NIGHTLY_CLUSTERS, cyc), 2);
   nh_puts("% mesh_util_c0_first_to_last_compute=");
   nh_putfix(nightly_util_bp(macs / NIGHTLY_CLUSTERS, peak, mesh1 - mesh0), 2); nh_puts("%\n");
+  // Compute axis in the campaign's machine-parseable form.  This is the only one of the 21
+  // HPC kernels on the MX/Gemmini datapath, and the only one whose device code already
+  // publishes phase stamps (kernel.cpp nightly_phase(0) at first mesh issue, nightly_phase(1)
+  // after the final mesh fence), so fill/compute/drain can be separated here and nowhere
+  // else without touching device code.
+  nightly_report_compute("mac", "mx-gemmini", macs, macs, 0, peak * NIGHTLY_CLUSTERS, cyc);
+  nh_puts("useful_flop_ops="); nh_putu(2ull * macs); nh_puts("\n");
+  nh_puts("peak_flop_per_cycle="); nh_putu(2ull * peak * NIGHTLY_CLUSTERS); nh_puts("\n");
+  nightly_report_phases(NIGHTLY_CLUSTERS, 2);
+  nh_puts("gemm_c0_compute_cycles="); nh_putu((uint64_t)(uint32_t)(mesh1 - mesh0)); nh_puts("\n");
+  nh_puts("gemm_c0_fill_cycles="); nh_putu((uint64_t)(uint32_t)(mesh0 - nightly_pb_read(0, NIGHTLY_PB_START + 0)));
+  nh_puts("\n");
+  nh_puts("gemm_c0_drain_cycles="); nh_putu((uint64_t)(uint32_t)(nightly_pb_read(0, NIGHTLY_PB_END + 0) - mesh1));
+  nh_puts("\n");
+  nh_puts("gemm_c0_compute_util_bp=");
+  nh_putu(nightly_util_bp(macs / NIGHTLY_CLUSTERS, peak, (uint32_t)(mesh1 - mesh0)));
+  nh_puts("\n");
+  nh_flush();
   constexpr uint32_t elements = GEMM_M * GEMM_N;
   const int good = nightly_host_check(
       "C", NIGHTLY_CLUSTERS, GEMM_C_ADDR, GEMM_G_ADDR, elements,

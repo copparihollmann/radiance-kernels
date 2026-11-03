@@ -523,6 +523,18 @@ def prepare(dataset: Dataset, out: Path, *, sms: int = 1,
         f"#define SPMV_EXPECTED_DIGEST 0x{expected_digest:016x}ULL",
     ]
     (GENERATED / "config.h").write_text("\n".join(config) + "\n")
+    # Host-only operation-count header.  generated/ops.h is included from host.cpp and from
+    # nothing else, so the number below cannot reach the Muon/RV32 compile and cannot perturb
+    # the device ELF.  The expanded nnz is not recoverable on the device: group_bounds records
+    # only the maximum nnz of each 32-row group, and six real Dubcova3 entries are themselves
+    # exactly 0.0f, so counting zeros in data[] would undercount.
+    ops = [
+        "#pragma once",
+        f"#define SPMV_EXPANDED_NNZ {sum(jds.row_nnz)}u",
+        f"#define SPMV_STORED_NNZ {dataset.stored_nnz}u",
+        f"#define SPMV_JDS_PADDED_ENTRIES {len(jds.data)}u",
+    ]
+    (GENERATED / "ops.h").write_text("\n".join(ops) + "\n")
     asm = [
         '.section .data,"aw",@progbits',
         '.balign 64', '.globl spmv_jds_data', 'spmv_jds_data:',
