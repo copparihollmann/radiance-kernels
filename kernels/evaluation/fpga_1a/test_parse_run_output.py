@@ -18,6 +18,17 @@ The fixtures under testdata/parse_run_output/ are:
   compute-dot-1m-stdout.log     runs/hpc-v2-compute-instrumented-v1 (the
   compute-gemm-bf16-512-        2SM_DRAM_v2 half), the first campaign to carry
     stdout.log                  the a8b6bcd device-reported compute counters.
+  memlat-instret-stdout.log     built from the print statements in
+                                kernels/nightly/memlat/host.cpp and
+                                lib/include/nightly/host.h, which are
+                                authoritative for our ELFs.  memlat has never
+                                run on hardware (the campaign plan for it is
+                                prepared but unexecuted), so no captured log
+                                exists; the fixture's gold values
+                                (terminal/checksum/order hash) are the real
+                                ones, reproduced from memlat's own permutation
+                                construction.
+
   compute-hotspot3d-stdout.log  btree has executed_ops == useful_ops with
                                 executed_ops_distinguished=0; dot-1m is one of
                                 the three kernels that really can tell the two
@@ -432,6 +443,146 @@ class ComputeCounters(unittest.TestCase):
         text = "".join(f"stream_k{i}={i}\n" for i in range(4096))
         out = parse_text(text)
         self.assertEqual(len(out["compute_detail"]), 256)
+
+
+class PerCoreInstructions(unittest.TestCase):
+    """Per-core retired instructions (NIGHTLY_INSTRET).
+
+    CAVEAT UNDER TEST: minstret is a per-CORE count of retired micro-ops over
+    all resident warps.  One 16-lane SIMT instruction retires once whatever the
+    active lane count, so ipc bounds issue efficiency and is NOT lane
+    utilisation.  The parser must carry the device's own scope string through
+    so that caveat cannot be separated from the number.
+    """
+
+    def test_rows(self):
+        out = parsed("memlat-instret-stdout.log")
+        self.assertEqual(out["core_instructions_count"], 4)
+        self.assertEqual(out["core_instructions"][0], {
+            "cluster": 0, "core": 0,
+            "instructions_begin": 980, "instructions_end": 3142572,
+            "instructions": 3141592, "cycles": 4298920,
+            "ipc_x1000": 730, "ipc": 0.73,
+        })
+        self.assertEqual(out["core_instructions"][3]["cluster"], 1)
+        self.assertEqual(out["core_instructions"][3]["core"], 1)
+
+    def test_total_and_scope(self):
+        out = parsed("memlat-instret-stdout.log")
+        self.assertEqual(out["core_instructions_total"],
+                         sum(row["instructions"]
+                             for row in out["core_instructions"]))
+        self.assertIn("not-per-lane", out["instret_scope"])
+        self.assertIn("not-lane-utilisation", out["instret_scope"])
+
+    def test_no_single_headline_ipc_is_invented(self):
+        # A run-wide "ipc" is exactly the number that would get mistaken for
+        # lane utilisation, so the parser must not produce one.
+        out = parsed("memlat-instret-stdout.log")
+        self.assertNotIn("ipc", out)
+        self.assertNotIn("ipc_x1000", out)
+
+    def test_instret_does_not_disturb_the_core_cycle_rows(self):
+        # The instret lines are separate lines precisely so campaign.py's
+        # per-SM timing check and CORE_CYCLES keep working unchanged.
+        out = parsed("memlat-instret-stdout.log")
+        self.assertEqual(out["core_cycles_count"], 4)
+        self.assertEqual(out["core_cycles"][0],
+                         {"cluster": 0, "core": 0, "start": 1200,
+                          "end": 4300120, "cycles": 4298920})
+        self.assertEqual(out["kernel_cycles"], 4298931)
+
+    def test_absent_when_the_device_did_not_publish(self):
+        for name in ("hpc-firesim-stdout.log", "compute-btree-stdout.log"):
+            with self.subTest(fixture=name):
+                out = parsed(name)
+                self.assertNotIn("core_instructions", out)
+                self.assertNotIn("instret_scope", out)
+
+
+class MemlatFields(unittest.TestCase):
+    """memlat's per-(cluster, level) rows and its correctness gate."""
+
+    def test_row_count_and_shape(self):
+        out = parsed("memlat-instret-stdout.log")
+        self.assertEqual(out["memlat_rows"], 8)          # 2 clusters x 4 levels
+        self.assertEqual(out["memlat"][0], {
+            "cluster": 0, "level": 0, "level_name": "idle", "loads": 4096,
+            "seq_cycles": 333127, "rand_cycles": 425000,
+            "seq_cyc_per_load_x100": 8132, "rand_cyc_per_load_x100": 10375,
+            "muon_bytes": 0, "dma_bytes": 0, "level_cycles": 760000,
+            "muon_b_per_cyc_x100": 0, "dma_b_per_cyc_x100": 0,
+            "seq_cyc_per_load": 81.32, "rand_cyc_per_load": 103.75,
+            "muon_b_per_cyc": 0.0, "dma_b_per_cyc": 0.0,
+        })
+
+    def test_levels_are_named_and_ordered(self):
+        out = parsed("memlat-instret-stdout.log")
+        names = [row["level_name"] for row in out["memlat"]]
+        self.assertEqual(names, ["idle", "muon", "dma", "muon_dma"] * 2)
+
+    def test_background_bandwidth_is_reported_per_generator(self):
+        # The whole point of the levels: each one says what the background
+        # generator actually achieved, so latency can be placed on a
+        # latency-bandwidth curve instead of quoted bare.
+        rows = {(r["cluster"], r["level"]): r
+                for r in parsed("memlat-instret-stdout.log")["memlat"]}
+        self.assertEqual(rows[(0, 0)]["muon_b_per_cyc"], 0.0)
+        self.assertEqual(rows[(0, 0)]["dma_b_per_cyc"], 0.0)
+        self.assertGreater(rows[(0, 1)]["muon_b_per_cyc"], 0.0)
+        self.assertEqual(rows[(0, 1)]["dma_b_per_cyc"], 0.0)
+        self.assertEqual(rows[(0, 2)]["muon_b_per_cyc"], 0.0)
+        self.assertGreater(rows[(0, 2)]["dma_b_per_cyc"], 0.0)
+        self.assertGreater(rows[(0, 3)]["muon_b_per_cyc"], 0.0)
+        self.assertGreater(rows[(0, 3)]["dma_b_per_cyc"], 0.0)
+
+    def test_loaded_latency_exceeds_unloaded(self):
+        rows = {(r["cluster"], r["level"]): r
+                for r in parsed("memlat-instret-stdout.log")["memlat"]}
+        for level in (1, 2, 3):
+            self.assertGreater(rows[(0, level)]["seq_cyc_per_load"],
+                               rows[(0, 0)]["seq_cyc_per_load"])
+
+    def test_correctness_gate_rows(self):
+        out = parsed("memlat-instret-stdout.log")
+        self.assertEqual(out["memlat_checks_count"], 6)   # seq, rand, all_levels x2
+        self.assertTrue(out["memlat_checks_all_ok"])
+        self.assertTrue(out["memlat_pass"])
+        seq = out["memlat_checks"][0]
+        self.assertEqual(seq["chase"], "seq")
+        self.assertEqual(seq["terminal"], seq["terminal_expected"])
+        self.assertEqual(seq["checksum"], seq["checksum_expected"])
+        self.assertEqual(seq["order_hash"], seq["order_hash_expected"])
+
+    def test_order_hash_separates_the_two_chases(self):
+        # terminal and checksum are identical for seq and rand (both are one
+        # full lap of a 4096-cycle), so only the order-sensitive hash can tell
+        # a run that chased the right buffer from one that chased the wrong
+        # buffer twice.
+        checks = {c["chase"]: c
+                  for c in parsed("memlat-instret-stdout.log")["memlat_checks"]
+                  if c["chase"] in ("seq", "rand")}
+        self.assertEqual(checks["seq"]["checksum"], checks["rand"]["checksum"])
+        self.assertNotEqual(checks["seq"]["order_hash"],
+                            checks["rand"]["order_hash"])
+
+    def test_failed_gate_is_reported_as_failed(self):
+        text = fixture("memlat-instret-stdout.log").replace(
+            "order_hash=1595234304 order_hash_expected=1595234304 ok=1",
+            "order_hash=99 order_hash_expected=1595234304 ok=0")
+        out = parse_text(text)
+        self.assertFalse(out["memlat_checks_all_ok"])
+
+    def test_human_row_is_not_mistaken_for_the_machine_row(self):
+        out = parsed("memlat-instret-stdout.log")
+        self.assertEqual(out["memlat_rows"], 8)
+        self.assertEqual(len(out["memlat"]), 8)
+
+    def test_absent_for_non_memlat_logs(self):
+        out = parsed("hpc-firesim-stdout.log")
+        self.assertNotIn("memlat", out)
+        self.assertNotIn("memlat_checks", out)
+        self.assertNotIn("memlat_pass", out)
 
 
 class Totality(unittest.TestCase):

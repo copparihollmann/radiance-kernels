@@ -151,8 +151,8 @@ PHASE_STAMP = re.compile(r"^phase_stamp_c(\d+)_(\d+)=(\d+)[ \t\r]*$", re.M)
 # prefix is picked up without a parser change; the anchored shape keeps that
 # from scooping up anything else in the console stream.
 DETAIL_PREFIXES = (
-    "btree_", "dot_", "gemm_", "gemv_", "hotspot3d_", "lbm_", "nearn_",
-    "pathfinder_", "spatter_", "spmv_", "stencil3d_", "stream_",
+    "btree_", "dot_", "gemm_", "gemv_", "hotspot3d_", "lbm_", "memlat_",
+    "nearn_", "pathfinder_", "spatter_", "spmv_", "stencil3d_", "stream_",
 )
 # Detail counters that carry no kernel-name prefix (gemm's FLOP restatement of
 # its MAC counts, and the payload memory-op count stream and spatter share).
@@ -163,6 +163,50 @@ DETAIL_FIELD = re.compile(
 # A console log is untrusted input; cap the detail object so a pathological or
 # corrupted stream cannot make the result.json unbounded.
 DETAIL_MAX_KEYS = 256
+
+# ---------------------------------------------------------------------------
+# A3. per-core retired instructions
+#     (lib/include/nightly/device.h NIGHTLY_INSTRET -> nightly/host.h
+#      nightly_report_core_instret)
+# ---------------------------------------------------------------------------
+#
+# One line per core, deliberately SEPARATE from the "cluster N core M:" row so
+# that CORE_CYCLES above and campaign.py's per-SM timing completeness check are
+# untouched.
+#
+# SCOPE, which must travel with the number: minstret counts micro-ops accepted
+# by one CORE's execute stage, summed over every warp resident on it.  A 16-lane
+# SIMT instruction retires ONCE however many lanes were active, so ipc bounds
+# ISSUE efficiency and is NOT lane utilisation and NOT a divergence measure.
+# The device prints `instret_scope=` saying so and it is carried through to the
+# parsed object verbatim, so a consumer of result.json cannot lose the caveat.
+
+INSTRET_ROW = re.compile(
+    r"^instret cluster=(\d+) core=(\d+) instructions_begin=(\d+) "
+    r"instructions_end=(\d+) instructions=(\d+) cycles=(\d+) "
+    r"ipc_x1000=(\d+)[ \t\r]*$", re.M)
+INSTRET_SCOPE = re.compile(r"^instret_scope=(\S+)[ \t\r]*$", re.M)
+
+# ---------------------------------------------------------------------------
+# A4. memlat (kernels/nightly/memlat)
+# ---------------------------------------------------------------------------
+#
+# A dependent-load latency microbenchmark.  Two kinds of line:
+#
+#   memlat cluster=N level=L level_name=... <uint key=value>...
+#   memlat_check cluster=N chase=seq|rand|all_levels|none <uint key=value>...
+#
+# Both are matched as "prefix + a trailing run of key=value", not as a fixed
+# field list, so a later memlat that reports one more counter is picked up
+# without a parser change.  The host also prints a human-readable
+# "memlat cluster 0 level 0 idle: ..." line for each row; it has no '=' after
+# "cluster" and so cannot be mistaken for the machine row.
+
+MEMLAT_ROW = re.compile(
+    r"^memlat (cluster=\d+ level=\d+ .*)$", re.M)
+MEMLAT_CHECK = re.compile(
+    r"^memlat_check cluster=(\d+) chase=([a-z_]+)(.*)$", re.M)
+MEMLAT_LEVEL_NAME = re.compile(r"\blevel_name=(\S+)")
 
 # ---------------------------------------------------------------------------
 # B. llama_e2e (kernels/nightly/llama_e2e/host.cpp)
@@ -438,6 +482,83 @@ def parse_compute(text: str, out: dict) -> None:
         out["phase_stamps_count"] = len(stamps)
 
 
+def parse_instret(text: str, out: dict) -> None:
+    """Per-core retired instructions and IPC.
+
+    ``ipc`` is the only derived value and it is a unit conversion of the
+    emitted ``ipc_x1000``, in the same spirit as ``util_pct`` above.  It is
+    deliberately reported PER CORE and never summed into a single "IPC" for the
+    run, because the per-core counters of different cores cover overlapping but
+    distinct windows, and because a single headline number is exactly what
+    would get mistaken for lane utilisation.
+    """
+    rows = []
+    for cluster, core, begin, end, n, cycles, ipc in INSTRET_ROW.findall(text):
+        row = {"cluster": int(cluster), "core": int(core),
+               "instructions_begin": int(begin), "instructions_end": int(end),
+               "instructions": int(n), "cycles": int(cycles),
+               "ipc_x1000": int(ipc)}
+        _put(row, "ipc", round(int(ipc) / 1000.0, 4))
+        rows.append(row)
+    if not rows:
+        return
+    out["core_instructions"] = rows
+    out["core_instructions_count"] = len(rows)
+    out["core_instructions_total"] = sum(row["instructions"] for row in rows)
+    scope = INSTRET_SCOPE.findall(text)
+    if scope:
+        out["instret_scope"] = scope[-1]
+
+
+def _key_uints(text: str, limit: int = DETAIL_MAX_KEYS) -> dict:
+    """The ``key=<uint>`` pairs of one already-identified line."""
+    fields: dict = {}
+    for key, value in KEY_UINT.findall(text):
+        if len(fields) >= limit and key not in fields:
+            continue
+        _put(fields, key, _int(value))
+    return fields
+
+
+def parse_memlat(text: str, out: dict) -> None:
+    """memlat's per-(cluster, level) rows and its correctness-gate rows.
+
+    The ``*_x100`` fields the device prints are integers because the host
+    Rocket has no FPU; the matching float is a unit conversion of the emitted
+    value and nothing else is derived.
+    """
+    rows = []
+    for body in MEMLAT_ROW.findall(text):
+        row = _key_uints(body)
+        name = MEMLAT_LEVEL_NAME.search(body)
+        if name:
+            row["level_name"] = name.group(1)
+        for source, target in (("seq_cyc_per_load_x100", "seq_cyc_per_load"),
+                               ("rand_cyc_per_load_x100", "rand_cyc_per_load"),
+                               ("muon_b_per_cyc_x100", "muon_b_per_cyc"),
+                               ("dma_b_per_cyc_x100", "dma_b_per_cyc")):
+            if source in row:
+                _put(row, target, round(row[source] / 100.0, 4))
+        rows.append(row)
+    if rows:
+        out["memlat"] = rows
+        out["memlat_rows"] = len(rows)
+
+    checks = []
+    for cluster, chase, rest in MEMLAT_CHECK.findall(text):
+        row = {"cluster": int(cluster), "chase": chase}
+        row.update(_key_uints(rest))
+        checks.append(row)
+    if checks:
+        out["memlat_checks"] = checks
+        out["memlat_checks_count"] = len(checks)
+        out["memlat_checks_all_ok"] = all(row.get("ok") == 1 for row in checks)
+
+    passed = re.findall(r"^memlat_pass=(\d+)[ \t\r]*$", text, re.M)
+    if passed:
+        out["memlat_pass"] = int(passed[-1]) == 1
+
+
 def parse_tables(text: str) -> tuple[list[dict], list[dict]]:
     """The llama_e2e per-phase table and the per-op roll-up.
 
@@ -602,6 +723,8 @@ def parse_text(text: str) -> dict:
     parse_cyclotron(text, out)
     parse_extras(text, out)
     parse_compute(text, out)
+    parse_instret(text, out)
+    parse_memlat(text, out)
     parse_llama(text, out)
     parse_correctness(text, out)
     return out

@@ -1,0 +1,45 @@
+memlat: nodes=4096 stride=64 working_set_bytes=262144 loads_per_chase=4096 clusters=2
+memlat_gold seq_terminal=0 seq_sum=8386560 seq_hash=1595234304 rand_terminal=0 rand_sum=8386560 rand_hash=637633798
+wait ok=1 host_cycles=118403991
+cluster 0 core 0: start=1200 end=4300120 cycles=4298920
+cluster 0 core 1: start=1240 end=4300118 cycles=4298878
+cluster 1 core 0: start=1210 end=4300095 cycles=4298885
+cluster 1 core 1: start=1252 end=4300131 cycles=4298879
+instret cluster=0 core=0 instructions_begin=980 instructions_end=3142572 instructions=3141592 cycles=4298920 ipc_x1000=730
+instret cluster=0 core=1 instructions_begin=1004 instructions_end=2516878 instructions=2515874 cycles=4298878 ipc_x1000=585
+instret cluster=1 core=0 instructions_begin=991 instructions_end=3139104 instructions=3138113 cycles=4298885 ipc_x1000=729
+instret cluster=1 core=1 instructions_begin=1018 instructions_end=2514330 instructions=2513312 cycles=4298879 ipc_x1000=584
+instret_scope=per-core-retired-instructions-all-warps-one-per-warp-instruction-not-per-lane-not-lane-utilisation
+instret_cores=4
+kernel_cycles=4298931
+memlat_check cluster=0 chase=seq loads=4096 terminal=0 terminal_expected=0 checksum=8386560 checksum_expected=8386560 order_hash=1595234304 order_hash_expected=1595234304 ok=1
+memlat_check cluster=0 chase=rand loads=4096 terminal=0 terminal_expected=0 checksum=8386560 checksum_expected=8386560 order_hash=637633798 order_hash_expected=637633798 ok=1
+memlat_check cluster=0 chase=all_levels levels=4 ok=1 dma_ready_timeout=0 dma_drain_timeout=0
+memlat_check cluster=1 chase=seq loads=4096 terminal=0 terminal_expected=0 checksum=8386560 checksum_expected=8386560 order_hash=1595234304 order_hash_expected=1595234304 ok=1
+memlat_check cluster=1 chase=rand loads=4096 terminal=0 terminal_expected=0 checksum=8386560 checksum_expected=8386560 order_hash=637633798 order_hash_expected=637633798 ok=1
+memlat_check cluster=1 chase=all_levels levels=4 ok=1 dma_ready_timeout=0 dma_drain_timeout=0
+memlat cluster 0 level 0 idle: seq 81.32 rand 103.75  cyc/load  dma_B/cyc 0.00 muon_B/cyc 0.00 level_cycles 760000
+memlat cluster=0 level=0 level_name=idle loads=4096 seq_cycles=333127 rand_cycles=425000 seq_cyc_per_load_x100=8132 rand_cyc_per_load_x100=10375 muon_bytes=0 dma_bytes=0 level_cycles=760000 muon_b_per_cyc_x100=0 dma_b_per_cyc_x100=0
+memlat cluster 0 level 1 muon: seq 146.30 rand 142.59  cyc/load  dma_B/cyc 0.00 muon_B/cyc 0.85 level_cycles 1190000
+memlat cluster=0 level=1 level_name=muon loads=4096 seq_cycles=599246 rand_cycles=584089 seq_cyc_per_load_x100=14630 rand_cyc_per_load_x100=14259 muon_bytes=1011500 dma_bytes=0 level_cycles=1190000 muon_b_per_cyc_x100=85 dma_b_per_cyc_x100=0
+memlat cluster 0 level 2 dma: seq 115.06 rand 129.78  cyc/load  dma_B/cyc 8.81 muon_B/cyc 0.00 level_cycles 1010000
+memlat cluster=0 level=2 level_name=dma loads=4096 seq_cycles=471326 rand_cycles=531579 seq_cyc_per_load_x100=11506 rand_cyc_per_load_x100=12978 muon_bytes=0 dma_bytes=8898100 level_cycles=1010000 muon_b_per_cyc_x100=0 dma_b_per_cyc_x100=881
+memlat cluster 0 level 3 muon_dma: seq 156.08 rand 167.86  cyc/load  dma_B/cyc 7.69 muon_B/cyc 0.65 level_cycles 1335000
+memlat cluster=0 level=3 level_name=muon_dma loads=4096 seq_cycles=639344 rand_cycles=687595 seq_cyc_per_load_x100=15608 rand_cyc_per_load_x100=16786 muon_bytes=867750 dma_bytes=10266150 level_cycles=1335000 muon_b_per_cyc_x100=65 dma_b_per_cyc_x100=769
+memlat cluster 1 level 0 idle: seq 81.40 rand 103.69  cyc/load  dma_B/cyc 0.00 muon_B/cyc 0.00 level_cycles 760902
+memlat cluster=1 level=0 level_name=idle loads=4096 seq_cycles=333438 rand_cycles=424726 seq_cyc_per_load_x100=8140 rand_cyc_per_load_x100=10369 muon_bytes=0 dma_bytes=0 level_cycles=760902 muon_b_per_cyc_x100=0 dma_b_per_cyc_x100=0
+memlat cluster 1 level 1 muon: seq 146.37 rand 142.53  cyc/load  dma_B/cyc 0.00 muon_B/cyc 0.85 level_cycles 1190902
+memlat cluster=1 level=1 level_name=muon loads=4096 seq_cycles=599557 rand_cycles=583815 seq_cyc_per_load_x100=14637 rand_cyc_per_load_x100=14253 muon_bytes=1021927 dma_bytes=0 level_cycles=1190902 muon_b_per_cyc_x100=85 dma_b_per_cyc_x100=0
+memlat cluster 1 level 2 dma: seq 115.14 rand 129.71  cyc/load  dma_B/cyc 8.73 muon_B/cyc 0.00 level_cycles 1010902
+memlat cluster=1 level=2 level_name=dma loads=4096 seq_cycles=471637 rand_cycles=531305 seq_cyc_per_load_x100=11514 rand_cyc_per_load_x100=12971 muon_bytes=0 dma_bytes=8830176 level_cycles=1010902 muon_b_per_cyc_x100=0 dma_b_per_cyc_x100=873
+memlat cluster 1 level 3 muon_dma: seq 156.16 rand 167.80  cyc/load  dma_B/cyc 7.62 muon_B/cyc 0.65 level_cycles 1335902
+memlat cluster=1 level=3 level_name=muon_dma loads=4096 seq_cycles=639655 rand_cycles=687321 seq_cyc_per_load_x100=15616 rand_cyc_per_load_x100=16780 muon_bytes=876695 dma_bytes=10187783 level_cycles=1335902 muon_b_per_cyc_x100=65 dma_b_per_cyc_x100=762
+memlat_pass=1
+PASS
+*** PASSED *** after 118403991 cycles
+Emulation Performance Summary
+Wallclock Time Elapsed: 61.2 s
+Host Frequency: 60.000 MHz
+Target Cycles Emulated: 118403991
+Effective Target Frequency: 1.934 MHz
+FMR: 31.02

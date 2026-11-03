@@ -16,7 +16,9 @@
  *                    nightly_cluster_id: the cluster-ID CSR is 1 bit wide in the RTL)
  *   8..15  PHASE    GPU -> host: kernel-defined phase stamps (mcycle), cluster core 0
  *   16     FENCE_EPOCH device-only robust-completion warp-fence handoff
- *   17..47 free
+ *   17, 18 INSTRET_START GPU -> host: minstret at kernel start, per core
+ *   19, 20 INSTRET_END   GPU -> host: minstret at the END stamp, per core
+ *   21..47 free
  *   48     HEARTBEAT kernel progress
  *   49..63 free
  */
@@ -36,6 +38,14 @@
 #define NIGHTLY_PB_CLUSTER 7u
 #define NIGHTLY_PB_PHASE   8u   /* + phase index, 0..7 */
 #define NIGHTLY_PB_FENCE_EPOCH 16u
+/* Per-core retired-instruction stamps, written beside START/END when the device is built with
+ * NIGHTLY_INSTRET=1 (the default; see nightly/device.h).  A build with NIGHTLY_INSTRET=0 leaves
+ * these slots at whatever nightly_host_launch cleared them to, and the host prints nothing. */
+#define NIGHTLY_PB_INSTRET_START 17u  /* + core */
+#define NIGHTLY_PB_INSTRET_END   19u  /* + core */
+/* First slot a kernel may use for its own per-cluster results (21..47 inclusive). */
+#define NIGHTLY_PB_KERNEL_FIRST  21u
+#define NIGHTLY_PB_KERNEL_LAST   47u
 #define NIGHTLY_PB_HEARTBEAT 48u /* kernel progress value, printed by the host while it waits */
 
 #define NIGHTLY_LAUNCH_MAGIC 0x6E1A0C11u

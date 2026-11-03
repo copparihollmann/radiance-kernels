@@ -95,6 +95,10 @@ static inline void nightly_host_launch(uint32_t n_clusters, uint32_t arg = 0) {
     for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++) {
       nightly_pb_write(cl, NIGHTLY_PB_END + c, 0);
       nightly_pb_write(cl, NIGHTLY_PB_START + c, 0);
+      /* Clear the companion instruction stamps too, so a device built with NIGHTLY_INSTRET=0
+       * reads back 0 and nightly_host_report() stays silent instead of printing a stale count. */
+      nightly_pb_write(cl, NIGHTLY_PB_INSTRET_END + c, 0);
+      nightly_pb_write(cl, NIGHTLY_PB_INSTRET_START + c, 0);
     }
     nightly_pb_write(cl, NIGHTLY_PB_STATUS, 0);
     nightly_pb_write(cl, NIGHTLY_PB_ARG, arg);
@@ -146,9 +150,41 @@ static inline int nightly_host_wait(uint32_t n_clusters, uint64_t max_polls = 50
   return 0;
 }
 
+/* ---- per-core retired instructions (nightly/device.h: NIGHTLY_INSTRET) -------------------
+ *
+ * One `instret ` line per core, in the key=value shape the campaign parser already scrapes.  It
+ * is a SEPARATE line, never an extension of the `cluster N core M:` row, because that row's shape
+ * is load bearing for campaign.py's per-SM timing completeness check and for
+ * parse_run_output.py's line-anchored CORE_CYCLES regex.
+ *
+ * READ THE SCOPE BEFORE USING IPC.  minstret counts micro-ops accepted by one CORE's execute
+ * stage, summed over every warp resident on that core.  A 16-lane SIMT instruction retires ONCE
+ * regardless of how many lanes were active, so ipc bounds ISSUE efficiency and is NOT lane
+ * utilisation and NOT a divergence measurement.  The emitted `instret_scope=` line says so in the
+ * log itself so a downstream reader cannot lose the caveat.
+ *
+ * Both stamps are 32-bit truncations of the RTL's 64-bit counters, so `end - begin` in uint32
+ * arithmetic is correct across a single wrap, exactly like the cycle stamps beside them. */
+static inline void nightly_report_core_instret(uint32_t cluster, uint32_t core,
+                                               uint32_t cycles) {
+  const uint32_t ib = nightly_pb_read(cluster, NIGHTLY_PB_INSTRET_START + core);
+  const uint32_t ie = nightly_pb_read(cluster, NIGHTLY_PB_INSTRET_END + core);
+  if (!ie) return;   /* device built without NIGHTLY_INSTRET: absent is absent */
+  const uint32_t n = ie - ib;
+  const uint64_t ipc_x1000 = cycles ? ((uint64_t)n * 1000ull) / (uint64_t)cycles : 0ull;
+  nh_puts("instret cluster="); nh_putu(cluster); nh_puts(" core="); nh_putu(core);
+  nh_puts(" instructions_begin="); nh_putu(ib);
+  nh_puts(" instructions_end="); nh_putu(ie);
+  nh_puts(" instructions="); nh_putu(n);
+  nh_puts(" cycles="); nh_putu(cycles);
+  nh_puts(" ipc_x1000="); nh_putu(ipc_x1000);
+  nh_puts("\n");
+}
+
 /* Kernel cycles = latest END - earliest START over all cores (GPU mcycle, 500 MHz). */
 static inline uint32_t nightly_host_report(uint32_t n_clusters) {
   uint32_t t0 = 0xFFFFFFFFu, t1 = 0;
+  uint32_t instret_cores = 0;
   for (uint32_t cl = 0; cl < n_clusters; cl++) {
     for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++) {
       const uint32_t s = nightly_pb_read(cl, NIGHTLY_PB_START + c);
@@ -158,7 +194,18 @@ static inline uint32_t nightly_host_report(uint32_t n_clusters) {
       nh_puts("cluster "); nh_putu(cl); nh_puts(" core "); nh_putu(c);
       nh_puts(": start="); nh_putu(s); nh_puts(" end="); nh_putu(e);
       nh_puts(" cycles="); nh_putu(e - s); nh_puts("\n");
+      instret_cores += nightly_pb_read(cl, NIGHTLY_PB_INSTRET_END + c) != 0;
     }
+  }
+  if (instret_cores) {
+    for (uint32_t cl = 0; cl < n_clusters; cl++)
+      for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++)
+        nightly_report_core_instret(cl, c,
+            nightly_pb_read(cl, NIGHTLY_PB_END + c) -
+            nightly_pb_read(cl, NIGHTLY_PB_START + c));
+    nh_puts("instret_scope=per-core-retired-instructions-all-warps-one-per-warp-instruction-"
+            "not-per-lane-not-lane-utilisation\n");
+    nh_puts("instret_cores="); nh_putu(instret_cores); nh_puts("\n");
   }
   const uint32_t cyc = t1 - t0;
   nh_puts("kernel_cycles="); nh_putu(cyc); nh_puts("\n");

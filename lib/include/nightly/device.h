@@ -104,6 +104,34 @@ static inline uint32_t nightly_mcycle(void) {
   return c;
 }
 
+/* Per-core retired-instruction counter.
+ *
+ * NIGHTLY_INSTRET publishes minstret beside the mcycle START/END stamps, so the host can report
+ * instructions and IPC per core.  This is a DEVICE-CODE change only: CSR 0xB02 (minstret) is
+ * already implemented by the Muon core in the bitstreams we run (radiance
+ * src/main/scala/radiance/muon/backend/int/CSR.scala: `case object MInstRet extends
+ * MuonCSR(CSRs.minstret, accessor = wrap(minstret(31, 0)))`, which is a member of `allCSRs`, fed
+ * from Execute.scala's free-running `minstretReg` through the same SFUPipe CSR read path that
+ * serves mcycle).  Nothing gates it on a config parameter, so reading it needs no RTL rebuild.
+ *
+ * WHAT IT COUNTS, stated exactly so it is not over-claimed: Execute.scala increments minstret once
+ * per micro-op accepted by the core's execute stage (io.req.fire), for ALL warps resident on that
+ * core together.  On a 16-lane SIMT core one instruction retires for the whole warp no matter how
+ * many lanes were active, so instructions / cycles bounds ISSUE efficiency and says nothing about
+ * lane occupancy or divergence.  It is not a per-lane or per-warp count, and it is not a FLOP
+ * count.  The RTL comment also notes that `vx_join` is absorbed in the frontend and so is not
+ * counted. */
+#ifndef NIGHTLY_INSTRET
+#define NIGHTLY_INSTRET 1
+#endif
+#define NIGHTLY_CSR_MINSTRET 0xB02
+
+static inline uint32_t nightly_minstret(void) {
+  uint32_t c;
+  asm volatile("csrr %0, %1" : "=r"(c) : "i"(NIGHTLY_CSR_MINSTRET) : "memory");
+  return c;
+}
+
 static inline void nightly_pb_put(uint32_t slot, uint32_t v) {
   const uint32_t a = NIGHTLY_PB_DEV_BASE + slot * 8u;
   asm volatile("sw.shared %0, 0(%1)" :: "r"(v), "r"(a) : "memory");
@@ -138,7 +166,15 @@ static inline void nightly_wait_launch(void) {
   while (nightly_pb_get(NIGHTLY_PB_LAUNCH) != NIGHTLY_LAUNCH_MAGIC) {
     asm volatile("nop");
   }
-  nightly_pb_put(NIGHTLY_PB_START + (uint32_t)vx_core_id(), nightly_mcycle());
+  const uint32_t core = (uint32_t)vx_core_id();
+  const uint32_t cyc = nightly_mcycle();
+#if NIGHTLY_INSTRET
+  /* Publish the instruction stamp BEFORE the cycle stamp: the host treats the cycle slot as the
+   * ready flag for the pair (and polls END the same way), so the companion value must already be
+   * in place when the cycle slot becomes visible. */
+  nightly_pb_put(NIGHTLY_PB_INSTRET_START + core, nightly_minstret());
+#endif
+  nightly_pb_put(NIGHTLY_PB_START + core, cyc);
 }
 
 /* Kernel-defined phase stamp (cluster core 0, one thread). */
@@ -186,6 +222,21 @@ static inline void nightly_l1_drain(void) {
   mu_fence();
 }
 #endif
+
+/* The END stamp pair for the calling core: mcycle, and (NIGHTLY_INSTRET) minstret beside it.
+ * Both counters are sampled back to back before either is published, so the instruction window
+ * and the cycle window of a core differ by at most the two csrr instructions between them.  The
+ * cycle slot is written last for the same reason as in nightly_wait_launch(): the host polls END
+ * and must not see it set before the companion instruction stamp has landed. */
+static inline void nightly_publish_end_stamps(void) {
+  const uint32_t core = (uint32_t)vx_core_id();
+  const uint32_t cyc = nightly_mcycle();
+#if NIGHTLY_INSTRET
+  const uint32_t ins = nightly_minstret();
+  nightly_pb_put(NIGHTLY_PB_INSTRET_END + core, ins);
+#endif
+  nightly_pb_put(NIGHTLY_PB_END + core, cyc);
+}
 
 /* End of a kernel entry: every thread of the threadblock must call this exactly once.
  * noinline + convergent: inlined, clang tail-duplicated its barrier into both arms of a preceding
@@ -352,7 +403,7 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
   mu_barrier(NIGHTLY_BAR_END - 1u, warps);
 #endif
   if (warp < MU_NUM_CORES && lane == 0u) {
-    nightly_pb_put(NIGHTLY_PB_END + (uint32_t)vx_core_id(), nightly_mcycle());
+    nightly_publish_end_stamps();
   } else {
     asm volatile("nop");
   }
@@ -379,7 +430,7 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
   mu_barrier(NIGHTLY_BAR_END, warps);
 #endif
   if (tid_in_threadblock < MU_NUM_CORES * MU_NUM_THREADS && (tid_in_threadblock % MU_NUM_THREADS) == 0)
-    nightly_pb_put(NIGHTLY_PB_END + (uint32_t)vx_core_id(), nightly_mcycle());
+    nightly_publish_end_stamps();
   else asm volatile("nop");
 #endif
 }
