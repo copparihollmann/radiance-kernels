@@ -83,6 +83,88 @@ MESH_UTIL_KERNEL = re.compile(r"\bmesh_util_kernel=([0-9.]+)%")
 PROFILE_GUARD = re.compile(r"\bprofile_guard_cycles=(\d+)")
 
 # ---------------------------------------------------------------------------
+# A2. device-reported compute counters
+#     (lib/include/nightly/host.h: nightly_report_compute,
+#      nightly_report_compute_scalar, nightly_report_launch,
+#      nightly_report_phases -- added to all 21 HPC hosts by a8b6bcd)
+# ---------------------------------------------------------------------------
+#
+# The emit shape is one ``key=value`` per line, exactly the form the campaign
+# harness already scrapes for ``kernel_cycles=``.  Every regex below is
+# line-anchored so that a FireSim driver line carrying an ``=`` inside it (the
+# ``+netbw0=200`` plusargs dump, for instance) can never be mistaken for a
+# counter.
+#
+# Nine fields come out of nightly_report_compute() for every instrumented
+# kernel.  They land in the ``compute`` object with the redundant ``compute_``
+# prefix dropped:
+#
+#   compute_op_unit            -> compute.op_unit
+#   compute_datapath           -> compute.datapath
+#   useful_ops                 -> compute.useful_ops
+#   executed_ops               -> compute.executed_ops
+#   executed_ops_distinguished -> compute.executed_ops_distinguished (0 or 1,
+#                                 kept as the integer the device printed)
+#   peak_ops_per_cycle         -> compute.peak_ops_per_cycle
+#   compute_util_bp            -> compute.util_bp
+#   executed_util_bp           -> compute.executed_util_bp
+#   compute_window_cycles      -> compute.window_cycles
+#
+# ``util_pct`` / ``executed_util_pct`` are the only added values and they are a
+# unit conversion of an emitted field (0.01 % -> %), in the same spirit as
+# wallclock_seconds and host_frequency_mhz above.  Nothing else is derived.
+
+COMPUTE_TEXT_FIELD = re.compile(
+    r"^(compute_op_unit|compute_datapath)=(\S+)[ \t\r]*$", re.M)
+COMPUTE_UINT_FIELD = re.compile(
+    r"^(useful_ops|executed_ops|executed_ops_distinguished"
+    r"|peak_ops_per_cycle|compute_util_bp|executed_util_bp"
+    r"|compute_window_cycles)=(\d+)[ \t\r]*$", re.M)
+
+# compute_*/executed_* -> the name used inside the "compute" object.
+COMPUTE_FIELD_NAMES = {
+    "compute_op_unit": "op_unit",
+    "compute_datapath": "datapath",
+    "useful_ops": "useful_ops",
+    "executed_ops": "executed_ops",
+    "executed_ops_distinguished": "executed_ops_distinguished",
+    "peak_ops_per_cycle": "peak_ops_per_cycle",
+    "compute_util_bp": "util_bp",
+    "executed_util_bp": "executed_util_bp",
+    "compute_window_cycles": "window_cycles",
+}
+
+# nightly_report_launch(): one host-sequenced launch out of several.  hotspot3d
+# runs four inside a single kernel_cycles window, and hotspot3d's host adds a
+# launch_N_compute_util_bp line of its own, so the suffix is matched generically
+# rather than from a fixed list.
+LAUNCH_FIELD = re.compile(
+    r"^launch_(\d+)_([a-z][a-z0-9_]*)=(\d+)[ \t\r]*$", re.M)
+
+# nightly_report_phases(): per-cluster device phase stamps.  gemm is the only
+# one of the 21 whose device code calls nightly_phase(), so it is the only one
+# that prints these.
+PHASE_STAMP = re.compile(r"^phase_stamp_c(\d+)_(\d+)=(\d+)[ \t\r]*$", re.M)
+
+# Per-kernel detail lines.  Matched by namespace prefix rather than by an
+# exhaustive list so that a kernel that grows another counter under an existing
+# prefix is picked up without a parser change; the anchored shape keeps that
+# from scooping up anything else in the console stream.
+DETAIL_PREFIXES = (
+    "btree_", "dot_", "gemm_", "gemv_", "hotspot3d_", "lbm_", "nearn_",
+    "pathfinder_", "spatter_", "spmv_", "stencil3d_", "stream_",
+)
+# Detail counters that carry no kernel-name prefix (gemm's FLOP restatement of
+# its MAC counts, and the payload memory-op count stream and spatter share).
+DETAIL_EXTRA_KEYS = frozenset(
+    {"payload_mem_ops_32bit", "useful_flop_ops", "peak_flop_per_cycle"})
+DETAIL_FIELD = re.compile(
+    r"^([a-z][a-z0-9_]*)=(\d+(?:\.\d+)?)[ \t\r]*$", re.M)
+# A console log is untrusted input; cap the detail object so a pathological or
+# corrupted stream cannot make the result.json unbounded.
+DETAIL_MAX_KEYS = 256
+
+# ---------------------------------------------------------------------------
 # B. llama_e2e (kernels/nightly/llama_e2e/host.cpp)
 # ---------------------------------------------------------------------------
 
@@ -280,6 +362,82 @@ def parse_extras(text: str, out: dict) -> None:
         _put(out, "profile_guard_cycles", _int(guard[-1]))
 
 
+def parse_compute(text: str, out: dict) -> None:
+    """The device-reported COMPUTE axis.
+
+    Produces up to four keys, each only when the kernel actually printed the
+    lines behind it:
+
+      compute          the nine nightly_report_compute() fields
+      compute_detail   the per-kernel detail counters (btree_lookups=,
+                       spmv_executed_macs=, ... ), kept in one object instead
+                       of flattened across the top level
+      compute_launches a LIST of per-launch records, one per
+                       nightly_report_launch() index.  hotspot3d's four
+                       launches share one kernel_cycles window; as a list they
+                       stay separable instead of collapsing into N flat keys.
+      phase_stamps     a LIST of nightly_report_phases() device phase stamps
+
+    Last occurrence wins for every scalar, matching the rest of this parser and
+    campaign.py's own kernel_cycles scrape.
+    """
+    compute: dict = {}
+    for key, value in COMPUTE_TEXT_FIELD.findall(text):
+        compute[COMPUTE_FIELD_NAMES[key]] = value
+    for key, value in COMPUTE_UINT_FIELD.findall(text):
+        _put(compute, COMPUTE_FIELD_NAMES[key], _int(value))
+    for source, target in (("util_bp", "util_pct"),
+                           ("executed_util_bp", "executed_util_pct")):
+        if source in compute:
+            _put(compute, target, round(compute[source] / 100.0, 4))
+    if compute:
+        out["compute"] = compute
+
+    detail: dict = {}
+    for key, value in DETAIL_FIELD.findall(text):
+        if len(detail) >= DETAIL_MAX_KEYS and key not in detail:
+            continue
+        if key in DETAIL_EXTRA_KEYS or key.startswith(DETAIL_PREFIXES):
+            _put(detail, key, _float(value) if "." in value else _int(value))
+    if detail:
+        out["compute_detail"] = detail
+
+    launches: dict[int, dict] = {}
+    for index, field, value in LAUNCH_FIELD.findall(text):
+        number = _int(index)
+        amount = _int(value)
+        if number is None or amount is None or field == "index":
+            continue    # "index" is this record's own key, never a counter
+        if len(launches) >= DETAIL_MAX_KEYS and number not in launches:
+            continue
+        launches.setdefault(number, {"index": number})[field] = amount
+    if launches:
+        rows = [launches[index] for index in sorted(launches)]
+        out["compute_launches"] = rows
+        out["compute_launches_count"] = len(rows)
+        # Aggregates only where every launch reported the field, so a partial
+        # set is reported as a list and nothing else rather than as a total
+        # that silently omits a launch.
+        for field, name in (("cycles", "compute_launches_cycles_total"),
+                            ("useful_ops",
+                             "compute_launches_useful_ops_total"),
+                            ("executed_ops",
+                             "compute_launches_executed_ops_total")):
+            if all(field in row for row in rows):
+                out[name] = sum(row[field] for row in rows)
+
+    stamps: dict[tuple[int, int], dict] = {}
+    for cluster, index, cycles in PHASE_STAMP.findall(text):
+        key = (int(cluster), int(index))
+        if len(stamps) >= DETAIL_MAX_KEYS and key not in stamps:
+            continue
+        stamps[key] = {"cluster": key[0], "index": key[1],
+                       "cycles": int(cycles)}
+    if stamps:
+        out["phase_stamps"] = [stamps[key] for key in sorted(stamps)]
+        out["phase_stamps_count"] = len(stamps)
+
+
 def parse_tables(text: str) -> tuple[list[dict], list[dict]]:
     """The llama_e2e per-phase table and the per-op roll-up.
 
@@ -443,6 +601,7 @@ def parse_text(text: str) -> dict:
     parse_firesim(text, out)
     parse_cyclotron(text, out)
     parse_extras(text, out)
+    parse_compute(text, out)
     parse_llama(text, out)
     parse_correctness(text, out)
     return out

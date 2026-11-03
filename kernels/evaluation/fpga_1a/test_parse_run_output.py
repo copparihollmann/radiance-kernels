@@ -13,6 +13,19 @@ The fixtures under testdata/parse_run_output/ are:
                                 exists in our corpus yet.
   failed-tohost-stdout.log      a synthetic failure shape
   quiet-stdout.log              a kernel that prints none of the fields
+
+  compute-btree-stdout.log      captured verbatim from the completed jobs of
+  compute-dot-1m-stdout.log     runs/hpc-v2-compute-instrumented-v1 (the
+  compute-gemm-bf16-512-        2SM_DRAM_v2 half), the first campaign to carry
+    stdout.log                  the a8b6bcd device-reported compute counters.
+  compute-hotspot3d-stdout.log  btree has executed_ops == useful_ops with
+                                executed_ops_distinguished=0; dot-1m is one of
+                                the three kernels that really can tell the two
+                                apart; gemm is the only kernel on the
+                                MX/Gemmini datapath (512 MAC/cycle, not 64
+                                ops/cycle) and the only one that publishes
+                                phase stamps; hotspot3d is the four-launch
+                                case.
 """
 
 import contextlib
@@ -234,6 +247,191 @@ class LlamaPrefillFields(unittest.TestCase):
         self.assertEqual(out["model_geometry"]["model"], "llama7b")
         self.assertEqual(out["per_op_rows"], 3)
         self.assertEqual(out["phase_table_rows"], 6)
+
+
+class ComputeCounters(unittest.TestCase):
+    """The device-reported COMPUTE axis (nightly/host.h, added by a8b6bcd).
+
+    Every number asserted here was printed by the hardware and is copied out of
+    the captured fixture; none of it is recomputed by the parser.
+    """
+
+    def test_btree_compute_block(self):
+        out = parsed("compute-btree-stdout.log")
+        self.assertEqual(out["compute"], {
+            "op_unit": "integer-compare-add",
+            "datapath": "scalar-simt",
+            "useful_ops": 193986560,
+            "executed_ops": 193986560,
+            "executed_ops_distinguished": 0,
+            "peak_ops_per_cycle": 64,
+            "util_bp": 164,
+            "util_pct": 1.64,
+            "executed_util_bp": 164,
+            "executed_util_pct": 1.64,
+            "window_cycles": 184187406,
+        })
+
+    def test_executed_equals_useful_when_undistinguished(self):
+        compute = parsed("compute-btree-stdout.log")["compute"]
+        self.assertEqual(compute["executed_ops_distinguished"], 0)
+        self.assertEqual(compute["executed_ops"], compute["useful_ops"])
+        self.assertEqual(compute["executed_util_bp"], compute["util_bp"])
+
+    def test_compute_window_is_the_scraped_kernel_cycles(self):
+        for name in ("compute-btree-stdout.log", "compute-dot-1m-stdout.log",
+                     "compute-gemm-bf16-512-stdout.log"):
+            with self.subTest(fixture=name):
+                out = parsed(name)
+                self.assertEqual(out["compute"]["window_cycles"],
+                                 out["kernel_cycles"])
+
+    def test_btree_detail(self):
+        out = parsed("compute-btree-stdout.log")
+        self.assertEqual(out["compute_detail"],
+                         {"btree_lookups": 524288,
+                          "btree_comparisons_per_lookup": 368})
+        # 524288 * 368 = 192937984 comparisons, plus the adds the op unit
+        # folds in; the parser does not recompute it, it only reports both.
+        self.assertNotIn("compute_launches", out)
+        self.assertNotIn("phase_stamps", out)
+
+    def test_dot_distinguishes_executed_from_useful(self):
+        out = parsed("compute-dot-1m-stdout.log")
+        compute = out["compute"]
+        self.assertEqual(compute["op_unit"], "flop")
+        self.assertEqual(compute["executed_ops_distinguished"], 1)
+        self.assertEqual(compute["useful_ops"], 2097151)
+        self.assertEqual(compute["executed_ops"], 2097662)
+        self.assertGreater(compute["executed_ops"], compute["useful_ops"])
+        detail = out["compute_detail"]
+        self.assertEqual(detail["dot_device_fp32_multiplies"], 1048576)
+        self.assertEqual(detail["dot_device_fp32_adds"], 1049086)
+        self.assertEqual(detail["dot_threads_per_threadblock"], 256)
+        self.assertEqual(detail["dot_host_software_float_adds"], 1)
+        # the device's own two halves add up to the executed total it printed
+        self.assertEqual(detail["dot_device_fp32_multiplies"] +
+                         detail["dot_device_fp32_adds"],
+                         compute["executed_ops"])
+
+    def test_gemm_is_the_mx_gemmini_datapath(self):
+        out = parsed("compute-gemm-bf16-512-stdout.log")
+        compute = out["compute"]
+        self.assertEqual(compute["op_unit"], "mac")
+        self.assertEqual(compute["datapath"], "mx-gemmini")
+        # 256 MAC/cycle/cluster x 2 clusters, not the 64 scalar ops/cycle the
+        # other twenty report.
+        self.assertEqual(compute["peak_ops_per_cycle"], 512)
+        self.assertEqual(compute["useful_ops"], 134217728)
+        self.assertEqual(compute["util_bp"], 7971)
+        self.assertEqual(compute["util_pct"], 79.71)
+        detail = out["compute_detail"]
+        self.assertEqual(detail["useful_flop_ops"], 2 * compute["useful_ops"])
+        self.assertEqual(detail["peak_flop_per_cycle"],
+                         2 * compute["peak_ops_per_cycle"])
+        self.assertEqual(detail["gemm_c0_fill_cycles"], 36693)
+        self.assertEqual(detail["gemm_c0_compute_cycles"], 288583)
+        self.assertEqual(detail["gemm_c0_drain_cycles"], 3449)
+        self.assertEqual(detail["gemm_c0_compute_util_bp"], 9083)
+
+    def test_gemm_phase_stamps(self):
+        out = parsed("compute-gemm-bf16-512-stdout.log")
+        self.assertEqual(out["phase_stamps_count"], 4)
+        self.assertEqual(out["phase_stamps"][:2], [
+            {"cluster": 0, "index": 0, "cycles": 38114},
+            {"cluster": 0, "index": 1, "cycles": 326697},
+        ])
+        # cluster 1 published zeros; they are reported as printed, not dropped
+        # and not turned into an absence.
+        self.assertEqual([row["cycles"] for row in out["phase_stamps"][2:]],
+                         [0, 0])
+
+    def test_hotspot3d_launches_are_a_list_not_n_flat_keys(self):
+        out = parsed("compute-hotspot3d-stdout.log")
+        self.assertEqual(out["compute_launches_count"], 4)
+        self.assertEqual([row["index"] for row in out["compute_launches"]],
+                         [0, 1, 2, 3])
+        for row in out["compute_launches"]:
+            self.assertEqual(sorted(row),
+                             ["compute_util_bp", "cycles", "executed_ops",
+                              "index", "useful_ops"])
+        for key in out:
+            self.assertFalse(key.startswith("launch_"), key)
+        self.assertEqual(out["compute_detail"]["hotspot3d_launches"], 4)
+        self.assertEqual(out["compute_detail"]["hotspot3d_ops_per_update"], 17)
+
+    def test_hotspot3d_launch_totals_reconstruct_the_aggregate(self):
+        out = parsed("compute-hotspot3d-stdout.log")
+        compute = out["compute"]
+        # This is the field that fixes hotspot3d's roofline: the aggregate
+        # window fuses four launches, and the per-launch split recovers them.
+        self.assertEqual(out["compute_launches_cycles_total"],
+                         compute["window_cycles"])
+        self.assertEqual(out["compute_launches_useful_ops_total"],
+                         compute["useful_ops"])
+        self.assertEqual(out["compute_launches_executed_ops_total"],
+                         compute["executed_ops"])
+        per_launch = {row["useful_ops"] for row in out["compute_launches"]}
+        self.assertEqual(len(per_launch), 1)
+        self.assertEqual(per_launch.pop() * 4, compute["useful_ops"])
+
+    def test_pre_instrumentation_log_has_no_compute_fields(self):
+        out = parsed("hpc-firesim-stdout.log")
+        for key in ("compute", "compute_detail", "compute_launches",
+                    "compute_launches_count", "phase_stamps"):
+            self.assertNotIn(key, out)
+
+    def test_counters_must_own_their_whole_line(self):
+        # The FireSim driver dumps a plusargs line full of key=value pairs and
+        # the memory model prints its own; nothing embedded in a longer line
+        # may be mistaken for a counter.
+        out = parse_text(
+            "+autocounter-readrate=0 +netbw0=200 useful_ops=5\n"
+            "note: stream_fp_ops=7 here\n"
+            "[FASED] configuration register dramTimings_tCAS=14\n"
+            "launch_0_cycles=11 trailing words\n")
+        self.assertNotIn("compute", out)
+        self.assertNotIn("compute_detail", out)
+        self.assertNotIn("compute_launches", out)
+
+    def test_partial_block_reports_only_what_was_printed(self):
+        out = parse_text("useful_ops=10\ncompute_window_cycles=100\n")
+        self.assertEqual(out["compute"],
+                         {"useful_ops": 10, "window_cycles": 100})
+        self.assertNotIn("executed_ops", out["compute"])
+        self.assertNotIn("util_pct", out["compute"])
+
+    def test_launch_totals_need_every_launch_to_report_the_field(self):
+        out = parse_text("launch_0_cycles=10\nlaunch_0_useful_ops=4\n"
+                         "launch_1_cycles=20\n")
+        self.assertEqual(out["compute_launches_count"], 2)
+        self.assertEqual(out["compute_launches_cycles_total"], 30)
+        self.assertNotIn("compute_launches_useful_ops_total", out)
+
+    def test_last_occurrence_wins(self):
+        out = parse_text("useful_ops=1\ncompute_op_unit=flop\n"
+                         "useful_ops=2\ncompute_op_unit=mac\n")
+        self.assertEqual(out["compute"]["useful_ops"], 2)
+        self.assertEqual(out["compute"]["op_unit"], "mac")
+
+    def test_carriage_returns_from_the_uart_do_not_hide_a_counter(self):
+        out = parse_text("useful_ops=5\r\ncompute_op_unit=flop\r\n"
+                         "btree_lookups=2\r\nlaunch_0_cycles=3\r\n"
+                         "phase_stamp_c0_0=9\r\n")
+        self.assertEqual(out["compute"], {"useful_ops": 5, "op_unit": "flop"})
+        self.assertEqual(out["compute_detail"], {"btree_lookups": 2})
+        self.assertEqual(out["compute_launches"], [{"index": 0, "cycles": 3}])
+        self.assertEqual(out["phase_stamps_count"], 1)
+
+    def test_launch_record_index_cannot_be_overwritten(self):
+        out = parse_text("launch_2_cycles=10\nlaunch_2_index=99\n")
+        self.assertEqual(out["compute_launches"],
+                         [{"index": 2, "cycles": 10}])
+
+    def test_detail_object_is_bounded(self):
+        text = "".join(f"stream_k{i}={i}\n" for i in range(4096))
+        out = parse_text(text)
+        self.assertEqual(len(out["compute_detail"]), 256)
 
 
 class Totality(unittest.TestCase):

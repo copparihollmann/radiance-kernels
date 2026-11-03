@@ -39,10 +39,22 @@ from parse_run_output import parse_job_dir  # noqa: E402
 # Lists that are kept whole in parsed.json / the JSONL but not exploded into
 # CSV columns (a 46-row llama phase table would add hundreds of columns).
 BULK_LISTS = ("core_cycles", "cyclotron_cluster_cycles", "gmem_checks",
-              "phase_table", "bf16_checks", "byte_checks", "per_op", "sources")
+              "phase_table", "bf16_checks", "byte_checks", "per_op", "sources",
+              "compute_launches", "phase_stamps")
 
 RESULT_COLUMNS = ("id", "status", "returncode", "kernel_cycles",
                   "per_sm_timing_complete", "wall_seconds", "parser_error")
+
+# parsed["compute"] key -> CSV column.  The column is the name the device
+# actually printed, so a CSV cell can be grepped straight out of a stdout.log;
+# keys not listed here already carry that name.
+COMPUTE_CSV_COLUMNS = {
+    "op_unit": "compute_op_unit",
+    "datapath": "compute_datapath",
+    "util_bp": "compute_util_bp",
+    "util_pct": "compute_util_pct",
+    "window_cycles": "compute_window_cycles",
+}
 
 
 def flatten(parsed: dict) -> dict:
@@ -54,6 +66,15 @@ def flatten(parsed: dict) -> dict:
         if key == "model_geometry" and isinstance(value, dict):
             for sub, item in value.items():
                 row[f"geometry_{sub}"] = item
+            continue
+        if key == "compute" and isinstance(value, dict):
+            for sub, item in value.items():
+                row[COMPUTE_CSV_COLUMNS.get(sub, sub)] = item
+            continue
+        if key == "compute_detail" and isinstance(value, dict):
+            # Already namespaced per kernel (btree_lookups, spmv_executed_macs)
+            # and disjoint across kernels, so carried through unprefixed.
+            row.update(value)
             continue
         if key == "parse_errors":
             row["parse_errors"] = "; ".join(str(v) for v in value)
@@ -73,6 +94,16 @@ def flatten(parsed: dict) -> dict:
         for field in ("count", "cycles", "share_pct", "mesh_util_pct"):
             if field in op:
                 row[f"op_{op['op']}_{field}"] = op[field]
+    # hotspot3d's four host-sequenced launches: kept whole in parsed.json and
+    # exploded here, since four launches x four fields is a bounded widening
+    # and the per-launch cycle split is the point of the field.
+    for launch in parsed.get("compute_launches", []):
+        for field, value in launch.items():
+            if field != "index":
+                row[f"launch{launch['index']}_{field}"] = value
+    for stamp in parsed.get("phase_stamps", []):
+        row[f"phase_stamp_c{stamp['cluster']}_{stamp['index']}"] = \
+            stamp["cycles"]
     return row
 
 

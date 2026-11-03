@@ -1,0 +1,234 @@
+=== HPC FASED profile interval: 10000 target cycles ===
+=== HPC FASED profile destination: /scratch/agustin/radiance-fpga-1a/runs/hpc-v2-compute-instrumented-v1/jobs/firesim-2sm-dram-v2-quadrank--guarded-profile-btree--measure-0/memory-profile ===
+### Config : 2SM_DRAM_v2 (FireSimE4M3MxGemminiTwoClusterHBMRadianceConfig-FRFCFS8GBQuadRank)
+### FPGA   : 1a:00.0
+### Bitstr : /scratch/agustin/radiance-fpga-1a/runs/fpga-runtime-state/sim_slot_1a/corigine_mimicturbo_gt/firesim.bit
+### Driver : /scratch/agustin/radiance-fpga-1a/artifacts/nicolas-fpga-assets-v2-candidates/radiance-bitstreams/FireSim-corigine_mimicturbo_gt-radiance2SM_DRAM_v2
+### Load   : /scratch/agustin/radiance-fpga-1a/runs/hpc-v2-compute-instrumented-v1/builds/btree/2sm/kernel.accepted-device-profile-host.soc.elf
+
+=== Programming FPGA (passwordless; flash serialized across parallel runs) ===
+=== Verifying FPGA 1a:00.0 is quiesced before programming ===
+:INFO: Writing to /sys/devices/pci0000:17/0000:17:00.0/0000:18:00.0/0000:19:08.0/0000:1a:00.0/remove: 1
+:INFO: Successfully programmed FPGA 1a with /scratch/agustin/radiance-fpga-1a/runs/fpga-runtime-state/sim_slot_1a/corigine_mimicturbo_gt/firesim.bit
+:INFO: Writing to /sys/bus/pci/rescan: 1
+=== Fixing xdma / pcie perms ===
+=== Bring-up done ===
+
+=== Launching simulation (no root needed) ===
+=== Running kernel.accepted-device-profile-host.soc.elf (1 prog) on FPGA 1a:00.0 (fastloadmem) (profile@10000) ===
+    /scratch/agustin/radiance-fpga-1a/runs/hpc-v2-compute-instrumented-v1/builds/btree/2sm/kernel.accepted-device-profile-host.soc.elf
+=== FASED runtime settings: +mm_useHardwareDefaultRuntimeSettings_0 +mm_useHardwareDefaultRuntimeSettings_1 +mm_useHardwareDefaultRuntimeSettings_2 +mm_useHardwareDefaultRuntimeSettings_3 +mm_useHardwareDefaultRuntimeSettings_4 ===
+entered simulation flow execution
+finished waiting
+Zeroing out FPGA DRAM. This will take a few seconds...
+[FASED] Using hardware default of 2 for configuration register backendLatency
+[FASED] Using hardware default of 7 for configuration register bankAddr_mask
+[FASED] Using hardware default of 13 for configuration register bankAddr_offset
+[FASED] Using hardware default of 0 for configuration register dramTimings_tAL
+[FASED] Using hardware default of 14 for configuration register dramTimings_tCAS
+[FASED] Using hardware default of 4 for configuration register dramTimings_tCCD
+[FASED] Using hardware default of 1 for configuration register dramTimings_tCMD
+[FASED] Using hardware default of 10 for configuration register dramTimings_tCWD
+[FASED] Using hardware default of 25 for configuration register dramTimings_tFAW
+[FASED] Using hardware default of 33 for configuration register dramTimings_tRAS
+[FASED] Using hardware default of 47 for configuration register dramTimings_tRC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRCD
+[FASED] Using hardware default of 7800 for configuration register dramTimings_tREFI
+[FASED] Using hardware default of 160 for configuration register dramTimings_tRFC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRP
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRRD
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRTP
+[FASED] Using hardware default of 2 for configuration register dramTimings_tRTRS
+[FASED] Using hardware default of 15 for configuration register dramTimings_tWR
+[FASED] Using hardware default of 8 for configuration register dramTimings_tWTR
+[FASED] Using hardware default of 1 for configuration register openPagePolicy
+[FASED] Using hardware default of 3 for configuration register rankAddr_mask
+[FASED] Using hardware default of 16 for configuration register rankAddr_offset
+[FASED] Using hardware default of 0 for configuration register relaxFunctionalModel
+[FASED] Using hardware default of 32767 for configuration register rowAddr_mask
+[FASED] Using hardware default of 18 for configuration register rowAddr_offset
+[FASED] Using hardware default of 8 for configuration register schedulerWindowSize
+[FASED] Using hardware default of 8 for configuration register transactionQueueDepth
+[FASED] Model 0 accepted 0 explicit runtime settings; hardware defaults enabled
+[FASED] Using hardware default of 2 for configuration register backendLatency
+[FASED] Using hardware default of 7 for configuration register bankAddr_mask
+[FASED] Using hardware default of 13 for configuration register bankAddr_offset
+[FASED] Using hardware default of 0 for configuration register dramTimings_tAL
+[FASED] Using hardware default of 14 for configuration register dramTimings_tCAS
+[FASED] Using hardware default of 4 for configuration register dramTimings_tCCD
+[FASED] Using hardware default of 1 for configuration register dramTimings_tCMD
+[FASED] Using hardware default of 10 for configuration register dramTimings_tCWD
+[FASED] Using hardware default of 25 for configuration register dramTimings_tFAW
+[FASED] Using hardware default of 33 for configuration register dramTimings_tRAS
+[FASED] Using hardware default of 47 for configuration register dramTimings_tRC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRCD
+[FASED] Using hardware default of 7800 for configuration register dramTimings_tREFI
+[FASED] Using hardware default of 160 for configuration register dramTimings_tRFC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRP
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRRD
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRTP
+[FASED] Using hardware default of 2 for configuration register dramTimings_tRTRS
+[FASED] Using hardware default of 15 for configuration register dramTimings_tWR
+[FASED] Using hardware default of 8 for configuration register dramTimings_tWTR
+[FASED] Using hardware default of 1 for configuration register openPagePolicy
+[FASED] Using hardware default of 3 for configuration register rankAddr_mask
+[FASED] Using hardware default of 16 for configuration register rankAddr_offset
+[FASED] Using hardware default of 0 for configuration register relaxFunctionalModel
+[FASED] Using hardware default of 32767 for configuration register rowAddr_mask
+[FASED] Using hardware default of 18 for configuration register rowAddr_offset
+[FASED] Using hardware default of 8 for configuration register schedulerWindowSize
+[FASED] Using hardware default of 8 for configuration register transactionQueueDepth
+[FASED] Model 1 accepted 0 explicit runtime settings; hardware defaults enabled
+[FASED] Using hardware default of 2 for configuration register backendLatency
+[FASED] Using hardware default of 7 for configuration register bankAddr_mask
+[FASED] Using hardware default of 13 for configuration register bankAddr_offset
+[FASED] Using hardware default of 0 for configuration register dramTimings_tAL
+[FASED] Using hardware default of 14 for configuration register dramTimings_tCAS
+[FASED] Using hardware default of 4 for configuration register dramTimings_tCCD
+[FASED] Using hardware default of 1 for configuration register dramTimings_tCMD
+[FASED] Using hardware default of 10 for configuration register dramTimings_tCWD
+[FASED] Using hardware default of 25 for configuration register dramTimings_tFAW
+[FASED] Using hardware default of 33 for configuration register dramTimings_tRAS
+[FASED] Using hardware default of 47 for configuration register dramTimings_tRC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRCD
+[FASED] Using hardware default of 7800 for configuration register dramTimings_tREFI
+[FASED] Using hardware default of 160 for configuration register dramTimings_tRFC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRP
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRRD
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRTP
+[FASED] Using hardware default of 2 for configuration register dramTimings_tRTRS
+[FASED] Using hardware default of 15 for configuration register dramTimings_tWR
+[FASED] Using hardware default of 8 for configuration register dramTimings_tWTR
+[FASED] Using hardware default of 1 for configuration register openPagePolicy
+[FASED] Using hardware default of 3 for configuration register rankAddr_mask
+[FASED] Using hardware default of 16 for configuration register rankAddr_offset
+[FASED] Using hardware default of 0 for configuration register relaxFunctionalModel
+[FASED] Using hardware default of 32767 for configuration register rowAddr_mask
+[FASED] Using hardware default of 18 for configuration register rowAddr_offset
+[FASED] Using hardware default of 8 for configuration register schedulerWindowSize
+[FASED] Using hardware default of 8 for configuration register transactionQueueDepth
+[FASED] Model 2 accepted 0 explicit runtime settings; hardware defaults enabled
+[FASED] Using hardware default of 2 for configuration register backendLatency
+[FASED] Using hardware default of 7 for configuration register bankAddr_mask
+[FASED] Using hardware default of 13 for configuration register bankAddr_offset
+[FASED] Using hardware default of 0 for configuration register dramTimings_tAL
+[FASED] Using hardware default of 14 for configuration register dramTimings_tCAS
+[FASED] Using hardware default of 4 for configuration register dramTimings_tCCD
+[FASED] Using hardware default of 1 for configuration register dramTimings_tCMD
+[FASED] Using hardware default of 10 for configuration register dramTimings_tCWD
+[FASED] Using hardware default of 25 for configuration register dramTimings_tFAW
+[FASED] Using hardware default of 33 for configuration register dramTimings_tRAS
+[FASED] Using hardware default of 47 for configuration register dramTimings_tRC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRCD
+[FASED] Using hardware default of 7800 for configuration register dramTimings_tREFI
+[FASED] Using hardware default of 160 for configuration register dramTimings_tRFC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRP
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRRD
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRTP
+[FASED] Using hardware default of 2 for configuration register dramTimings_tRTRS
+[FASED] Using hardware default of 15 for configuration register dramTimings_tWR
+[FASED] Using hardware default of 8 for configuration register dramTimings_tWTR
+[FASED] Using hardware default of 1 for configuration register openPagePolicy
+[FASED] Using hardware default of 3 for configuration register rankAddr_mask
+[FASED] Using hardware default of 16 for configuration register rankAddr_offset
+[FASED] Using hardware default of 0 for configuration register relaxFunctionalModel
+[FASED] Using hardware default of 32767 for configuration register rowAddr_mask
+[FASED] Using hardware default of 18 for configuration register rowAddr_offset
+[FASED] Using hardware default of 8 for configuration register schedulerWindowSize
+[FASED] Using hardware default of 8 for configuration register transactionQueueDepth
+[FASED] Model 3 accepted 0 explicit runtime settings; hardware defaults enabled
+[FASED] Using hardware default of 2 for configuration register backendLatency
+[FASED] Using hardware default of 7 for configuration register bankAddr_mask
+[FASED] Using hardware default of 13 for configuration register bankAddr_offset
+[FASED] Using hardware default of 0 for configuration register dramTimings_tAL
+[FASED] Using hardware default of 14 for configuration register dramTimings_tCAS
+[FASED] Using hardware default of 4 for configuration register dramTimings_tCCD
+[FASED] Using hardware default of 1 for configuration register dramTimings_tCMD
+[FASED] Using hardware default of 10 for configuration register dramTimings_tCWD
+[FASED] Using hardware default of 25 for configuration register dramTimings_tFAW
+[FASED] Using hardware default of 33 for configuration register dramTimings_tRAS
+[FASED] Using hardware default of 47 for configuration register dramTimings_tRC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRCD
+[FASED] Using hardware default of 7800 for configuration register dramTimings_tREFI
+[FASED] Using hardware default of 160 for configuration register dramTimings_tRFC
+[FASED] Using hardware default of 14 for configuration register dramTimings_tRP
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRRD
+[FASED] Using hardware default of 8 for configuration register dramTimings_tRTP
+[FASED] Using hardware default of 2 for configuration register dramTimings_tRTRS
+[FASED] Using hardware default of 15 for configuration register dramTimings_tWR
+[FASED] Using hardware default of 8 for configuration register dramTimings_tWTR
+[FASED] Using hardware default of 1 for configuration register openPagePolicy
+[FASED] Using hardware default of 3 for configuration register rankAddr_mask
+[FASED] Using hardware default of 16 for configuration register rankAddr_offset
+[FASED] Using hardware default of 0 for configuration register relaxFunctionalModel
+[FASED] Using hardware default of 32767 for configuration register rowAddr_mask
+[FASED] Using hardware default of 18 for configuration register rowAddr_offset
+[FASED] Using hardware default of 8 for configuration register schedulerWindowSize
+[FASED] Using hardware default of 8 for configuration register transactionQueueDepth
+[FASED] Model 4 accepted 0 explicit runtime settings; hardware defaults enabled
+Commencing simulation.
++domain found: 0x0000
++bus found: 0x1a
++device found: 0x00
++function found: 0x0
++bar found: 0x0
+Using: 0000:1a:00.0, BAR ID: 0, PCI Vendor ID: 0x10ee, PCI Device ID: 0x903f
+Opening /sys/bus/pci/devices/0000:1a:00.0/vendor
+Opening /sys/bus/pci/devices/0000:1a:00.0/device
+examining xdma/.
+examining xdma/..
+examining xdma/xdma140_events_4
+examining xdma/xdma140_events_14
+examining xdma/xdma140_h2c_2
+examining xdma/xdma140_events_2
+examining xdma/xdma140_events_12
+examining xdma/xdma140_h2c_0
+Using xdma write queue: /dev/xdma140_h2c_0
+Using xdma read queue: /dev/xdma140_c2h_0
+UART0 is here (stdin/stdout).
+command line for program 0. argc=33:
++permissive +zero-out-dram +fastloadmem +mm_useHardwareDefaultRuntimeSettings_0 +mm_useHardwareDefaultRuntimeSettings_1 +mm_useHardwareDefaultRuntimeSettings_2 +mm_useHardwareDefaultRuntimeSettings_3 +mm_useHardwareDefaultRuntimeSettings_4 +macaddr0=00:12:6D:00:00:02 +niclog0=niclog0 +trace-select=1 +trace-start=0 +trace-end=-1 +trace-output-format=0 +dwarf-file-name=/scratch/agustin/radiance-fpga-1a/runs/hpc-v2-compute-instrumented-v1/builds/btree/2sm/kernel.accepted-device-profile-host.soc.elf-dwarf +autocounter-readrate=0 +autocounter-filename-base=AUTOCOUNTERFILE +profile-interval=10000 +print-start=0 +print-end=-1 +linklatency0=6405 +netbw0=200 +shmemportname0=default +init-debug +domain=0x0000 +bus=0x1a +device=0x00 +function=0x0 +bar=0x0 +pci-vendor=0x10ee +pci-device=0x903f +permissive-off /scratch/agustin/radiance-fpga-1a/runs/hpc-v2-compute-instrumented-v1/builds/btree/2sm/kernel.accepted-device-profile-host.soc.elf 
+FireSim fingerprint: 0x46697265
+tsibridge_t::tick skipping tick
+tsibridge_t::tick skipping tick
+tsibridge_t::tick skipping tick
+tsibridge_t::tick skipping tick
+tsibridge_t::tick skipping tick
+tsibridge_t::tick skipping tick
+tsibridge_t::tick skipping tick
+tsibridge_t::tick skipping tick
+profile_guard_cycles=1000000
+cluster 0 core 0: start=1628 end=184189005 cycles=184187377
+cluster 0 core 1: start=1627 end=184188951 cycles=184187324
+cluster 1 core 0: start=1599 end=184117333 cycles=184115734
+cluster 1 core 1: start=1600 end=184117265 cycles=184115665
+kernel_cycles=184187406
+btree_lookups=524288
+btree_comparisons_per_lookup=368
+compute_op_unit=integer-compare-add
+compute_datapath=scalar-simt
+useful_ops=193986560
+executed_ops=193986560
+executed_ops_distinguished=0
+peak_ops_per_cycle=64
+compute_util_bp=164
+executed_util_bp=164
+compute_window_cycles=184187406
+BTREE_CHECK point_n=262144 point_bad=0 point_digest=0x1e8607bdea745abb point_digest_ok=1 range_n=131072 range_bad=0 range_digest=0xc44e15b63067d8c6 range_digest_ok=1 guards=1
+PASS
+
+Simulation complete.
+*** PASSED *** after 469115012 cycles
+
+Emulation Performance Summary
+------------------------------
+Wallclock Time Elapsed: 69.6 s
+Host Frequency: 10.000 MHz
+Target Cycles Emulated: 469115012
+Effective Target Frequency: 6.737 MHz
+FMR: 1.48
+Note: The latter three figures are based on the fastest target clock.
+=== archived memory stats -> /scratch/agustin/radiance-fpga-1a/runs/fpga-runtime-state/sim_slot_1a/memstats_kernel.accepted-device-profile-host.soc_20261102_220656 ===
+
+### Simulation finished (exit 0). Console log: /scratch/agustin/radiance-fpga-1a/runs/fpga-runtime-state/sim_slot_1a/uartlog
+=== archived profiled HPC counters -> /scratch/agustin/radiance-fpga-1a/runs/hpc-v2-compute-instrumented-v1/jobs/firesim-2sm-dram-v2-quadrank--guarded-profile-btree--measure-0/memory-profile (46915 CSV rows max) ===
