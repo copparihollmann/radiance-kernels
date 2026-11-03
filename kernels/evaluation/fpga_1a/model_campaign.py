@@ -136,6 +136,11 @@ def workload_checks(row: dict, result: dict, elf: Path) -> tuple[list[str], list
         address = output_address(elf)
         if family == "spatter":
             address += int(result.get("output_pad_cache_lines", 0)) * 64
+        if family == "stream":
+            # kernels/stream/run.py --array-offset-bytes pads the kernel's .bss
+            # contribution ahead of stream_guard_before, so the output array sits
+            # that much further past the zero-sized RV32 BSS marker.
+            address += int(result.get("stream_array_offset_bytes", 0))
         if family in ("stream", "stream_dot"):
             words = int(result.get("output_element_count", result["stream_elements"]))
         elif family in ("stencil3d", "nearn", "spmv_jds", "sfilter"):

@@ -67,11 +67,23 @@ def prepare(kind: str, elements: int, out: Path,
             block_cyclic_lines: bool = False,
             block_cyclic_chunk_lines: int = 0,
             robust_cluster_l1_manager: bool = False,
-            robust_split_l1_drain: bool = False) -> dict:
+            robust_split_l1_drain: bool = False,
+            array_offset_bytes: int = 0) -> dict:
     if elements < 2 or elements & 1:
         raise ValueError("elements must be an even integer of at least 2")
-    if elements * 12 + 0x100000 > 0x70000000:
+    if elements * 12 + 0x100000 + 2 * array_offset_bytes > 0x70000000:
         raise ValueError("STREAM arrays exceed the GPU DRAM address window")
+    # The GPU address hash (radiance AddressHashParams, soc/scramble_gpu_elf.py)
+    # sends consecutive 32 B units round-robin to 4 L2 slices, each with its own
+    # DRAM channel, and keeps each slice's units dense.  A client-address offset
+    # of N bytes therefore becomes an offset of N/4 bytes inside the slice, and
+    # it is the SLICE-LOCAL address that the DDR3 map decodes: bank =
+    # addr[15:13], rank = addr[17:16] (midas DramCommon.scala:118-133).  A
+    # multiple of 128 keeps the shift an exact whole number of 32 B units, so
+    # the arrays stay line-aligned in slice-local space; 32 KiB is one bank and
+    # 256 KiB is one rank.
+    if array_offset_bytes < 0 or array_offset_bytes % 128:
+        raise ValueError("array_offset_bytes must be a nonnegative multiple of 128")
     if warps_per_core not in (1, 2, 4, 8):
         raise ValueError("warps_per_core must be 1, 2, 4, or 8")
     if not math.isfinite(scalar) or scalar <= 0.0:
@@ -124,14 +136,22 @@ def prepare(kind: str, elements: int, out: Path,
         f"#define STREAM_BLOCK_CYCLIC_LINES {int(block_cyclic_lines)}",
     ]
     (GENERATED / "config.h").write_text("\n".join(config) + "\n")
+    # Array k (in link order: the two .data inputs, then the .bss output) is
+    # pushed k * array_offset_bytes further along, so every pair of arrays is
+    # separated by a different multiple of the offset.  The padding goes BEFORE
+    # stream_guard_before so the guard band stays immediately adjacent to the
+    # output array and still detects an overrun.
     asm = ['.section .data,"aw",@progbits']
-    for name in "abc":
-        if name == output:
-            continue
+    for index, name in enumerate(n for n in "abc" if n != output):
+        if index and array_offset_bytes:
+            asm += [f".zero {array_offset_bytes}"]
         asm += [".balign 64", f".globl stream_{name}", f"stream_{name}:",
                 f'.incbin "generated/{name}.bin"']
+    asm += ['.section .bss,"aw",@nobits']
+    if array_offset_bytes:
+        asm += [".balign 64", f".zero {array_offset_bytes}"]
     asm += [
-        '.section .bss,"aw",@nobits', '.balign 64',
+        '.balign 64',
         '.globl stream_guard_before', 'stream_guard_before:', '.zero 64',
         f'.globl stream_{output}', f'stream_{output}:', f'.zero {elements * 4}',
         '.globl stream_guard_after', 'stream_guard_after:', '.zero 64',
@@ -170,7 +190,8 @@ def prepare(kind: str, elements: int, out: Path,
                 f"l1manager{int(robust_cluster_l1_manager)}:"
                 f"splitl1{int(robust_split_l1_drain)}:"
                 f"post{robust_post_spin}:blockcyclic{int(block_cyclic_lines)}:"
-                f"chunklines{block_cyclic_chunk_lines}".encode()
+                f"chunklines{block_cyclic_chunk_lines}:"
+                f"arrayoffset{array_offset_bytes}".encode()
             ).hexdigest(),
             "case": KINDS[kind],
             "kernel_revision": subprocess.check_output(
@@ -198,6 +219,8 @@ def prepare(kind: str, elements: int, out: Path,
             "robust_post_spin": robust_post_spin,
             "stream_block_cyclic_lines": block_cyclic_lines,
             "stream_block_cyclic_chunk_lines": block_cyclic_chunk_lines,
+            "stream_array_offset_bytes": array_offset_bytes,
+            "stream_array_offset_slice_local_bytes": array_offset_bytes // 4,
             "diagnostic_readback": diagnostic_readback,
             "checker_word_pairs": elements // 2}
     (GENERATED / "manifest.json").write_text(json.dumps(case, indent=2) + "\n")
@@ -237,6 +260,10 @@ def main() -> None:
                         help="round-robin complete 64-byte lines across physical SMs")
     parser.add_argument("--block-cyclic-chunk-lines", type=int, default=0,
                         help="round-robin chunks containing this many complete cache lines")
+    parser.add_argument("--array-offset-bytes", type=int, default=0,
+                        help="push array k of 3 by k*N client bytes, i.e. k*N/4 bytes in "
+                             "slice-local DRAM space after the 4-slice GPU address hash; "
+                             "32768 moves one DDR3 bank, 262144 moves one rank")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--full-host-check", action="store_true",
@@ -262,7 +289,8 @@ def main() -> None:
                    args.robust_post_spin, args.block_cyclic_lines,
                    args.block_cyclic_chunk_lines,
                    args.robust_cluster_l1_manager,
-                   args.robust_split_l1_drain)
+                   args.robust_split_l1_drain,
+                   args.array_offset_bytes)
     case["host_timing_requested"] = args.host_timing
     (out / "result.json").write_text(json.dumps(case, indent=2) + "\n")
     if args.prepare_only:

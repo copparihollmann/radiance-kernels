@@ -72,6 +72,23 @@ static inline void nightly_pb_write(uint32_t cluster, uint32_t slot, uint32_t v)
 }
 static inline uint64_t nightly_rdcycle(void) { uint64_t c; asm volatile("rdcycle %0" : "=r"(c)); return c; }
 
+/* Optional profiling-only quiet windows around the GPU interval.  This is a
+ * host-side build knob and defaults to zero, so ordinary binaries are
+ * unchanged.  A sufficiently long register-only spin lets periodic FASED
+ * snapshots observe settled traffic counters immediately before launch and
+ * after every END stamp, without adding cycles to the GPU START/END interval.
+ */
+#ifndef NIGHTLY_PROFILE_GUARD_CYCLES
+#define NIGHTLY_PROFILE_GUARD_CYCLES 0ull
+#endif
+static inline void nightly_profile_guard(void) {
+#if NIGHTLY_PROFILE_GUARD_CYCLES > 0
+  const uint64_t begin = nightly_rdcycle();
+  while (nightly_rdcycle() - begin < (uint64_t)NIGHTLY_PROFILE_GUARD_CYCLES)
+    asm volatile("nop" ::: "memory");
+#endif
+}
+
 /* ---- launch / wait ---------------------------------------------------------------------- */
 static inline void nightly_host_launch(uint32_t n_clusters, uint32_t arg = 0) {
   for (uint32_t cl = 0; cl < n_clusters; cl++) {
@@ -84,6 +101,11 @@ static inline void nightly_host_launch(uint32_t n_clusters, uint32_t arg = 0) {
     nightly_pb_write(cl, NIGHTLY_PB_CLUSTER, NIGHTLY_CLUSTER_TAG | cl);   /* see nightly_cluster_id */
   }
   asm volatile("fence" ::: "memory");
+#if NIGHTLY_PROFILE_GUARD_CYCLES > 0
+  nh_puts("profile_guard_cycles="); nh_putu(NIGHTLY_PROFILE_GUARD_CYCLES); nh_puts("\n");
+  nh_flush();
+  nightly_profile_guard();
+#endif
   /* Release the GPU soft reset (GPUResetAggregator, CanHaveGPUReset.scala: a write of 0 clears it).  The FireSim
    * configs hold the GPU in reset at power-on (WithGPUDefaultResetHeld); the VCS configs boot it, where this write
    * changes nothing.  The released cores boot and wait for LAUNCH below. */
@@ -117,6 +139,7 @@ static inline int nightly_host_wait(uint32_t n_clusters, uint64_t max_polls = 50
       *(volatile uint32_t *)NIGHTLY_HOST_GPU_RESET = 1u;
       asm volatile("fence" ::: "memory");
 #endif
+      nightly_profile_guard();
       return 1;
     }
   }

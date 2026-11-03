@@ -47,6 +47,39 @@ class StreamRunTest(unittest.TestCase):
             self.assertFalse(result["stream_block_cyclic_lines"])
             self.assertEqual(result["stream_block_cyclic_chunk_lines"], 0)
 
+    def test_array_offset_pads_between_arrays_without_changing_arithmetic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            baseline = run.prepare(
+                "triad", 64, Path(directory), full_host_check=True, sms=2,
+            )
+            plain = (run.ROOT / "data.S").read_text()
+            offset = run.prepare(
+                "triad", 64, Path(directory), full_host_check=True, sms=2,
+                array_offset_bytes=32768,
+            )
+            padded = (run.ROOT / "data.S").read_text()
+            # Moving a base address must not change what the kernel computes.
+            self.assertEqual(offset["expected_digest"], baseline["expected_digest"])
+            self.assertEqual(offset["stream_array_offset_bytes"], 32768)
+            # The GPU address hash divides a client-space shift by the slice count.
+            self.assertEqual(offset["stream_array_offset_slice_local_bytes"], 8192)
+            self.assertNotEqual(offset["suite_sha256"], baseline["suite_sha256"])
+            self.assertEqual(baseline["stream_array_offset_bytes"], 0)
+            self.assertNotIn(".zero 32768", plain)
+            # One pad between the two .data inputs, one ahead of the .bss guard,
+            # so array k of three is pushed k * 32768 bytes.
+            self.assertEqual(padded.count(".zero 32768"), 2)
+            # The guard band still sits immediately before the output array.
+            self.assertIn("stream_guard_before:\n.zero 64\n.globl stream_a",
+                          padded)
+
+    def test_array_offset_rejects_unaligned_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for bad in (-128, 100, 32769):
+                with self.assertRaises(ValueError):
+                    run.prepare("copy", 64, Path(directory), sms=1,
+                                array_offset_bytes=bad)
+
     def test_records_opt_in_cache_line_block_cyclic_partition(self):
         with tempfile.TemporaryDirectory() as directory:
             baseline = run.prepare(
