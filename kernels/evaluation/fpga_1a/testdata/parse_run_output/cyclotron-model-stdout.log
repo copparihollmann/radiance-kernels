@@ -1,0 +1,10 @@
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110001000..110001050] to [10001000..10001050]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110000000..110000068] to [10000000..10000068]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110002000..110003a50] to [10002000..10003a50]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110004000..11020600c] to [10004000..1020600c]
+Cyclotron: copy_elf: detected CPU-fused ELF; relocating section [110207000..1102070d4] to [10207000..102070d4]
+simulation finished after 182686 cycles
+Cyclotron: gmem check gemv-bf16-256x4096-staggered-end-post20k--2sm: PASS address=0x10207140 words=128 fnv64=b6c36c1bfdb82e5e nonzero_u64=64
+Cyclotron: nightly_cluster_cycles cluster=0 cycles=182607 start=53 end=182660
+Cyclotron: nightly_cluster_cycles cluster=1 cycles=182607 start=53 end=182660
+Cyclotron: nightly_kernel_cycles=182607

@@ -1,0 +1,2 @@
+# Captured console-log fixtures for test_parse_run_output.py are source, not output.
+!*.log

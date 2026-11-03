@@ -1,0 +1,36 @@
+llama_e2e llama7b: M=128 tokens at positions 896..1023 (KV cache 896, SK=1024) layers=1 D=4096 F=11008 heads=32/32 hd=128 vocab=32000 phases=6 (init 3) clusters=2
+cluster 0 core 0: start=1306 end=239003402 cycles=239002096
+cluster 0 core 1: start=1305 end=239003128 cycles=239001823
+cluster 1 core 0: start=1327 end=239004350 cycles=239003023
+cluster 1 core 1: start=1326 end=239005167 cycles=239003841
+kernel_cycles=239003862
+phase layer op cycles [MACs mesh_util]
+0 - init 19807898
+1 - init 7026221
+2 - init 35335925
+3 0 norm1 2089105
+4 0 attn 2392504 536870912 87.65%
+5 - lmhead 34467039 8388608000 95.07%
+== per op (all layers): op count cycles share [mesh_util]
+norm1 1 2089105 5.35%
+attn 1 2392504 6.13% 87.65%
+lmhead 1 34467039 88.31% 95.07%
+== model (first phase after init to the end of the LM head)
+model_cycles=39027316 phase_cycles=38948648 handshake_cycles=78668
+kernel_cycles=39027316
+cycles_per_layer=4560277 cycles_per_token=304901
+gemm_macs=8925478912 mesh_util_model=89.30%
+logits: nonfinite=0
+PASS
+
+Simulation complete.
+*** PASSED *** after 545296082 cycles
+
+Emulation Performance Summary
+------------------------------
+Wallclock Time Elapsed: 81.6 s
+Host Frequency: 10.000 MHz
+Target Cycles Emulated: 545296082
+Effective Target Frequency: 6.682 MHz
+FMR: 1.50
+Note: The latter three figures are based on the fastest target clock.

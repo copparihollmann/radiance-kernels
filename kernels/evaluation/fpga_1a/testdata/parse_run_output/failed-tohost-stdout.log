@@ -1,0 +1,14 @@
+FireSim fingerprint: 0x46697265
+cluster 0 core 0: start=100 end=200 cycles=100
+FAIL
+
+Simulation complete.
+*** FAILED *** (tohost = 3)
+
+Emulation Performance Summary
+------------------------------
+Wallclock Time Elapsed: 4.0 s
+Host Frequency: 10.000 MHz
+Target Cycles Emulated: 12345
+Effective Target Frequency: 0.031 MHz
+FMR: 324.00
