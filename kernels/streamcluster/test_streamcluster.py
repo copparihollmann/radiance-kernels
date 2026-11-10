@@ -140,7 +140,7 @@ class StreamClusterTest(unittest.TestCase):
 
     def test_invalid_or_unpinned_inputs_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(ValueError, "missing"):
+            with self.assertRaisesRegex(ValueError, "does not exist"):
                 port.verify_reference(Path(directory) / "not-a-repository")
             with self.assertRaisesRegex(ValueError, "divisible"):
                 port.prepare(127, 32, Path(directory) / "bad")

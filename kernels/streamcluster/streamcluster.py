@@ -23,10 +23,9 @@ from oracle import Dataset, float_word, fnv_bytes, fnv_words, make_dataset, pgai
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent))
 import hpc_presets  # noqa: E402  (needs ROOT.parent on the path)
+import vortex_reference  # noqa: E402  (needs ROOT.parent on the path)
 GENERATED = ROOT / "generated"
-DEFAULT_REFERENCE = Path(
-    "/scratch/agustin/radiance-fpga-1a/reference/vortex"
-)
+DEFAULT_REFERENCE = vortex_reference.default_path()
 
 DEFAULT_NUM = 128
 DEFAULT_DIM = 32
@@ -80,8 +79,7 @@ def git_output(repository: Path, *arguments: str) -> bytes:
 
 
 def verify_reference(repository: Path) -> dict:
-    if not repository.is_dir():
-        raise ValueError(f"pinned reference repository is missing: {repository}")
+    repository = vortex_reference.require(repository)
     head = git_output(repository, "rev-parse", "HEAD").decode().strip()
     if head != REFERENCE_REVISION:
         raise ValueError(f"reference HEAD mismatch: {head}")

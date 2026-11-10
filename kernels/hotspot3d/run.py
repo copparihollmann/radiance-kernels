@@ -19,8 +19,9 @@ import sys
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent))
 import hpc_presets  # noqa: E402  (needs ROOT.parent on the path)
+import vortex_reference  # noqa: E402  (needs ROOT.parent on the path)
 GENERATED = ROOT / "generated"
-REFERENCE_REPOSITORY = ROOT.parents[3] / "reference" / "vortex"
+REFERENCE_REPOSITORY = vortex_reference.default_path()
 DEFAULT_RISCV64_TOOLCHAIN = (
     ROOT.parents[3] / "toolchains" / "riscv-tools-prefix" / "riscv-tools"
 )

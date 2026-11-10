@@ -21,10 +21,9 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent))
 import hpc_presets  # noqa: E402  (needs ROOT.parent on the path)
+import vortex_reference  # noqa: E402  (needs ROOT.parent on the path)
 GENERATED = ROOT / "generated"
-DEFAULT_REFERENCE = Path(
-    "/scratch/agustin/radiance-fpga-1a/reference/vortex"
-)
+DEFAULT_REFERENCE = vortex_reference.default_path()
 
 REFERENCE_REPOSITORY = "vortexgpgpu/vortex"
 REFERENCE_REVISION = "b447578d9f3bb116d658c614cf3407153f0536da"
@@ -178,9 +177,7 @@ def parse_define(text: str, name: str) -> int:
 
 
 def verify_reference(repo: Path) -> dict[str, bytes]:
-    repo = repo.resolve()
-    if not repo.is_dir():
-        raise ValueError(f"reference repository does not exist: {repo}")
+    repo = vortex_reference.require(repo).resolve()
     head = git_output(repo, "rev-parse", "HEAD").decode().strip()
     if head != REFERENCE_REVISION:
         raise ValueError(
