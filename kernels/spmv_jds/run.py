@@ -421,7 +421,11 @@ def source_digest() -> str:
         ROOT.parent / "addr_hash_stamp.mk",
         ROOT.parents[1] / "lib/include/nightly/device.h",
         ROOT.parents[1] / "lib/include/nightly/host.h",
-        ROOT / "Makefile", ROOT / "run.py", ROOT / "kernel.cpp",
+        # hpc.mk and hpc_presets.py decide the cluster count and drain protocol,
+        # so they are part of what produced this ELF.
+        ROOT.parent / "hpc.mk", ROOT.parent / "hpc_presets.py",
+        ROOT / "Makefile", ROOT / "run.py", ROOT / "kernel.cpp", ROOT / "kernel_impl.hpp",
+        ROOT / "kernel_ilp2.cpp", ROOT / "kernel_ilp4.cpp",
         ROOT / "host.cpp", ROOT / "emit_symbols.py", ROOT / "test_run.py",
         ROOT / "README.md",
     )
@@ -498,6 +502,11 @@ def prepare(dataset: Dataset, out: Path, *, preset: str = hpc_presets.DEFAULT_PR
 
     boundary_initializer = "{" + ",".join(f"{value}u" for value in boundaries) + "}"
     config = [
+        # The cluster count the DATA was partitioned for.  hpc.mk supplies
+        # NIGHTLY_CLUSTERS from the preset, and the kernel static_asserts that
+        # the two agree, so a preset that does not match the data fails to build
+        # rather than producing wrong output.
+        f"#define HPC_SM_COUNT {sms}u",
         f"#define SPMV_DIMENSION {jds.dimension}u",
         f"#define SPMV_JDS_WARP_SIZE {JDS_WARP_SIZE}u",
         f"#define SPMV_JDS_DEPTH {len(jds.pointers)}u",
@@ -515,11 +524,6 @@ def prepare(dataset: Dataset, out: Path, *, preset: str = hpc_presets.DEFAULT_PR
     # exactly 0.0f, so counting zeros in data[] would undercount.
     ops = [
         "#pragma once",
-        # The cluster count the DATA was partitioned for.  hpc.mk supplies
-        # NIGHTLY_CLUSTERS from the preset, and the kernel static_asserts that
-        # the two agree, so a preset that does not match the data fails to build
-        # rather than producing wrong output.
-        f"#define HPC_SM_COUNT {sms}u",
         f"#define SPMV_EXPANDED_NNZ {sum(jds.row_nnz)}u",
         f"#define SPMV_STORED_NNZ {dataset.stored_nnz}u",
         f"#define SPMV_JDS_PADDED_ENTRIES {len(jds.data)}u",

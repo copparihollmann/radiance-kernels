@@ -124,6 +124,39 @@ struct MuOwnedSpace {
   }
 };
 
+// A grid-stride loop unrolled ILP ways, with a one-at-a-time tail so the caller
+// never has to make the extent a multiple of anything.
+//
+// ILP is not about issuing wider loads: Muon has no vector ISA and no VPU, and
+// a warp's 16 lanes already cover 16 consecutive elements.  It is about having
+// several independent chains in flight at once.  These kernels are limited by
+// how many line fills a cluster can keep outstanding, so an unrolled body whose
+// slots do not depend on each other buys more than any amount of extra
+// arithmetic would.  Give each slot its own temporaries; if the unrolled
+// iterations share registers the core stalls on WAR and WAW hazards instead.
+template <uint32_t ILP, typename Body>
+static inline void mu_grid_stride(uint32_t begin, uint32_t end, uint32_t tid,
+                                  uint32_t threads_per_block, Body body) {
+  static_assert(ILP > 0u, "ILP must be at least 1");
+  if (begin >= end) return;
+  const uint32_t step = threads_per_block * ILP;
+  const uint32_t span = threads_per_block * (ILP - 1u);
+  uint32_t i = begin + tid;
+  for (; i + span < end; i += step) {
+#pragma unroll
+    for (uint32_t u = 0; u < ILP; ++u) body(i + u * threads_per_block);
+  }
+  for (; i < end; i += threads_per_block) body(i);
+}
+
+// The same walk over the elements one cluster owns, under any policy.
+template <uint32_t ILP, typename Body>
+static inline void mu_grid_stride(const MuOwnedSpace& owned, uint32_t tid,
+                                  uint32_t threads_per_block, Body body) {
+  mu_grid_stride<ILP>(0u, owned.count, tid, threads_per_block,
+                      [&](uint32_t v) { body(owned[v]); });
+}
+
 // Contiguous: cluster 1 of 4 over 4102 elements starts at 1040 and owns 1040.
 static_assert(MuOwnedSpace::of<MuOwnership::kContiguous, 16u>(4102u, 4u, 1u)[0] ==
               1040u);

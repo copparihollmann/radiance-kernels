@@ -1,111 +1,86 @@
-#include <mu_intrinsics.h>
-#include <mu_schedule.h>
-#include <shared_mem.h>
+// Rodinia nearest-neighbour on Muon: one Euclidean distance per record.
+//
+// NEARN_ILP is the unroll factor; kernel.cpp builds the ILP=1 baseline and
+// kernel_ilp{2,4}.cpp the unrolled variants, the same arrangement as
+// kernels/vecadd.  The body is two loads, three FLOPs and a store, so the only
+// thing unrolling buys is more loads in flight -- which is the whole point
+// here, since a cluster runs out of outstanding line fills long before it runs
+// out of arithmetic.
+#ifndef NEARN_KERNEL_IMPL_HPP
+#define NEARN_KERNEL_IMPL_HPP
 
 #include <math.h>
 #include <stdint.h>
 
-#ifndef NEARN_NUM_WARPS
-#define NEARN_NUM_WARPS 4
-#endif
+#include "generated/config.h"
+#include <mu_partition.h>
+#include <nightly/device.h>
+
+// hpc.mk picks NIGHTLY_CLUSTERS from the preset; HPC_SM_COUNT is the cluster
+// count the generated data was partitioned for.  A mismatch means the ELF would
+// read someone else's share, so fail the build rather than the run.
+static_assert(NIGHTLY_CLUSTERS == HPC_SM_COUNT,
+              "preset cluster count must match the generated data");
 
 #ifndef NEARN_ILP
 #define NEARN_ILP 1
 #endif
-
-extern "C" uint32_t __mu_num_warps = NEARN_NUM_WARPS;
 
 struct LatLong {
   float lat;
   float lng;
 };
 
-struct NearnArgs {
-  __global LatLong* locations;
-  __global float* distances;
-  uint32_t num_records;
-  float lat;
-  float lng;
-};
+extern "C" {
+extern __global LatLong nearn_locations[];
+extern __global float nearn_distances[];
+}
 
 template <uint32_t ILP>
-static inline void nearn_impl(
-  void* arg,
-  uint32_t tid_in_threadblock,
-  uint32_t threads_per_threadblock,
-  uint32_t threadblock_id
-) {
-  static_assert(ILP > 0);
-  auto* args = reinterpret_cast<NearnArgs*>(arg);
-  (void)threadblock_id;
+static inline void nearn_kernel(uint32_t tid, uint32_t threads_per_block,
+                                uint32_t block_id) {
+  static_assert(ILP > 0u, "ILP must be at least 1");
+  // Preserve the original one-distance-per-record equation.  Complete groups
+  // of 16 float outputs (one 64-byte line) belong to one physical SM.
+  const MuOwnedSpace owned =
+      MuOwnedSpace::of<MuOwnership::kContiguous, 16u>(
+          NEARN_RECORDS, NIGHTLY_CLUSTERS, block_id);
 
-  const uint32_t ilp_stride = threads_per_threadblock * ILP;
-  const uint32_t ilp_span = threads_per_threadblock * (ILP - 1);
-  uint32_t base = tid_in_threadblock;
-
-  for (; base + ilp_span < args->num_records; base += ilp_stride) {
-    float dx_vals[ILP];
-    float dy_vals[ILP];
-    float dist_vals[ILP];
-
-    #pragma unroll
+  const uint32_t step = threads_per_block * ILP;
+  const uint32_t span = threads_per_block * (ILP - 1u);
+  uint32_t v = tid;
+  for (; v + span < owned.count; v += step) {
+    uint32_t i[ILP];
+    float dx[ILP], dy[ILP];
+#pragma unroll
     for (uint32_t u = 0; u < ILP; ++u) {
-      const uint32_t i = base + u * threads_per_threadblock;
-      __global LatLong* lat_long = args->locations + i;
-      dx_vals[u] = args->lat - lat_long->lat;
-      dy_vals[u] = args->lng - lat_long->lng;
+      NIGHTLY_LANE_SAMPLE();
+      i[u] = owned[v + u * threads_per_block];
     }
-
-    #pragma unroll
+#pragma unroll
     for (uint32_t u = 0; u < ILP; ++u) {
-      float dx = dx_vals[u];
-      float dy = dy_vals[u];
-      dist_vals[u] = sqrtf(dx * dx + dy * dy);
+      dx[u] = NEARN_QUERY_LAT - nearn_locations[i[u]].lat;
+      dy[u] = NEARN_QUERY_LNG - nearn_locations[i[u]].lng;
     }
-
-    #pragma unroll
-    for (uint32_t u = 0; u < ILP; ++u) {
-      const uint32_t i = base + u * threads_per_threadblock;
-      args->distances[i] = dist_vals[u];
-    }
+#pragma unroll
+    for (uint32_t u = 0; u < ILP; ++u)
+      nearn_distances[i[u]] = sqrtf(dx[u] * dx[u] + dy[u] * dy[u]);
   }
-
-  if constexpr (ILP > 1) {
-    for (; base < args->num_records; base += threads_per_threadblock) {
-      __global LatLong* lat_long = args->locations + base;
-      float dx = args->lat - lat_long->lat;
-      float dy = args->lng - lat_long->lng;
-      args->distances[base] = sqrtf(dx * dx + dy * dy);
-    }
+  for (; v < owned.count; v += threads_per_block) {
+    NIGHTLY_LANE_SAMPLE();
+    const uint32_t i = owned[v];
+    const float dx = NEARN_QUERY_LAT - nearn_locations[i].lat;
+    const float dy = NEARN_QUERY_LNG - nearn_locations[i].lng;
+    nearn_distances[i] = sqrtf(dx * dx + dy * dy);
   }
 }
 
-static inline void nearn(
-  void* arg,
-  uint32_t tid_in_threadblock,
-  uint32_t threads_per_threadblock,
-  uint32_t threadblock_id
-) {
-  nearn_impl<NEARN_ILP>(
-    arg, tid_in_threadblock, threads_per_threadblock, threadblock_id);
+static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
+                        uint32_t block_id) {
+  nearn_kernel<NEARN_ILP>(tid, threads_per_block, block_id);
+  nightly_kernel_end(tid, threads_per_block);
 }
 
-NearnArgs nearn_args = {
-  .locations = nullptr,
-  .distances = nullptr,
-  .num_records = 0,
-  .lat = 0.0f,
-  .lng = 0.0f,
-};
+int main() { return nightly_main(kernel_body, nullptr); }
 
-#include "data"
-
-int main() {
-  nearn_args.locations = locations_raw;
-  nearn_args.distances = reinterpret_cast<__global float*>(distances_raw);
-  nearn_args.num_records = num_records;
-  nearn_args.lat = __builtin_bit_cast(float, query_lat_raw);
-  nearn_args.lng = __builtin_bit_cast(float, query_lng_raw);
-  mu_schedule(nearn, &nearn_args, NEARN_NUM_WARPS);
-  return 0;
-}
+#endif

@@ -189,7 +189,7 @@ class BTreeRunTest(unittest.TestCase):
         self.assertIn("btree-guard-middle", config)
 
     def test_device_is_scalar_and_preserves_point_and_range_traversal(self):
-        source = (ROOT / "kernel.cpp").read_text().lower()
+        source = (ROOT / "kernel_impl.hpp").read_text().lower()
         for required in ("point_lookup", "leaf_record_index",
                          "btree_point_outputs", "btree_range_outputs",
                          "mu_contiguous_partition"):

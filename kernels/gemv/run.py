@@ -52,13 +52,16 @@ def source_hash() -> str:
     digest = hashlib.sha256()
     paths = [
         ROOT / name for name in
-        ("run.py", "gemv.py", "Makefile", "kernel.cpp", "host.cpp",
-         "emit_symbols.py")
+        ("run.py", "gemv.py", "Makefile", "kernel.cpp", "kernel_impl.hpp",
+         "kernel_ilp2.cpp", "kernel_ilp4.cpp", "host.cpp", "emit_symbols.py")
     ] + [
         REPO / "lib/include/mu_partition.h",
         REPO / "lib/include/nightly/device.h",
         REPO / "lib/include/nightly/host.h",
         ROOT.parent / "addr_hash_stamp.mk",
+        # hpc.mk and hpc_presets.py decide the cluster count and drain
+        # protocol, so they are part of what produced this ELF.
+        ROOT.parent / "hpc.mk", ROOT.parent / "hpc_presets.py",
     ]
     for path in paths:
         digest.update(path.relative_to(REPO).as_posix().encode())
@@ -108,7 +111,6 @@ def prepare(args: argparse.Namespace) -> dict:
         f"#define HPC_SM_COUNT {hpc_presets.resolve(args.preset).clusters}u",
         f"#define GEMV_ROWS {args.rows}u",
         f"#define GEMV_COLS {args.cols}u",
-        f"#define GEMV_ILP {args.ilp}u",
         f"#define GEMV_UNROLL {args.unroll}u",
         f"#define GEMV_OUTPUT_WORDS {len(words)}u",
         f"#define GEMV_EXPECTED_DIGEST 0x{expected_digest:016x}ULL",

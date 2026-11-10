@@ -1,136 +1,111 @@
-#include <vx_intrinsics.h>
-#include <mu_intrinsics.h>
-#include <mu_schedule.h>
-#include <shared_mem.h>
+// GEMV on Muon: one warp per output row, a BF16 dot product reduced in shared
+// memory.
+//
+// GEMV_ILP is the unroll factor; kernel.cpp builds the ILP=1 baseline and
+// kernel_ilp{2,4}.cpp the unrolled variants, the same arrangement as
+// kernels/vecadd.  It used to come from the generated config.h, which meant
+// one ELF per ILP per data set and no way to compare two unrolls of the same
+// data.  GEMV_UNROLL stays in config.h: it is how far the row loop unrolls,
+// and must be a multiple of GEMV_ILP, which is how many independent
+// accumulator chains that unroll is split across.
+#ifndef GEMV_KERNEL_IMPL_HPP
+#define GEMV_KERNEL_IMPL_HPP
 
 #include <stdint.h>
 
-#ifndef GEMV_NUM_WARPS
-#define GEMV_NUM_WARPS 8
-#endif
+#include "generated/config.h"
+#include <mu_partition.h>
+#include <nightly/device.h>
+
+// hpc.mk picks NIGHTLY_CLUSTERS from the preset; HPC_SM_COUNT is the cluster
+// count the generated data was partitioned for.  A mismatch means the ELF
+// would read someone else's share, so fail the build rather than the run.
+static_assert(NIGHTLY_CLUSTERS == HPC_SM_COUNT,
+              "preset cluster count must match the generated data");
 
 #ifndef GEMV_ILP
 #define GEMV_ILP 1
 #endif
+static_assert(GEMV_ILP > 0u && GEMV_UNROLL > 0u);
+static_assert((GEMV_UNROLL % GEMV_ILP) == 0u,
+              "the row unroll must divide evenly across the accumulator chains");
+static_assert((MU_NUM_THREADS & (MU_NUM_THREADS - 1u)) == 0u);
 
-#ifndef GEMV_UNROLL
-#define GEMV_UNROLL 8
-#endif
+extern "C" {
+extern __global uint16_t gemv_a[];
+extern __global uint16_t gemv_x[];
+extern __global uint16_t gemv_y[];
+}
 
-extern "C" uint32_t __mu_num_warps = GEMV_NUM_WARPS;
+__shared _Float16* const gemv_sdata =
+    reinterpret_cast<__shared _Float16*>(0x0);
 
-struct GEMVArgs {
-  __global _Float16* A;
-  __global _Float16* x;
-  __global _Float16* y;
-  uint32_t m;
-  uint32_t n;
-};
-
-__shared _Float16* const sdata = reinterpret_cast<__shared _Float16*>(0x0);
-
-template <uint32_t MAX_STRIDE>
-static inline void reduce(uint32_t tid, uint32_t lane_id) {
-  for (uint32_t stride = 2; stride <= MAX_STRIDE; stride *= 2) {
-    if (lane_id % stride == 0)
-      sdata[tid] = sdata[tid] + sdata[tid + (stride >> 1)];
+template <uint32_t MaxStride>
+static inline void reduce(uint32_t tid, uint32_t lane) {
+  for (uint32_t stride = 2; stride <= MaxStride; stride *= 2) {
+    if ((lane % stride) == 0u)
+      gemv_sdata[tid] = gemv_sdata[tid] +
+                        gemv_sdata[tid + (stride >> 1u)];
   }
 }
 
-template <uint32_t ILP>
-static inline void keep_accum_ordered(_Float16 (&accum)[ILP]) {
-  #pragma unroll
-  for (uint32_t i = 0; i < ILP; ++i)
+template <uint32_t Ilp>
+static inline void keep_accum_ordered(_Float16 (&accum)[Ilp]) {
+#pragma unroll
+  for (uint32_t i = 0; i < Ilp; ++i)
     asm volatile("" : "+r"(accum[i]) :: "memory");
 }
 
 template <uint32_t ILP>
-static inline void gemv_impl(
-  void* arg,
-  uint32_t tid_in_threadblock,
-  uint32_t threads_per_threadblock,
-  uint32_t threadblock_id
-) {
-  static_assert(ILP > 0);
-  static_assert(GEMV_UNROLL > 0);
-  static_assert(GEMV_UNROLL % ILP == 0);
-  static_assert((MU_NUM_THREADS & (MU_NUM_THREADS - 1)) == 0);
-  auto* args = reinterpret_cast<GEMVArgs*>(arg);
-  constexpr uint32_t kWarpWidth = MU_NUM_THREADS;
-  uint32_t lane_id = tid_in_threadblock % kWarpWidth;
-  uint32_t warp_id = tid_in_threadblock / kWarpWidth;
-  uint32_t warps_per_threadblock = threads_per_threadblock / kWarpWidth;
-  uint32_t global_warp_id = threadblock_id * warps_per_threadblock + warp_id;
-  uint32_t global_warp_stride = MU_NUM_CLUSTERS * warps_per_threadblock;
+static inline void gemv_kernel(uint32_t tid, uint32_t threads_per_block,
+                               uint32_t block_id) {
+  constexpr uint32_t width = MU_NUM_THREADS;
+  const uint32_t lane = tid % width;
+  const uint32_t warp = tid / width;
+  const uint32_t warps_per_block = threads_per_block / width;
+  const MuPartition owned = mu_contiguous_partition(
+      GEMV_ROWS, NIGHTLY_CLUSTERS, block_id);
+  __global _Float16* const a =
+      reinterpret_cast<__global _Float16*>(gemv_a);
+  __global _Float16* const x =
+      reinterpret_cast<__global _Float16*>(gemv_x);
+  __global _Float16* const y =
+      reinterpret_cast<__global _Float16*>(gemv_y);
 
-  const uint32_t row_elems = args->n;
-  __global _Float16* x = args->x;
-  __global _Float16* y = args->y;
-
-  for (uint32_t row = global_warp_id; row < args->m; row += global_warp_stride) {
-    __global _Float16* A = args->A + row * row_elems;
+  for (uint32_t row = owned.begin + warp; row < owned.end;
+       row += warps_per_block) {
     _Float16 accum[ILP] = {};
-    constexpr uint32_t kUnroll = GEMV_UNROLL;
-    const uint32_t unroll_stride = kWarpWidth * kUnroll;
-    const uint32_t unroll_span = kWarpWidth * (kUnroll - 1);
-
-    // Benchmark assumption: each row slice is divisible into full unroll groups.
-    for (uint32_t base = lane_id; base + unroll_span < row_elems; base += unroll_stride) {
-      // decouple unrolling factor from ILP; ILP determines how many lds/fmadds
-      // are batched together, unrolling determines how frequently
-      // branch/vx_split shows up in the sequence.
-      #pragma unroll
-      for (uint32_t group = 0; group < kUnroll; group += ILP) {
-        #pragma unroll
-        for (uint32_t i = 0; i < ILP; ++i) {
-          const uint32_t idx = base + (group + i) * kWarpWidth;
-          _Float16 a_val = A[idx];
-          _Float16 x_val = x[idx];
-          accum[i] += a_val * x_val;
+    const uint32_t unroll_stride = width * GEMV_UNROLL;
+    const uint32_t unroll_span = width * (GEMV_UNROLL - 1u);
+    const __global _Float16* const row_a = a + row * GEMV_COLS;
+    for (uint32_t base = lane; base + unroll_span < GEMV_COLS;
+         base += unroll_stride) {
+#pragma unroll
+      for (uint32_t group = 0; group < GEMV_UNROLL; group += ILP) {
+#pragma unroll
+        for (uint32_t chain = 0; chain < ILP; ++chain) {
+          const uint32_t index = base + (group + chain) * width;
+          accum[chain] += row_a[index] * x[index];
         }
         keep_accum_ordered(accum);
       }
     }
-
     _Float16 sum = accum[0];
-    #pragma unroll
-    for (uint32_t u = 1; u < ILP; ++u)
-      sum += accum[u];
-
-    sdata[tid_in_threadblock] = sum;
-    reduce<kWarpWidth>(tid_in_threadblock, lane_id);
-
-    if (lane_id == 0)
-      y[row] = sdata[tid_in_threadblock];
+#pragma unroll
+    for (uint32_t chain = 1; chain < ILP; ++chain)
+      sum += accum[chain];
+    gemv_sdata[tid] = sum;
+    reduce<width>(tid, lane);
+    if (lane == 0u) y[row] = gemv_sdata[tid];
   }
 }
 
-static inline void gemv(
-  void* arg,
-  uint32_t tid_in_threadblock,
-  uint32_t threads_per_threadblock,
-  uint32_t threadblock_id
-) {
-  gemv_impl<GEMV_ILP>(
-    arg, tid_in_threadblock, threads_per_threadblock, threadblock_id);
+static void kernel_body(void*, uint32_t tid, uint32_t threads_per_block,
+                        uint32_t block_id) {
+  gemv_kernel<GEMV_ILP>(tid, threads_per_block, block_id);
+  nightly_kernel_end(tid, threads_per_block);
 }
 
-GEMVArgs gemv_args = {
-  .A = nullptr,
-  .x = nullptr,
-  .y = nullptr,
-  .m = 0,
-  .n = 0,
-};
+int main() { return nightly_main(kernel_body, nullptr); }
 
-#include "data"
-
-int main() {
-  gemv_args.A = reinterpret_cast<__global _Float16*>(A_raw);
-  gemv_args.x = reinterpret_cast<__global _Float16*>(x_raw);
-  gemv_args.y = reinterpret_cast<__global _Float16*>(y_raw);
-  gemv_args.m = m;
-  gemv_args.n = n;
-  mu_schedule(gemv, &gemv_args, GEMV_NUM_WARPS);
-  return 0;
-}
+#endif

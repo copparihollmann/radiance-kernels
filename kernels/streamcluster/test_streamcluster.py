@@ -155,7 +155,7 @@ class StreamClusterTest(unittest.TestCase):
         for forbidden in ("gemmini", "mxgemm", "vsetvli"):
             self.assertNotIn(forbidden, kernel)
         self.assertIn("#pragma clang fp contract(off)", kernel)
-        self.assertIn("physical_threadblock_id", (ROOT / "kernel.cpp").read_text())
+        self.assertIn("physical_threadblock_id", (ROOT / "kernel_impl.hpp").read_text())
         self.assertIn("STREAMCLUSTER_WORK_FLOATS", host)
         self.assertIn("STREAMCLUSTER_NUM", host)
         self.assertIn("switch_padding_bad", host)

@@ -146,7 +146,11 @@ def prepare(size: int, out: Path, *, preset: str = hpc_presets.DEFAULT_PRESET,
         ROOT.parents[1] / "lib/include/mu_partition.h",
         ROOT.parents[1] / "lib/include/nightly/device.h",
         ROOT.parents[1] / "lib/include/nightly/host.h",
-        ROOT / "run.py", ROOT / "Makefile", ROOT / "kernel.cpp",
+        # hpc.mk and hpc_presets.py decide the cluster count and drain protocol,
+        # so they are part of what produced this ELF.
+        ROOT.parent / "hpc.mk", ROOT.parent / "hpc_presets.py",
+        ROOT / "run.py", ROOT / "Makefile", ROOT / "kernel.cpp", ROOT / "kernel_impl.hpp",
+        ROOT / "kernel_ilp2.cpp", ROOT / "kernel_ilp4.cpp",
         ROOT / "host.cpp", ROOT / "emit_symbols.py",
     ):
         source_hash.update(path.relative_to(ROOT.parents[1]).as_posix().encode())

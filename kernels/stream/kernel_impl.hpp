@@ -2,8 +2,8 @@
 //
 // STREAM_ILP is the unroll factor.  kernel.cpp builds the ILP=1 baseline and
 // kernel_ilp{2,4}.cpp the unrolled variants, the same arrangement as
-// kernels/vecadd.  Unrolling here is not about issuing wider loads -- Muon has
-// no vector ISA and no VPU -- it is about having several independent loads in
+// kernels/vecadd.  Unrolling here is not about issuing wider loads -- Muon has no
+// vector instructions at all -- it is about having several independent loads in
 // flight at once.  These kernels are limited by how many line fills a cluster
 // can keep outstanding, not by arithmetic, so each unrolled step issues its
 // loads back to back, then does the arithmetic, then the stores, rather than

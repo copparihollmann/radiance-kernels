@@ -131,7 +131,7 @@ class StreamRunTest(unittest.TestCase):
     def test_cluster_l1_manager_barriers_are_uniform_and_three_passes_remain(self):
         device = RUN_PATH.parents[2] / "lib/include/nightly/device.h"
         source = device.read_text()
-        stream_kernel = RUN_PATH.with_name("kernel.cpp").read_text()
+        stream_kernel = RUN_PATH.with_name("kernel_impl.hpp").read_text()
         self.assertNotIn("mu_barrier(", stream_kernel)
         self.assertNotIn("NIGHTLY_BAR_ROBUST_DRAIN", stream_kernel)
         candidate = source.split(

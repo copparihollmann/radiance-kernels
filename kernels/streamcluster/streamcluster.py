@@ -206,6 +206,9 @@ def source_digest() -> str:
         ROOT.parents[1] / "lib/include/nightly/host.h",
         ROOT / ".gitignore", ROOT / "Makefile", ROOT / "README.md",
         ROOT / "emit_symbols.py", ROOT / "functional_smoke.py",
+        # hpc.mk and hpc_presets.py decide the cluster count and drain protocol,
+        # so they are part of what produced this ELF.
+        ROOT.parent / "hpc.mk", ROOT.parent / "hpc_presets.py",
         ROOT / "host.cpp", ROOT / "kernel.cpp", ROOT / "kernel_impl.hpp",
         ROOT / "oracle.py", ROOT / "streamcluster.py",
         ROOT / "test_streamcluster.py",

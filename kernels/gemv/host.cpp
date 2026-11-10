@@ -49,7 +49,11 @@ int main() {
     const uint64_t rows = (uint64_t)GEMV_ROWS;
     const uint64_t cols = (uint64_t)GEMV_COLS;
     const uint64_t lanes = NIGHTLY_SIMT_LANES_PER_CORE;
-    const uint64_t step = lanes * (uint64_t)GEMV_UNROLL * (uint64_t)GEMV_ILP;
+    // The device advances by width * GEMV_UNROLL per iteration (see
+    // kernel_impl.hpp); GEMV_ILP only splits that unroll across accumulator
+    // chains and does not widen the stride.  This used to multiply by ILP too,
+    // which made the exact-tiling check stricter than the kernel actually is.
+    const uint64_t step = lanes * (uint64_t)GEMV_UNROLL;
     const int exact_tiling = (cols % step) == 0u;
     const uint64_t useful_ops = 2ull * rows * cols + rows * (lanes - 1ull);
     nh_puts("gemv_fma_count="); nh_putu(rows * cols); nh_puts("\n");

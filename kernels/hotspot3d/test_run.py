@@ -113,7 +113,7 @@ class Hotspot3dRunTest(unittest.TestCase):
                     f"#define HOTSPOT3D_{macro} {value.hex()}f", config)
 
     def test_scalar_source_has_no_accelerator_path(self):
-        kernel = (ROOT / "kernel.cpp").read_text().lower()
+        kernel = (ROOT / "kernel_impl.hpp").read_text().lower()
         makefile = (ROOT / "Makefile").read_text().lower()
         self.assertIn("-fno-vectorize", makefile)
         for forbidden in ("gemmini", "mxgemm", "vpu", "riscv_vector.h"):

@@ -141,7 +141,7 @@ class LbmTest(unittest.TestCase):
             lbm.parse_define(changed, "SIZE_Z")
 
     def test_kernel_is_physical_sm_scalar_and_ordered(self):
-        kernel = (ROOT / "kernel.cpp").read_text()
+        kernel = (ROOT / "kernel_impl.hpp").read_text()
         self.assertIn("kGroupBoundaries[physical_threadblock_id]", kernel)
         self.assertIn("LBM_GROUP_CELLS", kernel)
         self.assertIn("#pragma clang fp contract(off)", kernel)

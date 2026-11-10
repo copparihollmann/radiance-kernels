@@ -182,7 +182,7 @@ class PathfinderTest(unittest.TestCase):
         self.assertIn("pathfinder-owners", config)
 
     def test_device_is_scalar_and_preserves_dp_structure(self):
-        source = (ROOT / "kernel.cpp").read_text().lower()
+        source = (ROOT / "kernel_impl.hpp").read_text().lower()
         for required in ("minimum3", "pathfinder_rows", "pathfinder_wall",
                          "pathfinder_scratch", "mu_contiguous_partition"):
             self.assertIn(required, source)
@@ -190,14 +190,18 @@ class PathfinderTest(unittest.TestCase):
             self.assertNotIn(forbidden, source)
 
     def test_device_has_no_tid_zero_only_work_and_uniform_phase_sync(self):
-        source = (ROOT / "kernel.cpp").read_text()
+        source = (ROOT / "kernel_impl.hpp").read_text()
         compact = "".join(source.split())
         self.assertNotIn("if(tid==0", compact)
         self.assertNotIn("if(tid==0u", compact)
-        self.assertEqual(source.count("column += threads_per_block"), 3)
+        # all three phases walk their columns with the same grid stride
+        self.assertEqual(source.count("mu_grid_stride<ILP>("), 3)
         self.assertEqual(source.count("pathfinder_phase_sync(warps);"), 3)
         helper_begin = source.index("static void pathfinder_phase_sync")
-        helper_end = source.index("static void kernel_body", helper_begin)
+        # the helper must stay branch-free: a barrier duplicated onto both arms
+        # of a divergent branch deadlocks (see the repo README).  Bound the span
+        # at the helper's own closing brace, not at whatever follows it.
+        helper_end = source.index("\n}\n", helper_begin) + 3
         helper = source[helper_begin:helper_end]
         self.assertIn("mu_fence();", helper)
         self.assertIn("mu_barrier(kPathfinderPhaseBarrier, warps);", helper)

@@ -1,9 +1,13 @@
 PROJECT = kernel
-MU_SRCS = kernel.cpp
+MU_SRCS = \
+	kernel.cpp \
+	kernel_ilp2.cpp \
+	kernel_ilp4.cpp
 HOST_SRCS = host.cpp
 MU_BIN_OBJS = data.mu.o
 
 include ../common.mk
+include ../hpc.mk
 include ../addr_hash_stamp.mk
 
 # The installed Muon clang does not add its bundled libc++ headers by default.
@@ -23,7 +27,7 @@ data.S generated/config.h generated/pattern.bin generated/pattern_gather.bin gen
 data.mu.o: data.S generated/pattern.bin generated/pattern_gather.bin generated/pattern_scatter.bin generated/source.bin generated/group_destinations.bin generated/group_offsets.bin generated/group_tasks.bin
 	$(MU_CXX) $(MU_CFLAGS) -x assembler-with-cpp -c $< -o $@
 
-kernel.mu.o: generated/config.h spatter_ops.hpp
+$(addsuffix .mu.o,$(basename $(MU_SRCS))): generated/config.h spatter_ops.hpp kernel_impl.hpp
 
 generated/symbols.h: kernel.radiance.elf generated/config.h emit_symbols.py
 	python3 emit_symbols.py $(MU_NM) $< $@

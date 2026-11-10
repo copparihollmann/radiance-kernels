@@ -172,7 +172,7 @@ int main() {
                 self.assertIn(
                     "#define STREAM_DOT_PARTIAL_STRIDE_FLOATS "
                     f"{run.PARTIAL_STRIDE_FLOATS}u", config)
-        kernel = (RUN_PATH.parent / "kernel.cpp").read_text()
+        kernel = (RUN_PATH.parent / "kernel_impl.hpp").read_text()
         self.assertIn(
             "stream_dot_partial[block_id * STREAM_DOT_PARTIAL_STRIDE_FLOATS]",
             kernel)

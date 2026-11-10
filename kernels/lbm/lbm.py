@@ -527,7 +527,11 @@ def source_digest() -> str:
         ROOT / "emit_symbols.py",
         ROOT / "functional_smoke.py",
         ROOT / "host.cpp",
-        ROOT / "kernel.cpp",
+        # hpc.mk and hpc_presets.py decide the cluster count and drain protocol,
+        # so they are part of what produced this ELF.
+        ROOT.parent / "hpc.mk", ROOT.parent / "hpc_presets.py",
+        ROOT / "kernel.cpp", ROOT / "kernel_impl.hpp",
+        ROOT / "kernel_ilp2.cpp", ROOT / "kernel_ilp4.cpp",
         ROOT / "lbm.py",
         ROOT / "partition_audit.py",
     )

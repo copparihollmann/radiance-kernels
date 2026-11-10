@@ -622,9 +622,15 @@ def source_hash() -> str:
                  ROOT.parents[1] / "lib/include/nightly/host.h"):
         digest.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
         digest.update(path.read_bytes())
-    for name in ("run.py", "plan.py", "Makefile", "kernel.cpp", "spatter_ops.hpp", "host.cpp",
+    # hpc.mk and hpc_presets.py decide the cluster count and drain protocol,
+    # so they are part of what produced this ELF.
+    for shared in ("hpc.mk", "hpc_presets.py"):
+        digest.update(shared.encode())
+        digest.update((ROOT.parent / shared).read_bytes())
+    for name in ("run.py", "plan.py", "Makefile", "kernel.cpp", "kernel_impl.hpp", "kernel_ilp2.cpp", "kernel_ilp4.cpp",
+                  "spatter_ops.hpp", "host.cpp",
                  "parallel_scatter_winner.hpp",
-                 "emit_symbols.py", "cyclotron-no-trace.patch"):
+                 "emit_symbols.py"):
         digest.update(name.encode())
         digest.update((ROOT / name).read_bytes())
     return digest.hexdigest()

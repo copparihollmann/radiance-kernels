@@ -89,6 +89,16 @@ HOST_CXXFLAGS += $(HPC_DEFS)
 # Changing a preset changes no file, so stamp it and let the objects depend on
 # the stamp.  Without this, `make PRESET=4sm_pipe` after `make` silently keeps
 # the 2-cluster objects.
+#
+# The stamp alone is not enough for the generated DATA, because every `make`
+# invocation rewrites it during parsing -- including `make clean`, which would
+# consume the change and leave data generated for the previous preset in place.
+# So check the data itself: if generated/config.h was written for a different
+# cluster count, remove it and let the kernel's data rule regenerate it.
+$(shell [ -f generated/config.h ] && \
+  ! grep -qx "\#define HPC_SM_COUNT $(HPC_CLUSTERS)u" generated/config.h && \
+  rm -f generated/config.h)
+
 HPC_STAMP := .hpc_preset.stamp
 HPC_STAMP_TEXT := $(PRESET) OCC=$(OCC) $(HPC_DEFS)
 $(shell printf '%s\n' "$(HPC_STAMP_TEXT)" | cmp -s - $(HPC_STAMP) || printf '%s\n' "$(HPC_STAMP_TEXT)" > $(HPC_STAMP))

@@ -17,7 +17,7 @@ RUN_SPEC.loader.exec_module(run)
 
 class SpmvJdsRunTest(unittest.TestCase):
     def test_device_source_is_scalar_and_preserves_equation(self):
-        source = RUN_PATH.with_name("kernel.cpp").read_text()
+        source = RUN_PATH.with_name("kernel_impl.hpp").read_text()
         self.assertIn("sum = sum + d * t;", source)
         self.assertIn("spmv_jds_ptr[k] + jds_row", source)
         for forbidden in ("gemmini", "mx::", "mvin", "mvout", "vsetvli"):
