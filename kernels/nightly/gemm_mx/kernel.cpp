@@ -54,8 +54,17 @@ static_assert(C_SP[1] + C_ROWS <= mx::SPAD_ROWS, "scratchpad budget");
 constexpr uint32_t ASC_STEP = TM * TK / 32, BSC_STEP = TN * TK / 32;   // scale bytes per k-step
 constexpr mx::Fmt FMT = FP4 ? mx::FP4 : mx::FP8;
 #if GEMM_BDUP
-static inline uint32_t b_base(uint32_t tb) { return tb ? GEMM_B2_ADDR : GEMM_B_ADDR; }
-static inline uint32_t bsc_base(uint32_t tb) { return tb ? GEMM_BSC2_ADDR : GEMM_BSC_ADDR; }
+// The original nightly kernel targeted at most two clusters.  Treating every
+// nonzero cluster as cluster 1 gives the second B copy three readers in a
+// four-cluster build while the first copy has only one.  Stripe clusters over
+// the two byte-identical copies so 2-SM behavior is unchanged and 4-SM traffic
+// is balanced 2:2.
+static inline uint32_t b_base(uint32_t tb) {
+  return (tb & 1u) ? GEMM_B2_ADDR : GEMM_B_ADDR;
+}
+static inline uint32_t bsc_base(uint32_t tb) {
+  return (tb & 1u) ? GEMM_BSC2_ADDR : GEMM_BSC_ADDR;
+}
 #else
 static inline uint32_t b_base(uint32_t) { return GEMM_B_ADDR; }
 static inline uint32_t bsc_base(uint32_t) { return GEMM_BSC_ADDR; }

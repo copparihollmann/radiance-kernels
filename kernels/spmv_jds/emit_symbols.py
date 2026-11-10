@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""Export linked RV32 JDS SpMV addresses for the RV64 checker."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+
+nm, elf, output = sys.argv[1:4]
+symbols = {}
+for line in subprocess.check_output([nm, "-n", elf], text=True).splitlines():
+    fields = line.split()
+    if len(fields) == 3 and fields[2].startswith("spmv_jds_"):
+        symbols[fields[2]] = int(fields[0], 16)
+required = (
+    "spmv_jds_output", "spmv_jds_expected",
+    "spmv_jds_guard_before", "spmv_jds_guard_after",
+    # Host-only: the RV64 checker counts the executed multiply-accumulates from the
+    # per-32-row group bounds.  generated/symbols.h is included from host.cpp and from
+    # nothing else, so exporting this cannot reach the Muon/RV32 compile.
+    "spmv_jds_group_bounds",
+)
+for name in required:
+    if name not in symbols:
+        raise SystemExit(f"missing {name} in {elf}")
+Path(output).write_text(
+    "#pragma once\n"
+    f"#define SPMV_JDS_OUTPUT_ADDR 0x{symbols['spmv_jds_output']:08x}u\n"
+    f"#define SPMV_JDS_EXPECTED_ADDR 0x{symbols['spmv_jds_expected']:08x}u\n"
+    f"#define SPMV_JDS_GUARD_BEFORE_ADDR 0x{symbols['spmv_jds_guard_before']:08x}u\n"
+    f"#define SPMV_JDS_GUARD_AFTER_ADDR 0x{symbols['spmv_jds_guard_after']:08x}u\n"
+    f"#define SPMV_JDS_GROUP_BOUNDS_ADDR 0x{symbols['spmv_jds_group_bounds']:08x}u\n"
+)

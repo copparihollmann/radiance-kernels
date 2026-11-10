@@ -1,0 +1,4 @@
+/__pycache__/
+/generated/
+/data.S
+/*.o

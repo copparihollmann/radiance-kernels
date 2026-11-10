@@ -1,4 +1,7 @@
 data
-gemv
+data.S
 expected
+gemv
+generated
 __pycache__
+/runs/

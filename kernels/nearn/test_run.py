@@ -1,0 +1,57 @@
+"""Focused tests for the faithful Vortex/Rodinia Nearn generator."""
+
+import importlib.util
+from pathlib import Path
+import tempfile
+import unittest
+
+RUN_PATH = Path(__file__).resolve().parent / "run.py"
+RUN_SPEC = importlib.util.spec_from_file_location("nearn_run", RUN_PATH)
+assert RUN_SPEC is not None and RUN_SPEC.loader is not None
+run = importlib.util.module_from_spec(RUN_SPEC)
+RUN_SPEC.loader.exec_module(run)
+
+class NearnRunTest(unittest.TestCase):
+    def test_reference_generation_is_reproducible(self):
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            a = run.prepare(32, Path(first), preset="4sm_pipe", loader="logical")
+            b = run.prepare(32, Path(second), preset="4sm_pipe", loader="logical")
+            self.assertEqual(a["input_sha256"], b["input_sha256"])
+            self.assertEqual(a["expected_sha256"], b["expected_sha256"])
+            self.assertEqual(a["expected_digest"], b["expected_digest"])
+            self.assertEqual(a["output_element_count"], 32)
+            self.assertEqual(a["reference_revision"], run.REFERENCE_REVISION)
+            self.assertEqual(a["reference_kernel"], run.REFERENCE_KERNEL)
+            self.assertEqual(a["reference_kernel_sha256"],
+                             run.REFERENCE_KERNEL_SHA256)
+            self.assertEqual(len(a["expected_top_indices"]), run.TOP_K)
+
+    def test_reference_matches_explicit_distance(self):
+        query_lat = run.f32(3.0)
+        query_lng = run.f32(4.0)
+        output = run.reference_output(query_lat, query_lng, [(0.0, 0.0)])
+        self.assertEqual(run.float_word(output[0]), run.float_word(5.0))
+
+    def test_reference_matches_original_4096_record_import(self):
+        query_lat, query_lng, locations = run.reference_dataset(4096)
+        output = run.reference_output(query_lat, query_lng, locations)
+        words = [run.float_word(value) for value in output]
+        self.assertEqual(run.digest(words), 0xEAE785DADD0EC6A7)
+        self.assertEqual(
+            sorted(range(len(output)), key=lambda i: (output[i], i))[:run.TOP_K],
+            [2414, 2114, 2609, 1950, 828],
+        )
+
+    def test_host_checker_keeps_full_validation_in_one_record_pass(self):
+        host = RUN_PATH.with_name("host.cpp").read_text()
+        self.assertEqual(
+            host.count("for (uint32_t i = 0; i < NEARN_RECORDS; ++i)"), 1)
+        self.assertIn(
+            "float_less(actual, selected_distance_bits[rank])", host)
+        self.assertNotIn("static float as_float", host)
+        self.assertNotIn("float selected_distance", host)
+        self.assertIn("selected[rank] != expected_top[rank]", host)
+        self.assertIn("if (host_hart_id() != 0)", host)
+
+if __name__ == "__main__":
+    unittest.main()

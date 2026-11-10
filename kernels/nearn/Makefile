@@ -1,35 +1,28 @@
-PROJECT = nearn
-
+PROJECT = kernel
 MU_SRCS = kernel.cpp
 HOST_SRCS = host.cpp
-
-ifneq ($(strip $(NEARN_ILP)),)
-MU_CFLAGS += -DNEARN_ILP=$(NEARN_ILP)
-endif
-
-ifneq ($(strip $(OCCUPANCIES)),)
-ifneq ($(strip $(ILPS)),)
-define add_ilp_warp_variant
-MU_VARIANTS += kernel_ilp$(1)_w$(2)
-kernel_ilp$(1)_w$(2).mu.o: kernel.cpp data kernel_impl.hpp
-kernel_ilp$(1)_w$(2).mu.o: MU_CFLAGS += -DNEARN_ILP=$(1) -DNEARN_NUM_WARPS=$(2)
-endef
-
-$(foreach i,$(ILPS),$(foreach w,$(OCCUPANCIES),$(eval $(call add_ilp_warp_variant,$(i),$(w)))))
-else
-define add_warp_variant
-MU_VARIANTS += kernel_w$(1)
-kernel_w$(1).mu.o: kernel.cpp data kernel_impl.hpp
-kernel_w$(1).mu.o: MU_CFLAGS += -DNEARN_NUM_WARPS=$(1)
-endef
-
-$(foreach w,$(OCCUPANCIES),$(eval $(call add_warp_variant,$(w))))
-endif
-endif
+MU_BIN_OBJS = data.mu.o
 
 include ../common.mk
+include ../addr_hash_stamp.mk
 
-data: nearn.py
-	python3 nearn.py
+MU_CFLAGS += -isystem $(LLVM_MUON)/include/c++/v1
+HOST_CXXFLAGS += -O3
+MU_NM = $(LLVM_MUON)/bin/llvm-nm
 
-kernel.mu.o: data kernel_impl.hpp
+data.S generated/config.h generated/input.bin generated/expected.bin &: run.py
+	python3 run.py --records 4096 --out runs/default --prepare-only
+
+data.mu.o: data.S generated/input.bin generated/expected.bin
+	$(MU_CXX) $(MU_CFLAGS) -x assembler-with-cpp -c $< -o $@
+
+kernel.mu.o: generated/config.h
+
+generated/symbols.h: kernel.radiance.elf generated/config.h emit_symbols.py
+	python3 emit_symbols.py $(MU_NM) $< $@
+
+host.host.o: generated/config.h generated/symbols.h
+
+.PHONY: clean-generated
+clean-generated:
+	rm -rf generated data.S

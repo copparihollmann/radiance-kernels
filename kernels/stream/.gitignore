@@ -1,0 +1,7 @@
+/generated/
+/__pycache__/
+/data.S
+/runs/
+/*.o
+/*.elf
+/*.dump

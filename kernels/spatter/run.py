@@ -1,0 +1,870 @@
+#!/usr/bin/env python3
+"""Build and run one Spatter JSON configuration on Radiance/Muon."""
+
+from __future__ import annotations
+
+import argparse
+from array import array
+import hashlib
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+from pathlib import Path
+from typing import Sequence
+
+from plan import plan_for
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parent))
+import hpc_presets  # noqa: E402  (needs ROOT.parent on the path)
+GENERATED = ROOT / "generated"
+MASK64 = (1 << 64) - 1
+FNV_OFFSET = 0xCBF29CE484222325
+FNV_PRIME = 0x100000001B3
+KINDS = {"gather": 0, "scatter": 1, "gs": 2, "multigather": 3, "multiscatter": 4}
+ARRAYS = (
+    "pattern", "pattern_gather", "pattern_scatter", "sparse", "dense",
+    "sparse_gather", "sparse_scatter", "group_destinations",
+    "group_offsets", "group_tasks",
+)
+
+
+def positive(value: object, name: str, allow_zero: bool = False) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < (0 if allow_zero else 1):
+        raise ValueError(f"{name} must be a {'nonnegative' if allow_zero else 'positive'} integer")
+    return value
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(8 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def parse_pattern(value: object, delta: int,
+                  base_dir: Path | None = None) -> tuple[Sequence[int], int]:
+    if isinstance(value, list):
+        if not value:
+            raise ValueError("empty pattern")
+        return [positive(v, "pattern index", True) for v in value], delta
+    if isinstance(value, dict):
+        if value.get("format") != "u32le" or not isinstance(value.get("file"), str):
+            raise ValueError("binary pattern needs file and format=u32le")
+        path = Path(value["file"])
+        if not path.is_absolute():
+            if base_dir is None:
+                raise ValueError("relative binary pattern needs a suite directory")
+            path = base_dir / path
+        path = path.resolve()
+        if not path.is_file() or path.stat().st_size == 0 or path.stat().st_size % 4:
+            raise ValueError(f"binary pattern is missing, empty, or not u32-aligned: {path}")
+        expected_bytes = value.get("bytes")
+        if expected_bytes is not None and positive(expected_bytes, "pattern bytes") != path.stat().st_size:
+            raise ValueError(f"binary pattern size differs from receipt: {path}")
+        expected_hash = value.get("sha256")
+        actual_hash = file_sha256(path)
+        if expected_hash is not None and expected_hash != actual_hash:
+            raise ValueError(f"binary pattern hash differs from receipt: {path}")
+        values = array("I")
+        with path.open("rb") as stream:
+            values.fromfile(stream, path.stat().st_size // 4)
+        if sys.byteorder != "little":
+            values.byteswap()
+        expected_length = value.get("length")
+        if expected_length is not None and positive(expected_length, "pattern length") != len(values):
+            raise ValueError(f"binary pattern length differs from receipt: {path}")
+        return values, delta
+    if not isinstance(value, str):
+        raise ValueError("pattern must be an array, u32le file, or Spatter pattern string")
+    parts = value.upper().split(":")
+    if parts[0] == "UNIFORM" and len(parts) in (3, 4):
+        length = positive(int(parts[1]), "uniform length")
+        stride = positive(int(parts[2]), "uniform stride")
+        if len(parts) == 4:
+            delta = length * stride if parts[3] == "NR" else positive(int(parts[3]), "uniform delta")
+        return list(range(0, length * stride, stride)), delta
+    if parts[0] == "MS1" and len(parts) == 4:
+        length = positive(int(parts[1]), "MS1 length")
+        positions = [positive(int(v), "gap location", True) for v in parts[2].split(",")]
+        gaps = [positive(int(v), "gap", True) for v in parts[3].split(",")]
+        if len(gaps) not in (1, len(positions)):
+            raise ValueError("MS1 gap count does not match gap locations")
+        result, current, gap_id = [], -1, 0
+        for j in range(length):
+            if gap_id < len(positions) and positions[gap_id] == j:
+                current += gaps[0 if len(gaps) == 1 else gap_id]
+                gap_id += 1
+            else:
+                current += 1
+            result.append(current)
+        if min(result) < 0:
+            raise ValueError("MS1 generated negative index")
+        return result, delta
+    if parts[0] == "LAPLACIAN" and len(parts) == 4:
+        dimension = positive(int(parts[1]), "Laplacian dimension")
+        order = positive(int(parts[2]), "Laplacian order")
+        size = positive(int(parts[3]), "Laplacian size")
+        offsets = [(j + 1) * size**i for i in range(dimension) for j in range(order)]
+        center = max(offsets)
+        return [center - v for v in reversed(offsets)] + [center] + [center + v for v in offsets], 1
+    if re.fullmatch(r"[0-9]+(,[0-9]+)*", value):
+        return [int(v) for v in value.split(",")], delta
+    raise ValueError(f"unsupported Spatter pattern: {value[:80]}")
+
+
+def normalize(raw: dict, base_dir: Path | None = None) -> dict:
+    for key in ("atomic-writes", "boundary", "compress", "shared-memory"):
+        if raw.get(key):
+            raise ValueError(f"{key} is not supported by the Radiance mapping")
+    kind_name = str(raw.get("kernel", "Gather")).lower()
+    if kind_name not in KINDS:
+        raise ValueError(f"unsupported kernel: {kind_name}")
+    collision_policy = raw.get("collision-policy", "parallel")
+    if collision_policy not in ("parallel", "ordered"):
+        raise ValueError("collision-policy must be parallel or ordered")
+    if collision_policy == "ordered" and kind_name not in ("scatter", "gs", "multiscatter"):
+        raise ValueError("ordered collision-policy needs a scatter destination")
+    count = positive(raw.get("count", 1024), "count")
+    local_work_size = raw.get("local-work-size")
+    if local_work_size is not None:
+        local_work_size = positive(local_work_size, "local-work-size")
+    wrap = positive(raw.get("wrap", 1), "wrap")
+    gather_final_wrap = positive(raw.get("gather-final-wrap", 0),
+                                 "gather-final-wrap", True)
+    if gather_final_wrap and kind_name != "gs":
+        raise ValueError("gather-final-wrap is supported only for GS")
+    delta = positive(raw.get("delta", 8), "delta", True)
+    delta_gather = positive(raw.get("delta-gather", 8), "delta-gather", True)
+    delta_scatter = positive(raw.get("delta-scatter", 8), "delta-scatter", True)
+    pattern, delta = parse_pattern(raw["pattern"], delta, base_dir) if "pattern" in raw else ([], delta)
+    gather, delta_gather = (
+        parse_pattern(raw["pattern-gather"], delta_gather, base_dir)
+        if "pattern-gather" in raw else ([], delta_gather)
+    )
+    scatter, delta_scatter = (
+        parse_pattern(raw["pattern-scatter"], delta_scatter, base_dir)
+        if "pattern-scatter" in raw else ([], delta_scatter)
+    )
+    pattern_size = raw.get("pattern-size")
+    if pattern_size is not None:
+        n = positive(pattern_size, "pattern-size")
+        pattern = pattern[:n]
+        gather = gather[:n]
+        scatter = scatter[:n]
+    if kind_name in ("gather", "scatter") and not pattern:
+        raise ValueError("gather/scatter needs pattern")
+    if kind_name == "gs" and (not gather or len(gather) != len(scatter)):
+        raise ValueError("GS requires equal nonempty gather/scatter patterns")
+    if kind_name == "multigather" and (not pattern or not gather or max(gather) >= len(pattern)):
+        raise ValueError("MultiGather inner indices must address pattern")
+    if kind_name == "multiscatter" and (not pattern or not scatter or max(scatter) >= len(pattern)):
+        raise ValueError("MultiScatter inner indices must address pattern")
+    length = len(gather) if kind_name in ("gs", "multigather") else (
+        len(scatter) if kind_name == "multiscatter" else len(pattern)
+    )
+    if count * length > 0xFFFFFFFF:
+        raise ValueError("count * pattern length exceeds RV32 task range")
+    if kind_name == "gs":
+        src_length = max(gather) + delta_gather * (count - 1) + 1
+        dst_length = max(scatter) + delta_scatter * (count - 1) + 1
+        source, output = "sparse_gather", "sparse_scatter"
+    elif kind_name in ("gather", "multigather"):
+        src_length = max(pattern) + delta * (count - 1) + 1
+        dst_length = length * wrap
+        source, output = "sparse", "dense"
+    else:
+        src_length = length * wrap
+        dst_length = max(pattern) + delta * (count - 1) + 1
+        source, output = "dense", "sparse"
+    payload_tag = positive(raw.get("source-tag", source_tag(source)), "source-tag")
+    if payload_tag > 0xFFFFFFFF:
+        raise ValueError("source-tag exceeds the supported range")
+    if max(src_length, dst_length) * 8 > 0x70000000:
+        raise ValueError("array exceeds the current GPU DRAM address window")
+    pattern_words = sum(max(1, len(table)) for table in (pattern, gather, scatter))
+    schedule_words = (dst_length + 1 + count * length
+                      if collision_policy == "ordered" else 2)
+    embedded_bytes = ((src_length + dst_length) * 8 +
+                      (pattern_words + schedule_words) * 4)
+    # RV32 code, runtime data, guards, and alignment occupy the same window.
+    if embedded_bytes + 0x100000 > 0x70000000:
+        raise ValueError("input, output, patterns, and schedule exceed GPU DRAM address window")
+    case = dict(
+        kind=kind_name, pattern=pattern, gather=gather, scatter=scatter,
+        count=count, wrap=wrap, delta=delta, delta_gather=delta_gather,
+        delta_scatter=delta_scatter, gather_final_wrap=gather_final_wrap,
+        length=length, src_length=src_length,
+        dst_length=dst_length, source=source, output=output,
+        payload_tag=payload_tag,
+        collision_policy=collision_policy,
+        requested_local_work_size=local_work_size,
+    )
+    case["_pattern_inputs"] = []
+    for key in ("pattern", "pattern-gather", "pattern-scatter"):
+        descriptor = raw.get(key)
+        if not isinstance(descriptor, dict):
+            continue
+        path = Path(descriptor["file"])
+        if not path.is_absolute():
+            path = (base_dir / path) if base_dir is not None else path
+        path = path.resolve()
+        case["_pattern_inputs"].append({
+            "field": key,
+            "path": str(path),
+            "format": "u32le",
+            "bytes": path.stat().st_size,
+            "length": path.stat().st_size // 4,
+            "sha256": file_sha256(path),
+        })
+    case["_plan"] = plan_for(case)
+    return case
+
+
+def payload(tag: int, index: int) -> int:
+    x = (index + tag * 0x9E3779B97F4A7C15) & MASK64
+    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & MASK64
+    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & MASK64
+    return x ^ (x >> 31)
+
+
+def fnv(values) -> int:
+    h = FNV_OFFSET
+    for value in values:
+        h = ((h ^ (value & 0xFFFFFFFF)) * FNV_PRIME) & MASK64
+        h = ((h ^ (value >> 32)) * FNV_PRIME) & MASK64
+    return h
+
+
+def fnv32(values) -> int:
+    h = FNV_OFFSET
+    for value in values:
+        h = ((h ^ (value & 0xFFFFFFFF)) * FNV_PRIME) & MASK64
+    return h
+
+
+def source_tag(source: str) -> int:
+    return {"sparse": 1, "dense": 2, "sparse_gather": 3}[source]
+
+
+def destination(case: dict, i: int, j: int) -> int:
+    return case["_plan"].write.at(case, i, j)
+
+
+def source_index(case: dict, i: int, j: int) -> int:
+    return case["_plan"].read.at(case, i, j)
+
+
+def reference(case: dict) -> tuple[int | None, bool]:
+    """Return serial output digest and whether destination writes overlap."""
+    length, count = case["length"], case["count"]
+    tag = case["payload_tag"]
+    source_base = case.get("source_index_base", 0)
+    if case["kind"] in ("gather", "multigather"):
+        def values():
+            for r in range(case["wrap"]):
+                last = r + ((count - 1 - r) // case["wrap"]) * case["wrap"] if r < count else None
+                for j in range(length):
+                    yield payload(tag, source_base + source_index(case, last, j)) if last is not None else 0
+        return fnv(values()), False
+    seen = bytearray(case["dst_length"])
+    overlap = False
+    # xRAGE 9 has repeated destinations. Its output is intentionally exploratory.
+    output = array("Q", [0]) * case["dst_length"]
+    for i in range(count):
+        for j in range(length):
+            dst = destination(case, i, j)
+            if seen[dst]:
+                overlap = True
+            seen[dst] = 1
+            if not overlap or case["collision_policy"] == "ordered":
+                output[dst] = payload(tag, source_index(case, i, j))
+    return (None if overlap and case["collision_policy"] == "parallel" else fnv(output)), overlap
+
+
+def written_destination_count(case: dict) -> int:
+    """Number of distinct destination elements touched by a scatter case."""
+    if case["kind"] in ("gather", "multigather"):
+        return case["dst_length"]
+    seen = bytearray(case["dst_length"])
+    for i in range(case["count"]):
+        for j in range(case["length"]):
+            seen[destination(case, i, j)] = 1
+    return sum(seen)
+
+
+def sample_digest(case: dict, samples: int = 64) -> int:
+    """Expected digest over evenly spaced output positions for RTL readback."""
+    n = min(samples, case["dst_length"])
+    positions = [i * (case["dst_length"] - 1) // (n - 1) for i in range(n)] if n > 1 else [0]
+    if case["kind"] in ("gather", "multigather"):
+        values = []
+        for pos in positions:
+            r, j = divmod(pos, case["length"])
+            if r >= case["count"]:
+                values.append(0)
+            else:
+                last = r + ((case["count"] - 1 - r) // case["wrap"]) * case["wrap"]
+                values.append(payload(case["payload_tag"],
+                                      case.get("source_index_base", 0) + source_index(case, last, j)))
+        return fnv(values)
+    selected = {pos: 0 for pos in positions}
+    for i in range(case["count"]):
+        for j in range(case["length"]):
+            dst = destination(case, i, j)
+            if dst in selected:
+                selected[dst] = payload(case["payload_tag"], source_index(case, i, j))
+    return fnv(selected[pos] for pos in positions)
+
+
+def write_u32(path: Path, values: Sequence[int]) -> None:
+    with path.open("wb") as stream:
+        if not values:
+            stream.write(b"\0\0\0\0")
+        for start in range(0, len(values), 65536):
+            chunk = values[start:start + 65536]
+            if any(v > 0xFFFFFFFF for v in chunk):
+                raise ValueError("pattern index exceeds RV32 range")
+            stream.write(struct.pack(f"<{len(chunk)}I", *chunk))
+
+
+def write_source(path: Path, length: int, tag: int, base_index: int = 0) -> None:
+    with path.open("wb") as stream:
+        for start in range(0, length, 32768):
+            chunk = [payload(tag, base_index + i)
+                     for i in range(start, min(length, start + 32768))]
+            stream.write(struct.pack(f"<{len(chunk)}Q", *chunk))
+
+
+def write_destination_groups(case: dict) -> int:
+    """Stable counting sort of transfers by destination, preserving every write.
+
+    Each destination is owned by one GPU lane. Writes to a repeated address
+    retain source order, so two 32-bit stores cannot tear against another
+    lane's write to the same 64-bit value.
+    """
+    destinations = case["dst_length"]
+    tasks = case["count"] * case["length"]
+    counts = array("I", [0]) * destinations
+    for task in range(tasks):
+        i, j = divmod(task, case["length"])
+        counts[destination(case, i, j)] += 1
+    offsets = array("I", [0]) * (destinations + 1)
+    for index, count in enumerate(counts):
+        offsets[index + 1] = offsets[index] + count
+    cursor = offsets[:destinations]
+    ordered = array("I", [0]) * tasks
+    for task in range(tasks):
+        i, j = divmod(task, case["length"])
+        dst = destination(case, i, j)
+        ordered[cursor[dst]] = task
+        cursor[dst] += 1
+    occupied = array("I", (index for index, count in enumerate(counts) if count))
+    compact_offsets = array("I", (offsets[index] for index in occupied))
+    compact_offsets.append(tasks)
+    write_u32(GENERATED / "group_destinations.bin", occupied)
+    write_u32(GENERATED / "group_offsets.bin", compact_offsets)
+    write_u32(GENERATED / "group_tasks.bin", ordered)
+    return len(occupied)
+
+
+def block_cyclic_schedule_receipt(owners: int, block_elements: int,
+                                  sms: int) -> dict | None:
+    """Describe and prove the owner partition implemented by kernel.cpp.
+
+    The device loop assigns chunk ``c`` to SM ``c % sms`` and clips only the
+    final chunk to ``owners``.  Recording the closed-form element counts makes
+    a missing tail or duplicate owner visible in build metadata without
+    materializing a multi-million-element owner bitmap.
+    """
+    if block_elements == 0:
+        return None
+    if owners <= 0 or block_elements <= 0 or sms <= 0:
+        raise ValueError("block-cyclic schedule dimensions must be positive")
+    chunks = (owners + block_elements - 1) // block_elements
+    tail_elements = owners - (chunks - 1) * block_elements
+    elements_by_sm = []
+    chunks_by_sm = []
+    for sm in range(sms):
+        sm_chunks = ((chunks - 1 - sm) // sms + 1) if sm < chunks else 0
+        sm_elements = sm_chunks * block_elements
+        if sm_chunks and (chunks - 1) % sms == sm:
+            sm_elements -= block_elements - tail_elements
+        chunks_by_sm.append(sm_chunks)
+        elements_by_sm.append(sm_elements)
+    if sum(chunks_by_sm) != chunks or sum(elements_by_sm) != owners:
+        raise AssertionError("block-cyclic owner partition is not exhaustive")
+    return {
+        "owners": owners,
+        "block_elements": block_elements,
+        "chunks": chunks,
+        "tail_begin": (chunks - 1) * block_elements,
+        "tail_elements": tail_elements,
+        "tail_sm": (chunks - 1) % sms,
+        "chunks_by_sm": chunks_by_sm,
+        "elements_by_sm": elements_by_sm,
+        "covered_elements": sum(elements_by_sm),
+        "coverage": "complete-disjoint-chunks",
+    }
+
+
+def prepare(case: dict, suite: Path, case_id: int, preset: str = hpc_presets.DEFAULT_PRESET,
+            loader: str = "logical", source_pad_lines: int = 0,
+            output_pad_lines: int = 0, warps_per_core: int = 4,
+            gather_block_cyclic_16: bool = False,
+            gather_block_cyclic_elements: int = 0,
+            diagnostic_readback: bool = False,
+            parallel_destination_owner: bool = False) -> dict:
+    sms = hpc_presets.resolve(preset).clusters
+    if not 0 <= source_pad_lines < 64 or not 0 <= output_pad_lines < 64:
+        raise ValueError("cache padding must be between 0 and 63 lines")
+    if warps_per_core not in (1, 2, 4, 8):
+        raise ValueError("warps_per_core must be 1, 2, 4, or 8")
+    if gather_block_cyclic_16 and gather_block_cyclic_elements:
+        raise ValueError("select only one Gather block-cyclic schedule")
+    if (gather_block_cyclic_elements and
+            (gather_block_cyclic_elements < 8 or
+             gather_block_cyclic_elements % 8 != 0)):
+        raise ValueError("Gather block-cyclic elements must be a positive multiple of 8")
+    GENERATED.mkdir(exist_ok=True)
+    write_u32(GENERATED / "pattern.bin", case["pattern"])
+    write_u32(GENERATED / "pattern_gather.bin", case["gather"])
+    write_u32(GENERATED / "pattern_scatter.bin", case["scatter"])
+    write_source(GENERATED / "source.bin", case["src_length"],
+                 case["payload_tag"], case.get("source_index_base", 0))
+    expected, overlap = reference(case)
+    if parallel_destination_owner and (
+            case["collision_policy"] != "parallel" or
+            case["kind"] != "scatter" or not overlap):
+        raise ValueError(
+            "parallel destination ownership requires a colliding parallel Scatter")
+    if parallel_destination_owner:
+        # The destination-owner schedule retains the original task order
+        # within every destination.  Its final value must therefore equal the
+        # serial last-writer result, not merely an arbitrary admissible winner.
+        ordered_case = dict(case)
+        ordered_case["collision_policy"] = "ordered"
+        expected, ordered_overlap = reference(ordered_case)
+        if not ordered_overlap or expected is None:
+            raise AssertionError("destination-owner serial oracle is unavailable")
+    destination_owner_groups = (
+        case["collision_policy"] == "ordered" or parallel_destination_owner)
+    if destination_owner_groups:
+        destination_group_count = write_destination_groups(case)
+    else:
+        destination_group_count = 0
+        write_u32(GENERATED / "group_destinations.bin", [])
+        write_u32(GENERATED / "group_offsets.bin", [])
+        write_u32(GENERATED / "group_tasks.bin", [])
+    pattern_digest = fnv32(case["pattern"])
+    source_digest = fnv(
+        payload(case["payload_tag"], case.get("source_index_base", 0) + i)
+        for i in range(case["src_length"])
+    )
+    exploratory = (overlap and case["collision_policy"] == "parallel" and
+                   not parallel_destination_owner)
+    admissible_winner_check = exploratory and case["kind"] == "scatter"
+    gather_owners = case["length"] * case["wrap"]
+    gather_block_cyclic = bool(gather_block_cyclic_16 or
+                               gather_block_cyclic_elements)
+    if gather_block_cyclic and case["kind"] not in ("gather", "multigather"):
+        raise ValueError("gather block-cyclic scheduling requires Gather or MultiGather")
+    block_elements = (gather_block_cyclic_elements or
+                      (16 if gather_block_cyclic_16 else 0))
+    gather_schedule = block_cyclic_schedule_receipt(
+        gather_owners, block_elements, sms)
+    probe_index = destination(case, 0, 0) if exploratory else 0
+    expected_nonzero_outputs = written_destination_count(case) if exploratory else 0
+    readback_samples = min(64, case["dst_length"]) if case["dst_length"] > 1024 and not exploratory else 0
+    expected_sample = sample_digest(case, readback_samples) if readback_samples else 0
+    lines = [
+        "#pragma once",
+        # The cluster count the DATA was partitioned for.  hpc.mk supplies
+        # NIGHTLY_CLUSTERS from the preset, and the kernel static_asserts that
+        # the two agree, so a preset that does not match the data fails to build
+        # rather than producing wrong output.
+        f"#define HPC_SM_COUNT {sms}u",
+        f"#define SPATTER_KIND {KINDS[case['kind']]}",
+        "#define SPATTER_CHAIN 0",
+        f"#define SPATTER_PATTERN_LENGTH {case['length']}u",
+        f"#define SPATTER_SOURCE_LENGTH {case['src_length']}u",
+        f"#define SPATTER_SOURCE_TAG {case['payload_tag']}u",
+        f"#define SPATTER_SOURCE_INDEX_BASE {case.get('source_index_base', 0)}ULL",
+        f"#define SPATTER_COUNT {case['count']}u",
+        f"#define SPATTER_WRAP {case['wrap']}u",
+        f"#define SPATTER_DELTA {case['delta']}u",
+        f"#define SPATTER_DELTA_GATHER {case['delta_gather']}u",
+        f"#define SPATTER_DELTA_SCATTER {case['delta_scatter']}u",
+        f"#define SPATTER_GATHER_FINAL_WRAP {case['gather_final_wrap']}u",
+        f"#define SPATTER_ORDERED_COLLISIONS {int(case['collision_policy'] == 'ordered')}",
+        f"#define SPATTER_DESTINATION_OWNER_GROUPS {int(destination_owner_groups)}",
+        f"#define SPATTER_GROUP_COUNT {destination_group_count}u",
+        f"#define SPATTER_OUTPUT_LENGTH {case['dst_length']}u",
+        f"#define SPATTER_EXPECTED_DIGEST 0x{(expected or 0):016x}ULL",
+        f"#define SPATTER_EXPECTED_PATTERN_DIGEST 0x{pattern_digest:016x}ULL",
+        f"#define SPATTER_EXPECTED_SOURCE_DIGEST 0x{source_digest:016x}ULL",
+        f"#define SPATTER_READBACK_SAMPLES {readback_samples}u",
+        f"#define SPATTER_EXPECTED_SAMPLE_DIGEST 0x{expected_sample:016x}ULL",
+        f"#define SPATTER_EXPLORATORY_PROBE_INDEX {probe_index}u",
+        f"#define SPATTER_EXPECTED_NONZERO_OUTPUTS {expected_nonzero_outputs}u",
+        f"#define SPATTER_EXPLORATORY {int(exploratory)}",
+        f"#define SPATTER_ADMISSIBLE_WINNER_CHECK {int(admissible_winner_check)}",
+        f"#define SPATTER_GATHER_BLOCK_CYCLIC_ELEMENTS {gather_block_cyclic_elements}u",
+        f"#define SPATTER_GATHER_BLOCK_CYCLIC_16 {int(gather_block_cyclic_16)}",
+        f"#define SPATTER_GATHER_OWNERS {gather_owners}u",
+    ]
+    (GENERATED / "config.h").write_text("\n".join(lines) + "\n")
+    names = {
+        "pattern": "pattern.bin", "pattern_gather": "pattern_gather.bin",
+        "pattern_scatter": "pattern_scatter.bin",
+        "group_destinations": "group_destinations.bin",
+        "group_offsets": "group_offsets.bin", "group_tasks": "group_tasks.bin",
+        case["source"]: "source.bin",
+    }
+    asm = ['.section .data,"aw",@progbits']
+    for name in ARRAYS:
+        if name == case["output"]:
+            continue
+        asm.append(".balign 64")
+        if name == case["source"] and source_pad_lines:
+            asm.append(f".zero {source_pad_lines * 64}")
+        asm.extend([f".globl spatter_{name}", f"spatter_{name}:"])
+        asm.append(f'.incbin "generated/{names[name]}"' if name in names else ".long 0")
+    asm.extend(['.section .bss,"aw",@nobits', '.balign 64'])
+    if output_pad_lines:
+        asm.append(f'.zero {output_pad_lines * 64}')
+    asm.extend([
+        '.globl spatter_guard_before', 'spatter_guard_before:', '.zero 64',
+        '.globl spatter_' + case["output"], 'spatter_' + case["output"] + ':',
+        f'.zero {case["dst_length"] * 8}',
+        '.globl spatter_guard_after', 'spatter_guard_after:', '.zero 64',
+    ])
+    (ROOT / "data.S").write_text("\n".join(asm) + "\n")
+    address_plan = case["_plan"].as_dict()
+    if parallel_destination_owner:
+        address_plan["schedule"] = "parallel_destination_owner"
+    (GENERATED / "plan.json").write_text(json.dumps(address_plan, indent=2) + "\n")
+    dataset_hash = hashlib.sha256(suite.read_bytes()).hexdigest()
+    manifest = {
+        "suite": str(suite.resolve()), "suite_sha256": dataset_hash, "case": case_id,
+        **hpc_presets.manifest(preset, warps_per_core),
+        "sm_count": sms,
+        "loader": loader, "gpu_address_hash": loader == "direct-hashed",
+        "kind": case["kind"], "pattern_length": case["length"],
+        "address_plan": address_plan,
+        "count": case["count"], "wrap": case["wrap"],
+        "iteration_start": case.get("iteration_start", 0),
+        "source_index_base": case.get("source_index_base", 0),
+        "source_tag": case["payload_tag"],
+        "requested_local_work_size": case["requested_local_work_size"],
+        "muon_warps_per_core": warps_per_core,
+        "diagnostic_readback": diagnostic_readback,
+        "source_pad_cache_lines": source_pad_lines,
+        "output_pad_cache_lines": output_pad_lines,
+        "layout_padding_bytes": (source_pad_lines + output_pad_lines) * 64,
+        "source_elements": case["src_length"], "output_elements": case["dst_length"],
+        "logical_payload_bytes": case["count"] * case["length"] * 16,
+        "expected_digest": None if expected is None else f"{expected:016x}",
+        "expected_pattern_digest": f"{pattern_digest:016x}",
+        "expected_source_digest": f"{source_digest:016x}",
+        "expected_sample_digest": f"{expected_sample:016x}" if readback_samples else None,
+        "readback_samples": readback_samples,
+        "exploratory_probe_index": probe_index if exploratory else None,
+        "expected_nonzero_outputs": expected_nonzero_outputs if exploratory else None,
+        "admissible_winner_check": admissible_winner_check,
+        "parallel_scatter_output": (
+            "serial-last-writer-equivalent" if parallel_destination_owner else
+            "schedule-dependent-non-atomic" if admissible_winner_check else None),
+        "parallel_destination_owner": parallel_destination_owner,
+        "all_original_transfers_executed": True,
+        "destination_overlap": overlap,
+        "collision_policy": case["collision_policy"],
+        "destination_group_count": destination_group_count,
+        "gather_iteration_partition": False,
+        "gather_block_cyclic_16": gather_block_cyclic_16,
+        "gather_block_cyclic_elements": gather_block_cyclic_elements,
+        "gather_block_cyclic_schedule": gather_schedule,
+        "gather_scratch_elements": 0,
+        "pattern_inputs": case.get("_pattern_inputs", []),
+        "status": "prepared",
+    }
+    (GENERATED / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
+def run_command(argv: list[str], log: Path, cwd: Path | None = None,
+                env: dict[str, str] | None = None) -> None:
+    with log.open("w") as output:
+        subprocess.run(argv, cwd=cwd, env=env, stdout=output,
+                       stderr=subprocess.STDOUT, check=True)
+
+
+def git_revision(path: Path) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def source_hash() -> str:
+    digest = hashlib.sha256()
+    build_rules = ROOT.parent / "addr_hash_stamp.mk"
+    digest.update(str(build_rules.name).encode())
+    digest.update(build_rules.read_bytes())
+    for path in (ROOT.parents[1] / "lib/include/mu_partition.h",
+                 ROOT.parents[1] / "lib/include/nightly/device.h",
+                 ROOT.parents[1] / "lib/include/nightly/host.h"):
+        digest.update(path.relative_to(ROOT.parents[1]).as_posix().encode())
+        digest.update(path.read_bytes())
+    for name in ("run.py", "plan.py", "Makefile", "kernel.cpp", "spatter_ops.hpp", "host.cpp",
+                 "parallel_scatter_winner.hpp",
+                 "emit_symbols.py", "cyclotron-no-trace.patch"):
+        digest.update(name.encode())
+        digest.update((ROOT / name).read_bytes())
+    return digest.hexdigest()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--suite", required=True, type=Path)
+    parser.add_argument("--case", type=int, default=0, help="zero-based JSON configuration index")
+    parser.add_argument("--preset", choices=tuple(hpc_presets.PRESETS),
+                        default=hpc_presets.DEFAULT_PRESET,
+                        help="target bitstream: fixes cluster count, drain "
+                             "protocol and L1 coherence together")
+    parser.add_argument("--ilp", type=int, choices=(1, 2, 4), default=1,
+                        help="unroll factor; selects the kernel variant to build")
+    parser.add_argument("--loader", choices=("logical", "direct-hashed"),
+                        default="logical",
+                        help="logical GPU loading, or direct loading that bypasses the RTL hash")
+    parser.add_argument("--source-pad-lines", type=int, default=0,
+                        help="0..63 cache lines inserted before the main source array")
+    parser.add_argument("--output-pad-lines", type=int, default=0,
+                        help="0..63 cache lines inserted before the destination array")
+    parser.add_argument("--warps-per-core", type=int, choices=(1, 2, 4, 8), default=4,
+                        help="Muon occupancy; recorded in the result manifest")
+    parser.add_argument("--gather-block-cyclic-16", action="store_true",
+                        help="assign complete 16-element Gather chunks round-robin to SMs")
+    parser.add_argument("--gather-block-cyclic-elements", type=int, default=0,
+                        help="assign aligned Gather chunks of this many elements round-robin to SMs")
+    parser.add_argument("--diagnostic-readback", action="store_true",
+                        help="print complete mismatch diagnostics if validation fails")
+    parser.add_argument("--count", type=int,
+                        help="replace the suite repetition count for a clearly labeled scaled run")
+    parser.add_argument("--iteration-start", type=int, default=0,
+                        help="start iteration for a wrap-1 Gather count chunk")
+    parser.add_argument("--collision-policy", choices=("parallel", "ordered"),
+                        help="ordered serializes transfers per destination for complete scatter checks")
+    parser.add_argument("--parallel-destination-owner", action="store_true",
+                        help=("for a colliding parallel Scatter, assign each destination "
+                              "to one lane while executing every original transfer"))
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--build-only", action="store_true")
+    parser.add_argument("--full-host-check", action="store_true",
+                        help="fully validate every output word on the RV64 host")
+    parser.add_argument("--host-timing", action="store_true",
+                        help="print RV64 release-to-all-finished cycle interval")
+    parser.add_argument("--sim-only", action="store_true",
+                        help="run an already built ELF from --out without regenerating inputs")
+    parser.add_argument("--simv", type=Path, help="VCS simulator for the pinned Radiance checkout")
+    parser.add_argument("--max-cycles", type=int, default=2_000_000_000)
+    parser.add_argument("--gpu-mhz", type=float,
+                        help="measured GPU clock for converting cycles to GB/s")
+    parser.add_argument("--record-trace", action="store_true",
+                        help="retain Cyclotron's SQLite instruction/memory trace")
+    args = parser.parse_args()
+    if args.gpu_mhz is not None and args.gpu_mhz <= 0:
+        parser.error("--gpu-mhz must be positive")
+    if args.max_cycles <= 0:
+        parser.error("--max-cycles must be positive")
+    if args.count is not None and args.count <= 0:
+        parser.error("--count must be positive")
+    if args.iteration_start < 0:
+        parser.error("--iteration-start must be nonnegative")
+    if not 0 <= args.source_pad_lines < 64 or not 0 <= args.output_pad_lines < 64:
+        parser.error("cache padding must be between 0 and 63 lines")
+    out = args.out.resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    if args.sim_only:
+        if args.prepare_only or args.build_only or args.simv is None:
+            parser.error("--sim-only requires --simv and excludes --prepare-only/--build-only")
+        if args.full_host_check or args.host_timing:
+            parser.error("--sim-only uses the existing ELF; readback and timing flags require a rebuild")
+        if not (out / "result.json").exists() or not (out / "kernel.soc.elf").exists():
+            parser.error("--sim-only requires result.json and kernel.soc.elf in --out")
+        manifest = json.loads((out / "result.json").read_text())
+        if manifest["suite"] != str(args.suite.resolve()) or manifest["case"] != args.case:
+            parser.error("--suite and --case must match the existing build")
+        selected = (
+            args.preset, args.loader, args.source_pad_lines, args.output_pad_lines,
+            args.warps_per_core,
+            args.gather_block_cyclic_16,
+            args.gather_block_cyclic_elements,
+            args.diagnostic_readback,
+            args.parallel_destination_owner,
+        )
+        recorded = (
+            manifest["preset"], manifest["loader"],
+            manifest.get("source_pad_cache_lines", 0),
+            manifest.get("output_pad_cache_lines", 0),
+            manifest.get("muon_warps_per_core", 4),
+            manifest.get("gather_block_cyclic_16", False),
+            manifest.get("gather_block_cyclic_elements", 0),
+            manifest.get("diagnostic_readback", False),
+            manifest.get("parallel_destination_owner", False),
+        )
+        if selected != recorded:
+            parser.error("--sim-only build options must match the existing ELF manifest")
+    else:
+        suite = json.loads(args.suite.read_text())
+        if not isinstance(suite, list) or not 0 <= args.case < len(suite):
+            parser.error("suite must be a nonempty JSON list and --case must select an entry")
+        original_count = suite[args.case].get("count", 1024)
+        raw_case = dict(suite[args.case])
+        if args.collision_policy is not None:
+            raw_case["collision-policy"] = args.collision_policy
+        if args.count is not None:
+            raw_case["count"] = args.count
+        case = normalize(raw_case, args.suite.resolve().parent)
+        if args.iteration_start:
+            if args.count is None:
+                parser.error("--iteration-start requires an explicit --count")
+            if case["kind"] != "gather" or case["wrap"] != 1:
+                parser.error("--iteration-start currently supports only wrap-1 Gather")
+            if args.iteration_start + case["count"] > original_count:
+                parser.error("the iteration chunk extends past the original count")
+        case["iteration_start"] = args.iteration_start
+        case["source_index_base"] = args.iteration_start * case["delta"]
+        manifest = prepare(
+            case, args.suite, args.case, args.preset, args.loader,
+            args.source_pad_lines, args.output_pad_lines, args.warps_per_core,
+            args.gather_block_cyclic_16,
+            args.gather_block_cyclic_elements,
+            args.diagnostic_readback,
+            args.parallel_destination_owner,
+        )
+        manifest["original_count"] = original_count
+        manifest["count_overridden"] = args.count is not None and args.count != original_count
+        manifest["spatter_revision"] = git_revision(args.suite.parent)
+        manifest["kernel_revision"] = git_revision(ROOT)
+        manifest["kernel_source_sha256"] = source_hash()
+        manifest["radiance_revision"] = (
+            git_revision(args.simv.resolve().parents[2] / "generators/radiance")
+            if args.simv else None
+        )
+        manifest["cyclotron_revision"] = (
+            git_revision(args.simv.resolve().parents[2] / "generators/radiance/cyclotron")
+            if args.simv else None
+        )
+        manifest["simulator"] = "VCS" if args.simv else None
+        manifest["cyclotron_trace_requested"] = args.record_trace
+        if (args.full_host_check and manifest["destination_overlap"] and
+                manifest["collision_policy"] == "parallel" and
+                not manifest.get("parallel_destination_owner", False) and
+                not manifest.get("admissible_winner_check", False)):
+            parser.error("a parallel collision case has no deterministic full-output digest")
+        manifest["correctness"] = (
+            "admissible-winner-set-checked" if
+            manifest.get("admissible_winner_check", False) else
+            "guards-and-nonzero-exploratory" if
+            manifest["destination_overlap"] and
+            manifest["collision_policy"] == "parallel" and
+            not manifest.get("parallel_destination_owner", False) else
+            "digest-checked" if args.full_host_check else
+            "sample-checked" if manifest["readback_samples"] else "digest-checked"
+        )
+        manifest["host_full_readback"] = bool(
+            args.full_host_check or manifest.get("admissible_winner_check", False) or
+            (not manifest["readback_samples"] and
+             manifest["correctness"] == "digest-checked")
+        )
+        manifest["host_timing_requested"] = args.host_timing
+        (out / "result.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    if args.prepare_only:
+        return 0
+    try:
+        if not args.sim_only:
+            build_env = os.environ.copy()
+            build_env["MU_ADDR_HASH"] = (
+                "1" if args.loader == "direct-hashed" else "0")
+            host_flags = []
+            if args.full_host_check:
+                host_flags.append("-DSPATTER_FORCE_FULL_READBACK=1")
+            if args.host_timing:
+                host_flags.append("-DRAD_HOST_TIMING=1")
+            if args.diagnostic_readback:
+                host_flags.append("-DSPATTER_DIAGNOSTIC_READBACK=1")
+            if host_flags:
+                build_env["EXTRA_HOST_CXXFLAGS"] = (
+                    build_env.get("EXTRA_HOST_CXXFLAGS", "") + " " +
+                    " ".join(host_flags)).strip()
+            run_command(["make", "kernel.soc.elf"], out / "build.log", ROOT,
+                        env=build_env)
+            shutil.copy2(ROOT / f"{variant}.soc.elf", out / "kernel.soc.elf")
+            manifest["status"] = "built"
+        if not args.build_only:
+            if args.simv is None:
+                parser.error("--simv is required unless --prepare-only or --build-only is used")
+            elf = out / "kernel.soc.elf"
+            manifest.pop("error", None)
+            manifest.pop("gpu_cycles", None)
+            manifest.pop("gpu_mhz", None)
+            manifest.pop("payload_gbps", None)
+            manifest["radiance_revision"] = git_revision(
+                args.simv.resolve().parents[2] / "generators/radiance")
+            manifest["cyclotron_revision"] = git_revision(
+                args.simv.resolve().parents[2] / "generators/radiance/cyclotron")
+            manifest["simulator"] = "VCS"
+            manifest["cyclotron_trace_requested"] = args.record_trace
+            manifest["status"] = "running"
+            (out / "result.json").write_text(json.dumps(manifest, indent=2) + "\n")
+            sim_env = os.environ.copy()
+            if not args.record_trace:
+                sim_env["RADIANCE_DISABLE_CYCLOTRON_TRACE"] = "1"
+            run_command([
+                str(args.simv.resolve()), "+permissive",
+                "+gpu_finish_keeps_sim=1", f"+max-cycles={args.max_cycles}",
+                f"+trace-db={out / 'trace.sqlite'}",
+                f"+loadmem={elf}", "+permissive-off", str(elf),
+            ], out / "vcs.log", out, sim_env)
+            log = (out / "vcs.log").read_text(errors="replace")
+            cycles = [int(v) for v in re.findall(r"\bCycles:\s*(\d+)", log)]
+            manifest["gpu_cycles"] = max(cycles) if cycles else None
+            if args.gpu_mhz is not None:
+                manifest["gpu_mhz"] = args.gpu_mhz
+            if cycles and args.gpu_mhz is not None:
+                manifest["payload_gbps"] = round(
+                    manifest["logical_payload_bytes"] * args.gpu_mhz * 1e6
+                    / (max(cycles) * 1e9), 6
+                )
+            # With +verbose disabled VCS does not print its PASS line. The
+            # host publishes HTIF status 1/3 only after validation.
+            manifest["status"] = (
+                "failed" if not cycles or "*** FAILED ***" in log else
+                "exploratory" if manifest["destination_overlap"] and
+                manifest["collision_policy"] == "parallel" and
+                not manifest.get("parallel_destination_owner", False) and
+                not manifest.get("admissible_winner_check", False) else "passed"
+            )
+    except subprocess.CalledProcessError as error:
+        manifest["status"] = "failed"
+        manifest["error"] = f"{error.cmd[0]} exited {error.returncode}"
+    except KeyboardInterrupt:
+        manifest["status"] = "interrupted"
+        manifest["error"] = "interrupted by signal"
+        (out / "result.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        return 130
+    (out / "result.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    print(json.dumps(manifest, indent=2))
+    return 0 if manifest["status"] in ("built", "passed", "exploratory") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
