@@ -11,6 +11,7 @@
 **/*.trace
 **/*.npy
 **/*.bak
+**/__pycache__/
 **/performance_logs/
 
 # clangd
@@ -27,3 +28,6 @@
 **/include/fa_data.h
 gemm_mxgemmini/mxgemm.data.fp8.*.h
 gemm_mxgemmini/mxgemm.data.fp4.*.h
+
+# hpc.mk preset stamp (forces a rebuild when PRESET/OCC change)
+**/.hpc_preset.stamp
