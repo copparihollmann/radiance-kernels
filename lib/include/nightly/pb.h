@@ -15,7 +15,12 @@
  *   7      CLUSTER   host -> GPU: NIGHTLY_CLUSTER_TAG | cluster index, written before LAUNCH (see
  *                    nightly_cluster_id: the cluster-ID CSR is 1 bit wide in the RTL)
  *   8..15  PHASE    GPU -> host: kernel-defined phase stamps (mcycle), cluster core 0
- *   16..63 free
+ *   16     FENCE_EPOCH device-only robust-completion warp-fence handoff
+ *   17, 18 INSTRET_START GPU -> host: minstret at kernel start, per core
+ *   19, 20 INSTRET_END   GPU -> host: minstret at the END stamp, per core
+ *   21..47 free
+ *   48     HEARTBEAT kernel progress
+ *   49..63 free
  */
 #ifndef NIGHTLY_PB_H
 #define NIGHTLY_PB_H
@@ -32,6 +37,22 @@
 #define NIGHTLY_PB_STATUS  6u
 #define NIGHTLY_PB_CLUSTER 7u
 #define NIGHTLY_PB_PHASE   8u   /* + phase index, 0..7 */
+#define NIGHTLY_PB_FENCE_EPOCH 16u
+/* Per-core retired-instruction stamps, written beside START/END when the device is built with
+ * NIGHTLY_INSTRET=1 (the default; see nightly/device.h).  A build with NIGHTLY_INSTRET=0 leaves
+ * these slots at whatever nightly_host_launch cleared them to, and the host prints nothing. */
+#define NIGHTLY_PB_INSTRET_START 17u  /* + core */
+#define NIGHTLY_PB_INSTRET_END   19u  /* + core */
+/* First slot a kernel may use for its own per-cluster results (21..47 inclusive). */
+#define NIGHTLY_PB_KERNEL_FIRST  21u
+#define NIGHTLY_PB_KERNEL_LAST   47u
+/* Lane-occupancy slots (device.h NIGHTLY_LANE_PROFILE). 40..47 are inside the kernel-owned
+ * range but unused by all 21 HPC kernels -- the highest slot referenced anywhere is 34 -- so
+ * they do not clash. Defined here, not in device.h, because the rv64 host half reads them and
+ * cannot include device.h (it pulls in the Muon intrinsics). */
+#define NIGHTLY_PB_LANE_ACTIVE  40u   /* + core : sum of popcount(active mask) */
+#define NIGHTLY_PB_LANE_SAMPLES 44u   /* + core : number of samples */
+
 #define NIGHTLY_PB_HEARTBEAT 48u /* kernel progress value, printed by the host while it waits */
 
 #define NIGHTLY_LAUNCH_MAGIC 0x6E1A0C11u

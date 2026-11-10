@@ -72,18 +72,44 @@ static inline void nightly_pb_write(uint32_t cluster, uint32_t slot, uint32_t v)
 }
 static inline uint64_t nightly_rdcycle(void) { uint64_t c; asm volatile("rdcycle %0" : "=r"(c)); return c; }
 
+/* Optional profiling-only quiet windows around the GPU interval.  This is a
+ * host-side build knob and defaults to zero, so ordinary binaries are
+ * unchanged.  A sufficiently long register-only spin lets periodic FASED
+ * snapshots observe settled traffic counters immediately before launch and
+ * after every END stamp, without adding cycles to the GPU START/END interval.
+ */
+#ifndef NIGHTLY_PROFILE_GUARD_CYCLES
+#define NIGHTLY_PROFILE_GUARD_CYCLES 0ull
+#endif
+static inline void nightly_profile_guard(void) {
+#if NIGHTLY_PROFILE_GUARD_CYCLES > 0
+  const uint64_t begin = nightly_rdcycle();
+  while (nightly_rdcycle() - begin < (uint64_t)NIGHTLY_PROFILE_GUARD_CYCLES)
+    asm volatile("nop" ::: "memory");
+#endif
+}
+
 /* ---- launch / wait ---------------------------------------------------------------------- */
 static inline void nightly_host_launch(uint32_t n_clusters, uint32_t arg = 0) {
   for (uint32_t cl = 0; cl < n_clusters; cl++) {
     for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++) {
       nightly_pb_write(cl, NIGHTLY_PB_END + c, 0);
       nightly_pb_write(cl, NIGHTLY_PB_START + c, 0);
+      /* Clear the companion instruction stamps too, so a device built with NIGHTLY_INSTRET=0
+       * reads back 0 and nightly_host_report() stays silent instead of printing a stale count. */
+      nightly_pb_write(cl, NIGHTLY_PB_INSTRET_END + c, 0);
+      nightly_pb_write(cl, NIGHTLY_PB_INSTRET_START + c, 0);
     }
     nightly_pb_write(cl, NIGHTLY_PB_STATUS, 0);
     nightly_pb_write(cl, NIGHTLY_PB_ARG, arg);
     nightly_pb_write(cl, NIGHTLY_PB_CLUSTER, NIGHTLY_CLUSTER_TAG | cl);   /* see nightly_cluster_id */
   }
   asm volatile("fence" ::: "memory");
+#if NIGHTLY_PROFILE_GUARD_CYCLES > 0
+  nh_puts("profile_guard_cycles="); nh_putu(NIGHTLY_PROFILE_GUARD_CYCLES); nh_puts("\n");
+  nh_flush();
+  nightly_profile_guard();
+#endif
   /* Release the GPU soft reset (GPUResetAggregator, CanHaveGPUReset.scala: a write of 0 clears it).  The FireSim
    * configs hold the GPU in reset at power-on (WithGPUDefaultResetHeld); the VCS configs boot it, where this write
    * changes nothing.  The released cores boot and wait for LAUNCH below. */
@@ -108,14 +134,57 @@ static inline int nightly_host_wait(uint32_t n_clusters, uint64_t max_polls = 50
     for (uint32_t cl = 0; cl < n_clusters; cl++)
       for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++)
         done += nightly_pb_read(cl, NIGHTLY_PB_END + c) != 0;
-    if (done == n_clusters * NIGHTLY_CORES_PER_CLUSTER) return 1;
+    if (done == n_clusters * NIGHTLY_CORES_PER_CLUSTER) {
+#if defined(NIGHTLY_ROBUST_SPIN_UNTIL_RESET) && NIGHTLY_ROBUST_SPIN_UNTIL_RESET
+      /* Robust device kernels deliberately spin after publishing END so the
+       * tile's broken finish-edge flush cannot race host readback.  Reset
+       * retires those warps without changing DRAM, matching rad_tapeout.h's
+       * measured-good in-kernel epilogue protocol. */
+      *(volatile uint32_t *)NIGHTLY_HOST_GPU_RESET = 1u;
+      asm volatile("fence" ::: "memory");
+#endif
+      nightly_profile_guard();
+      return 1;
+    }
   }
   return 0;
+}
+
+/* ---- per-core retired instructions (nightly/device.h: NIGHTLY_INSTRET) -------------------
+ *
+ * One `instret ` line per core, in the key=value shape the campaign parser already scrapes.  It
+ * is a SEPARATE line, never an extension of the `cluster N core M:` row, because that row's shape
+ * is load bearing for campaign.py's per-SM timing completeness check and for
+ * parse_run_output.py's line-anchored CORE_CYCLES regex.
+ *
+ * READ THE SCOPE BEFORE USING IPC.  minstret counts micro-ops accepted by one CORE's execute
+ * stage, summed over every warp resident on that core.  A 16-lane SIMT instruction retires ONCE
+ * regardless of how many lanes were active, so ipc bounds ISSUE efficiency and is NOT lane
+ * utilisation and NOT a divergence measurement.  The emitted `instret_scope=` line says so in the
+ * log itself so a downstream reader cannot lose the caveat.
+ *
+ * Both stamps are 32-bit truncations of the RTL's 64-bit counters, so `end - begin` in uint32
+ * arithmetic is correct across a single wrap, exactly like the cycle stamps beside them. */
+static inline void nightly_report_core_instret(uint32_t cluster, uint32_t core,
+                                               uint32_t cycles) {
+  const uint32_t ib = nightly_pb_read(cluster, NIGHTLY_PB_INSTRET_START + core);
+  const uint32_t ie = nightly_pb_read(cluster, NIGHTLY_PB_INSTRET_END + core);
+  if (!ie) return;   /* device built without NIGHTLY_INSTRET: absent is absent */
+  const uint32_t n = ie - ib;
+  const uint64_t ipc_x1000 = cycles ? ((uint64_t)n * 1000ull) / (uint64_t)cycles : 0ull;
+  nh_puts("instret cluster="); nh_putu(cluster); nh_puts(" core="); nh_putu(core);
+  nh_puts(" instructions_begin="); nh_putu(ib);
+  nh_puts(" instructions_end="); nh_putu(ie);
+  nh_puts(" instructions="); nh_putu(n);
+  nh_puts(" cycles="); nh_putu(cycles);
+  nh_puts(" ipc_x1000="); nh_putu(ipc_x1000);
+  nh_puts("\n");
 }
 
 /* Kernel cycles = latest END - earliest START over all cores (GPU mcycle, 500 MHz). */
 static inline uint32_t nightly_host_report(uint32_t n_clusters) {
   uint32_t t0 = 0xFFFFFFFFu, t1 = 0;
+  uint32_t instret_cores = 0;
   for (uint32_t cl = 0; cl < n_clusters; cl++) {
     for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++) {
       const uint32_t s = nightly_pb_read(cl, NIGHTLY_PB_START + c);
@@ -125,7 +194,46 @@ static inline uint32_t nightly_host_report(uint32_t n_clusters) {
       nh_puts("cluster "); nh_putu(cl); nh_puts(" core "); nh_putu(c);
       nh_puts(": start="); nh_putu(s); nh_puts(" end="); nh_putu(e);
       nh_puts(" cycles="); nh_putu(e - s); nh_puts("\n");
+      instret_cores += nightly_pb_read(cl, NIGHTLY_PB_INSTRET_END + c) != 0;
     }
+  }
+  if (instret_cores) {
+    for (uint32_t cl = 0; cl < n_clusters; cl++)
+      for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++)
+        nightly_report_core_instret(cl, c,
+            nightly_pb_read(cl, NIGHTLY_PB_END + c) -
+            nightly_pb_read(cl, NIGHTLY_PB_START + c));
+    nh_puts("instret_scope=per-core-retired-instructions-all-warps-one-per-warp-instruction-"
+            "not-per-lane-not-lane-utilisation\n");
+    nh_puts("instret_cores="); nh_putu(instret_cores); nh_puts("\n");
+  }
+  /* Lane occupancy, when the device was built with NIGHTLY_LANE_PROFILE=1.
+   * active/samples is the mean number of live lanes at the sampled points; on a
+   * 16-lane warp a fully converged loop reads 16.00. Slots stay zero in a normal
+   * build, so the lines simply do not appear. Emitted in the key=value shape the
+   * campaign parser already scrapes. */
+  uint32_t lane_any = 0;
+  for (uint32_t cl = 0; cl < n_clusters; cl++)
+    for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++)
+      lane_any += nightly_pb_read(cl, NIGHTLY_PB_LANE_SAMPLES + c) != 0;
+  if (lane_any) {
+    uint64_t act_all = 0, smp_all = 0;
+    for (uint32_t cl = 0; cl < n_clusters; cl++) {
+      for (uint32_t c = 0; c < NIGHTLY_CORES_PER_CLUSTER; c++) {
+        const uint32_t a = nightly_pb_read(cl, NIGHTLY_PB_LANE_ACTIVE + c);
+        const uint32_t m = nightly_pb_read(cl, NIGHTLY_PB_LANE_SAMPLES + c);
+        act_all += a; smp_all += m;
+        nh_puts("lane_occupancy cluster="); nh_putu(cl);
+        nh_puts(" core="); nh_putu(c);
+        nh_puts(" active_lanes="); nh_putu(a);
+        nh_puts(" samples="); nh_putu(m);
+        nh_puts(" mean_x100="); nh_putu(m ? (uint32_t)((uint64_t)a * 100ull / m) : 0u);
+        nh_puts("\n");
+      }
+    }
+    nh_puts("lane_occupancy_mean_x100=");
+    nh_putu(smp_all ? (uint32_t)(act_all * 100ull / smp_all) : 0u); nh_puts("\n");
+    nh_puts("lane_occupancy_scope=mean-active-lanes-at-sampled-points-of-16-not-cycle-weighted\n");
   }
   const uint32_t cyc = t1 - t0;
   nh_puts("kernel_cycles="); nh_putu(cyc); nh_puts("\n");
@@ -143,6 +251,98 @@ static inline void nightly_host_phases(uint32_t cluster, uint32_t n) {
 static inline uint64_t nightly_util_bp(uint64_t useful_ops, uint64_t peak_per_cycle, uint64_t cycles) {
   if (!cycles) return 0;
   return (useful_ops * 10000ull) / (peak_per_cycle * cycles);
+}
+
+/* ---- compute-axis self-report ------------------------------------------------------------
+ *
+ * This is HOST-ONLY.  nightly/host.h is included from host.cpp and from nothing else, so
+ * nothing here can reach a Muon/RV32 compile: the device ELF is untouched.
+ *
+ * What the numbers are, stated exactly so they are not over-claimed:
+ *
+ *   useful_ops     the operation count of the workload the kernel was BUILT for, computed in
+ *                  host.cpp from that build's own generated/config.h -- the same header the
+ *                  device compile consumed.  It is authoritative for the shape that actually
+ *                  ran, and it is independent of any external spreadsheet, but it is NOT a
+ *                  sampled hardware counter: there is no compute counter in this RTL.
+ *   executed_ops   the operations the kernel's own partitioning makes the device execute,
+ *                  including halo recomputation, zero padding and redundant traffic.  Where
+ *                  the kernel cannot distinguish the two, executed_ops == useful_ops and
+ *                  executed_ops_distinguished=0 says so rather than implying a measurement.
+ *   peak_ops_per_cycle   the datapath ceiling, from the RTL configuration (see below).
+ *   compute_util_bp      nightly_util_bp(useful_ops, peak, cycles), 0.01 % units.
+ *
+ * Emitted one key=value per line, the same shape the campaign harness already scrapes for
+ * kernel_cycles=.  Nothing here prints "kernel_cycles" or a "cluster N core M:" row, so the
+ * harness's cycle scrape and its per-SM timing completeness check are unaffected.
+ */
+
+/* RadianceConfigs.scala:21  WithSIMTConfig(numWarps = 8, numLanes = 16, numLsuLanes = 16, ...) */
+#define NIGHTLY_SIMT_LANES_PER_CORE 16ull
+/* RadianceConfigs.scala  WithMuonCores(2, location = InCluster(n), ...), one per cluster */
+#define NIGHTLY_MUON_CORES_PER_CLUSTER 2ull
+/* RadianceConfigs.scala  WithRadianceE4M3MxGemmini(..., dim = 16, ...) -> a 16x16 MAC mesh */
+#define NIGHTLY_MX_MACS_PER_CLUSTER 256ull
+
+/* Scalar SIMT ceiling: clusters x Muon cores/cluster x lanes/core, one issue per lane per
+ * cycle.  A strict upper bound: it assumes perfect occupancy, no divergence and no
+ * multi-cycle divide/sqrt. */
+static inline uint64_t nightly_peak_scalar_ops_per_cycle(uint64_t n_clusters) {
+  return n_clusters * NIGHTLY_MUON_CORES_PER_CLUSTER * NIGHTLY_SIMT_LANES_PER_CORE;
+}
+/* MX/Gemmini ceiling in MACs per cycle (one 16x16 mesh per cluster).  FLOP = 2 x MAC. */
+static inline uint64_t nightly_peak_mx_macs_per_cycle(uint64_t n_clusters) {
+  return n_clusters * NIGHTLY_MX_MACS_PER_CLUSTER;
+}
+
+static inline void nightly_report_compute(const char *op_unit, const char *datapath,
+                                          uint64_t useful_ops, uint64_t executed_ops,
+                                          int executed_distinguished,
+                                          uint64_t peak_per_cycle, uint64_t cycles) {
+  nh_puts("compute_op_unit="); nh_puts(op_unit); nh_puts("\n");
+  nh_puts("compute_datapath="); nh_puts(datapath); nh_puts("\n");
+  nh_puts("useful_ops="); nh_putu(useful_ops); nh_puts("\n");
+  nh_puts("executed_ops="); nh_putu(executed_ops); nh_puts("\n");
+  nh_puts("executed_ops_distinguished="); nh_putu(executed_distinguished ? 1u : 0u); nh_puts("\n");
+  nh_puts("peak_ops_per_cycle="); nh_putu(peak_per_cycle); nh_puts("\n");
+  nh_puts("compute_util_bp="); nh_putu(nightly_util_bp(useful_ops, peak_per_cycle, cycles)); nh_puts("\n");
+  nh_puts("executed_util_bp="); nh_putu(nightly_util_bp(executed_ops, peak_per_cycle, cycles)); nh_puts("\n");
+  nh_puts("compute_window_cycles="); nh_putu(cycles); nh_puts("\n");
+  nh_flush();
+}
+
+/* Convenience wrapper for the 20 kernels that run on the scalar SIMT lanes. */
+static inline void nightly_report_compute_scalar(const char *op_unit, uint64_t useful_ops,
+                                                 uint64_t executed_ops,
+                                                 int executed_distinguished,
+                                                 uint64_t n_clusters, uint64_t cycles) {
+  nightly_report_compute(op_unit, "scalar-simt", useful_ops, executed_ops,
+                         executed_distinguished,
+                         nightly_peak_scalar_ops_per_cycle(n_clusters), cycles);
+}
+
+/* Per-phase device cycle stamps, in the same key=value form.  The stamps are written by the
+ * DEVICE (nightly_phase(), nightly/device.h): a kernel whose device code never calls
+ * nightly_phase() has no stamps to publish and must not call this, because the slots would
+ * read back as whatever the launch left in them. */
+static inline void nightly_report_phases(uint32_t n_clusters, uint32_t n) {
+  for (uint32_t cl = 0; cl < n_clusters; cl++) {
+    nightly_host_phases(cl, n);
+    for (uint32_t i = 0; i < n && i < 8; i++) {
+      nh_puts("phase_stamp_c"); nh_putu(cl); nh_putc('_'); nh_putu(i); nh_putc('=');
+      nh_putu(nightly_pb_read(cl, NIGHTLY_PB_PHASE + i)); nh_puts("\n");
+    }
+  }
+  nh_flush();
+}
+
+/* One host-sequenced launch out of several (hotspot3d's four iterations): the host owns the
+ * boundary, so this separates launches without any device change. */
+static inline void nightly_report_launch(uint32_t index, uint64_t cycles, uint64_t useful_ops,
+                                         uint64_t executed_ops) {
+  nh_puts("launch_"); nh_putu(index); nh_puts("_cycles="); nh_putu(cycles); nh_puts("\n");
+  nh_puts("launch_"); nh_putu(index); nh_puts("_useful_ops="); nh_putu(useful_ops); nh_puts("\n");
+  nh_puts("launch_"); nh_putu(index); nh_puts("_executed_ops="); nh_putu(executed_ops); nh_puts("\n");
 }
 
 /* ---- bf16 comparison (integer-only) ----------------------------------------------------- */
@@ -274,6 +474,50 @@ static inline int nightly_host_check(const char *name, uint32_t n_clusters, uint
     }
   }
 #endif
+  nh_flush();
+  return pass;
+}
+
+/* Exact uint32_t counterpart for routing indices, offsets, IDs and other structural data. */
+static inline uint32_t nightly_host_spot_check_u32(uint32_t out_dev, uint32_t gold_dev,
+                                                   uint32_t n, uint32_t samples) {
+  const volatile uint32_t *o = nightly_gpu_ptr<uint32_t>(out_dev);
+  const volatile uint32_t *g = nightly_gpu_ptr<uint32_t>(gold_dev);
+  uint32_t same = 0;
+  const uint32_t step = n / samples ? n / samples : 1;
+  for (uint32_t k = 0, i = 7 % step; k < samples && i < n;
+       k++, i += step)
+    same += o[i] == g[i];
+  return same;
+}
+
+static inline int nightly_host_check_u32(const char *name, uint32_t n_clusters,
+                                         uint32_t out_dev, uint32_t gold_dev,
+                                         uint32_t n) {
+  int pass = 1;
+  NhVerify v0 = {};
+  for (uint32_t cl = 0; cl < n_clusters; cl++)
+    nightly_pb_write(cl, NV_GO, NV_GO_MAGIC);
+  for (uint32_t cl = 0; cl < n_clusters; cl++) {
+    if (!nightly_host_wait_verify(cl)) {
+      nh_puts(name); nh_puts(": GPU exact-u32 verify timeout\n");
+      return 0;
+    }
+    const NhVerify v = nightly_host_read_verify(cl);
+    nightly_host_print_verify(name, cl, v);
+    if (cl == 0) v0 = v;
+    else if (v.n != v0.n || v.exact != v0.exact || v.bad != v0.bad ||
+             v.poison != v0.poison) {
+      nh_puts("  clusters disagree\n");
+      pass = 0;
+    }
+  }
+  const uint32_t samples = n < 128 ? n : 128;
+  const uint32_t same = nightly_host_spot_check_u32(out_dev, gold_dev, n, samples);
+  nh_puts(name); nh_puts(" (host u32 spot check): exact "); nh_putu(same);
+  nh_puts("/"); nh_putu(samples); nh_puts("\n");
+  if (v0.n != n || v0.exact != n || v0.bad || v0.poison || same != samples)
+    pass = 0;
   nh_flush();
   return pass;
 }

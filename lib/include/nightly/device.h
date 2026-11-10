@@ -20,6 +20,61 @@
 #include <mu_schedule.h>
 #include <nightly/pb.h>
 
+/* Some long, write-heavy kernels can reach END before dirty global-memory
+ * lines have become host-visible.  NIGHTLY_ROBUST_GMEM_END is deliberately
+ * opt-in while it is being qualified across the FPGA configurations: it adds
+ * no useful work and does not alter the workload partition, but it does make
+ * completion mean that the per-core L0d and shared L1 have been evicted by
+ * capacity. */
+#ifndef NIGHTLY_ROBUST_GMEM_END
+#define NIGHTLY_ROBUST_GMEM_END 0
+#endif
+#ifndef NIGHTLY_ROBUST_SPIN_UNTIL_RESET
+#define NIGHTLY_ROBUST_SPIN_UNTIL_RESET 0
+#endif
+#ifndef NIGHTLY_ROBUST_SERIAL_FENCE
+#define NIGHTLY_ROBUST_SERIAL_FENCE 0
+#endif
+#ifndef NIGHTLY_ROBUST_TOKEN_FENCE
+#define NIGHTLY_ROBUST_TOKEN_FENCE 0
+#endif
+#ifndef NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
+#define NIGHTLY_ROBUST_CLUSTER_L1_MANAGER 0
+#endif
+#ifndef NIGHTLY_ROBUST_SPLIT_L1_DRAIN
+#define NIGHTLY_ROBUST_SPLIT_L1_DRAIN 0
+#endif
+#ifndef NIGHTLY_ROBUST_DRAIN_PASSES
+#define NIGHTLY_ROBUST_DRAIN_PASSES 3
+#endif
+#if NIGHTLY_ROBUST_SPIN_UNTIL_RESET && !NIGHTLY_ROBUST_GMEM_END
+#error "NIGHTLY_ROBUST_SPIN_UNTIL_RESET requires NIGHTLY_ROBUST_GMEM_END"
+#endif
+#if NIGHTLY_ROBUST_SERIAL_FENCE && !NIGHTLY_ROBUST_GMEM_END
+#error "NIGHTLY_ROBUST_SERIAL_FENCE requires NIGHTLY_ROBUST_GMEM_END"
+#endif
+#if NIGHTLY_ROBUST_TOKEN_FENCE && !NIGHTLY_ROBUST_SERIAL_FENCE
+#error "NIGHTLY_ROBUST_TOKEN_FENCE requires NIGHTLY_ROBUST_SERIAL_FENCE"
+#endif
+#if NIGHTLY_ROBUST_CLUSTER_L1_MANAGER && !NIGHTLY_ROBUST_GMEM_END
+#error "NIGHTLY_ROBUST_CLUSTER_L1_MANAGER requires NIGHTLY_ROBUST_GMEM_END"
+#endif
+#if NIGHTLY_ROBUST_SPLIT_L1_DRAIN && !NIGHTLY_ROBUST_GMEM_END
+#error "NIGHTLY_ROBUST_SPLIT_L1_DRAIN requires NIGHTLY_ROBUST_GMEM_END"
+#endif
+#if NIGHTLY_ROBUST_SPLIT_L1_DRAIN && NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
+#error "select only one shared-L1 drain candidate"
+#endif
+#if NIGHTLY_ROBUST_DRAIN_PASSES < 1 || NIGHTLY_ROBUST_DRAIN_PASSES > 3
+#error "NIGHTLY_ROBUST_DRAIN_PASSES must be between 1 and 3"
+#endif
+#if NIGHTLY_ROBUST_GMEM_END
+#include <rad_tapeout.h>
+#ifndef NIGHTLY_ROBUST_POST_SPIN
+#define NIGHTLY_ROBUST_POST_SPIN RAD_EPI_POST_SPIN
+#endif
+#endif
+
 /* Number of clusters (SMs) the kernel uses on RadianceHBMConfig (2 clusters): 1 = cluster 0 only
  * (the host does not launch cluster 1), 2 = both.  Set by the kernel Makefile per ELF. */
 #ifndef NIGHTLY_CLUSTERS
@@ -36,12 +91,103 @@ extern "C" uint32_t __mu_num_warps = NIGHTLY_OCC;
 /* mu_start.S: take the cluster index for the warp stacks from printBuf (see mu_cluster_id) */
 extern "C" uint32_t __mu_cluster_from_pb = 1;
 
-/* Barrier ids: mu_schedule uses 0.  nightly_kernel_end uses 15.  Kernels use 1..14. */
+/* Barrier ids: mu_schedule uses 0, nightly_kernel_end uses 15, and kernels may
+ * use 1..14.  Robust completion reuses 14 after the kernel body has converged.
+ * Callers enabling NIGHTLY_ROBUST_CLUSTER_L1_MANAGER must additionally reserve
+ * 13 from their kernel body so its repeated epilogue rendezvous cannot collide. */
 #define NIGHTLY_BAR_END 15u
+#define NIGHTLY_BAR_ROBUST_DRAIN 13u
 
 static inline uint32_t nightly_mcycle(void) {
   uint32_t c;
   asm volatile("csrr %0, mcycle" : "=r"(c) :: "memory");
+  return c;
+}
+
+/* Per-core retired-instruction counter.
+ *
+ * NIGHTLY_INSTRET publishes minstret beside the mcycle START/END stamps, so the host can report
+ * instructions and IPC per core.  This is a DEVICE-CODE change only: CSR 0xB02 (minstret) is
+ * already implemented by the Muon core in the bitstreams we run (radiance
+ * src/main/scala/radiance/muon/backend/int/CSR.scala: `case object MInstRet extends
+ * MuonCSR(CSRs.minstret, accessor = wrap(minstret(31, 0)))`, which is a member of `allCSRs`, fed
+ * from Execute.scala's free-running `minstretReg` through the same SFUPipe CSR read path that
+ * serves mcycle).  Nothing gates it on a config parameter, so reading it needs no RTL rebuild.
+ *
+ * WHAT IT COUNTS, stated exactly so it is not over-claimed: Execute.scala increments minstret once
+ * per micro-op accepted by the core's execute stage (io.req.fire), for ALL warps resident on that
+ * core together.  On a 16-lane SIMT core one instruction retires for the whole warp no matter how
+ * many lanes were active, so instructions / cycles bounds ISSUE efficiency and says nothing about
+ * lane occupancy or divergence.  It is not a per-lane or per-warp count, and it is not a FLOP
+ * count.  The RTL comment also notes that `vx_join` is absorbed in the frontend and so is not
+ * counted. */
+/* ---- lane-occupancy profiling (NIGHTLY_LANE_PROFILE) ---------------------------------------
+ *
+ * WHY THIS EXISTS.  Every "% of 64 ops/cycle" figure this project reports divides by a ceiling
+ * that assumes all 16 lanes of a warp are active.  Nothing measured that.  `minstret` cannot:
+ * one instruction retires for the whole warp however many lanes were active, so it bounds ISSUE
+ * efficiency and is blind to divergence.  `executed_ops` cannot either -- it is a kernel
+ * self-report, and for 18 of 21 kernels it equals useful_ops by construction
+ * (executed_ops_distinguished=0 says exactly that).
+ *
+ * WHAT THIS COUNTS.  NIGHTLY_LANE_SAMPLE() reads the active thread mask CSR and accumulates
+ * popcount(mask) plus one sample, per core.  active_lanes / samples is the mean number of lanes
+ * live at the sampled points.  On a 16-lane warp a fully converged loop gives 16.0; a loop where
+ * half the lanes are masked off gives 8.0.
+ *
+ * WHAT IT DOES NOT COUNT.  It samples where the kernel calls it, not uniformly in time, so it is
+ * a mean over sample points and not a cycle-weighted occupancy.  Put the call in the hot loop or
+ * the number means nothing.  It also costs a CSR read, a popcount and two adds per sample, so a
+ * build with this enabled measures OCCUPANCY, never performance -- take timing from the
+ * uninstrumented build, exactly as the compute-counter builds are kept separate.
+ *
+ * VALIDATION.  Always build a control whose answer is known.  stream-copy has no divergence
+ * (unit-stride, no branches in the loop) and must read 16.0; if it does not, the counter is
+ * wrong and no other kernel's number may be used. */
+#ifndef NIGHTLY_LANE_PROFILE
+#define NIGHTLY_LANE_PROFILE 0
+#endif
+/* NIGHTLY_PB_LANE_* slots live in nightly/pb.h so the host half can read them. */
+
+#if NIGHTLY_LANE_PROFILE
+static inline uint32_t nightly_active_lanes(void) {
+  uint32_t m;
+  asm volatile("csrr %0, %1" : "=r"(m) : "i"(VX_CSR_THREAD_MASK) : "memory");
+  return (uint32_t)__builtin_popcount(m & ((1u << MU_NUM_THREADS) - 1u));
+}
+/* Per-core accumulators. One lane per core does the accumulate so the count is per warp-
+ * instruction, not multiplied by the lane count. */
+extern "C" {
+__attribute__((section(".bss"))) inline uint32_t nightly_lane_active[MU_NUM_CORES];
+__attribute__((section(".bss"))) inline uint32_t nightly_lane_samples[MU_NUM_CORES];
+}
+#define NIGHTLY_LANE_SAMPLE()                                                        \
+  do {                                                                               \
+    const uint32_t _nl = nightly_active_lanes();                                     \
+    if ((vx_thread_id() % MU_NUM_THREADS) == 0u) {                                   \
+      const uint32_t _c = (uint32_t)vx_core_id();                                    \
+      nightly_lane_active[_c] += _nl;                                                \
+      nightly_lane_samples[_c] += 1u;                                                \
+    }                                                                                \
+  } while (0)
+#define NIGHTLY_LANE_PUBLISH(core)                                                   \
+  do {                                                                               \
+    nightly_pb_put(NIGHTLY_PB_LANE_ACTIVE + (core), nightly_lane_active[(core)]);    \
+    nightly_pb_put(NIGHTLY_PB_LANE_SAMPLES + (core), nightly_lane_samples[(core)]);  \
+  } while (0)
+#else
+#define NIGHTLY_LANE_SAMPLE()      do { } while (0)
+#define NIGHTLY_LANE_PUBLISH(core) do { } while (0)
+#endif
+
+#ifndef NIGHTLY_INSTRET
+#define NIGHTLY_INSTRET 1
+#endif
+#define NIGHTLY_CSR_MINSTRET 0xB02
+
+static inline uint32_t nightly_minstret(void) {
+  uint32_t c;
+  asm volatile("csrr %0, %1" : "=r"(c) : "i"(NIGHTLY_CSR_MINSTRET) : "memory");
   return c;
 }
 
@@ -79,7 +225,15 @@ static inline void nightly_wait_launch(void) {
   while (nightly_pb_get(NIGHTLY_PB_LAUNCH) != NIGHTLY_LAUNCH_MAGIC) {
     asm volatile("nop");
   }
-  nightly_pb_put(NIGHTLY_PB_START + (uint32_t)vx_core_id(), nightly_mcycle());
+  const uint32_t core = (uint32_t)vx_core_id();
+  const uint32_t cyc = nightly_mcycle();
+#if NIGHTLY_INSTRET
+  /* Publish the instruction stamp BEFORE the cycle stamp: the host treats the cycle slot as the
+   * ready flag for the pair (and polls END the same way), so the companion value must already be
+   * in place when the cycle slot becomes visible. */
+  nightly_pb_put(NIGHTLY_PB_INSTRET_START + core, nightly_minstret());
+#endif
+  nightly_pb_put(NIGHTLY_PB_START + core, cyc);
 }
 
 /* Kernel-defined phase stamp (cluster core 0, one thread). */
@@ -91,6 +245,64 @@ static inline void nightly_phase(uint32_t idx) {
  * shows no output until the host finishes, so this is how a hang becomes visible while it runs. */
 static inline void nightly_heartbeat(uint32_t v) { nightly_pb_put(NIGHTLY_PB_HEARTBEAT, v); }
 
+#if NIGHTLY_ROBUST_GMEM_END
+/* rad_tapeout.h targets a one-cluster part and keys its scratch only by
+ * vx_core_id().  Nightly Radiance uses up to four clusters, so give every
+ * (cluster, core) pair disjoint lines; otherwise different SMs manufacture
+ * cache-line contention in an epilogue whose only job is visibility. */
+static inline void nightly_l0d_drain(void) {
+  const uint32_t cluster_base = RAD_DRAIN_SCRATCH +
+      nightly_cluster_id() * MU_NUM_CORES * RAD_L0D_BYTES;
+  rad_l0d_drain_at(cluster_base, RAD_L0D_LINES);
+}
+
+static inline void nightly_l1_drain(void) {
+#if NIGHTLY_ROBUST_SPLIT_L1_DRAIN
+  static_assert(RAD_L1_DRAIN_MULT % MU_NUM_CORES == 0,
+                "L1 drain multiplicity must divide across cores");
+  constexpr uint32_t per_core_mult = RAD_L1_DRAIN_MULT / MU_NUM_CORES;
+  const uint32_t cluster_base = nightly_cluster_id() *
+      (RAD_L1_DRAIN_MULT * RAD_L1_BYTES);
+  const uint32_t core_base = cluster_base +
+      (uint32_t)vx_core_id() * (per_core_mult * RAD_L1_BYTES);
+  volatile uint32_t *p = (volatile uint32_t *)(
+      RAD_DRAIN_SCRATCH + 0x00100000u + core_base);
+  const uint32_t n = (per_core_mult * RAD_L1_BYTES) / RAD_L1_LINE_BYTES;
+#else
+  const uint32_t global_core =
+      nightly_cluster_id() * MU_NUM_CORES + (uint32_t)vx_core_id();
+  volatile uint32_t *p = (volatile uint32_t *)(
+      RAD_DRAIN_SCRATCH + 0x00100000u +
+      global_core * (RAD_L1_DRAIN_MULT * RAD_L1_BYTES));
+  const uint32_t n = (RAD_L1_DRAIN_MULT * RAD_L1_BYTES) / RAD_L1_LINE_BYTES;
+#endif
+  for (uint32_t i = 0; i < n; ++i)
+    p[i * (RAD_L1_LINE_BYTES / 4u)] = i + 1u;
+  mu_fence();
+}
+#endif
+
+/* The END stamp pair for the calling core: mcycle, and (NIGHTLY_INSTRET) minstret beside it.
+ * Both counters are sampled back to back before either is published, so the instruction window
+ * and the cycle window of a core differ by at most the two csrr instructions between them.  The
+ * cycle slot is written last for the same reason as in nightly_wait_launch(): the host polls END
+ * and must not see it set before the companion instruction stamp has landed.
+ *
+ * THE SAME RULE APPLIES TO THE LANE COUNTERS, and it was violated: NIGHTLY_LANE_PUBLISH used to
+ * run AFTER the END stamp, so the host saw END, began its teardown, and raced the lane words.
+ * Both jobs in runs/lane-occupancy-v1 failed that way -- cores reported end=0 and spmv-jds
+ * reported bad=126212. Everything the host must read has to land BEFORE END is published. */
+static inline void nightly_publish_end_stamps(void) {
+  const uint32_t core = (uint32_t)vx_core_id();
+  const uint32_t cyc = nightly_mcycle();
+#if NIGHTLY_INSTRET
+  const uint32_t ins = nightly_minstret();
+  nightly_pb_put(NIGHTLY_PB_INSTRET_END + core, ins);
+#endif
+  NIGHTLY_LANE_PUBLISH(core);
+  nightly_pb_put(NIGHTLY_PB_END + core, cyc);
+}
+
 /* End of a kernel entry: every thread of the threadblock must call this exactly once.
  * noinline + convergent: inlined, clang tail-duplicated its barrier into both arms of a preceding
  * `if (lead) ... else nop` (FA v2: `if (lead) mx::fence()`), so warp 0 ran barrier 15 twice and
@@ -99,6 +311,178 @@ __attribute__((noinline, convergent))
 static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per_threadblock) {
   const uint32_t warps = threads_per_threadblock / MU_NUM_THREADS;
   mu_barrier(NIGHTLY_BAR_END, warps);
+#if NIGHTLY_ROBUST_GMEM_END
+  const uint32_t warp = tid_in_threadblock / MU_NUM_THREADS;
+  const uint32_t lane = tid_in_threadblock % MU_NUM_THREADS;
+#if NIGHTLY_ROBUST_SERIAL_FENCE
+  /* A barrier only proves that every warp issued its stores; mu_fence() drains
+   * only the issuing warp's queue.  Fencing all warps simultaneously is not
+   * safe on the taped-out SFU path, which can silently drop overlapping
+   * requests.  Hand the uncached printBuf epoch from one warp to the next so
+   * exactly one lane issues a fence at a time.  The rest of each warp remains
+   * on the divergent path until lane 0 observes the completed epoch, so the
+   * warp reconverges before advancing.  All of this remains inside the timed
+   * kernel interval and does not add or remove useful workload transfers. */
+  if (tid_in_threadblock == 0u) {
+    nightly_pb_put(NIGHTLY_PB_FENCE_EPOCH, 0u);
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_END - 1u, warps);
+#if NIGHTLY_ROBUST_TOKEN_FENCE
+  /* Pass one token through the warp lane-0s.  This has the same single-fence
+   * ordering as the epoch-round implementation below, but each warp waits on
+   * only its predecessor instead of polling every epoch.  The trailing
+   * barrier is required: no cache-capacity drain may start until the final
+   * worker fence has completed. */
+  if (lane == 0u) {
+    while (nightly_pb_get(NIGHTLY_PB_FENCE_EPOCH) < warp) {
+      asm volatile("nop");
+    }
+    mu_fence();
+    nightly_pb_put(NIGHTLY_PB_FENCE_EPOCH, warp + 1u);
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_END - 1u, warps);
+#else
+  for (uint32_t round = 0; round < warps; ++round) {
+    if (warp == round && lane == 0u) {
+      mu_fence();
+      nightly_pb_put(NIGHTLY_PB_FENCE_EPOCH, round + 1u);
+    } else if (lane == 0u) {
+      while (nightly_pb_get(NIGHTLY_PB_FENCE_EPOCH) < round + 1u) {
+        asm volatile("nop");
+      }
+    } else {
+      asm volatile("nop");
+    }
+  }
+#endif
+#endif
+  /* warp_id_rr = warp_in_core*ncores + core, so the first MU_NUM_CORES
+   * threadblock warps select one executor on each core.  The settle is needed
+   * because the arrival barrier synchronizes warps but does not drain their
+   * independent store queues.  Keep the divergent guard explicit: LLVM has
+   * previously cloned a following barrier into both arms without the else. */
+#if NIGHTLY_ROBUST_CLUSTER_L1_MANAGER
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(RAD_EPI_QUEUE_SPIN);
+    mu_fence();
+    nightly_l0d_drain();
+  } else {
+    asm volatile("nop");
+  }
+  /* Candidate completion optimization: L0d is private to each core, so one
+   * lane on every core still performs every required L0d capacity walk.  L1
+   * is shared by the cluster, so only warp 0 / lane 0 capacity-drains it.
+   * Both barriers are encountered uniformly by every warp.  The first makes
+   * all private L0d drains complete before the manager starts L1; the second
+   * prevents the next pass (or END) from racing the shared drain.  Barrier 13
+   * is reusable after each completed rendezvous and does not collide with the
+   * scheduler (0) or END/fence barrier 14/15.  Opt-in callers reserve 13 from
+   * their kernel body for this protocol. */
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+  if (warp == 0u && lane == 0u) {
+    nightly_l1_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 2
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(RAD_EPI_SETTLE);
+    nightly_l0d_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+  if (warp == 0u && lane == 0u) {
+    nightly_l1_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+#endif
+
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 3
+  /* Keep the third pass that full-size xRAGE required in the default path. */
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(RAD_EPI_SETTLE);
+    nightly_l0d_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+  if (warp == 0u && lane == 0u) {
+    nightly_l1_drain();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_ROBUST_DRAIN, warps);
+#endif
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(NIGHTLY_ROBUST_POST_SPIN);
+  } else {
+    asm volatile("nop");
+  }
+#else
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    rad_pause(RAD_EPI_QUEUE_SPIN);
+    mu_fence();
+    nightly_l0d_drain();
+    nightly_l1_drain();
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 2
+    rad_pause(RAD_EPI_SETTLE);
+    nightly_l0d_drain();
+    nightly_l1_drain();
+#endif
+#if NIGHTLY_ROBUST_DRAIN_PASSES >= 3
+    /* A full-size xRAGE Gather exposed one absent, aligned 32-byte L1 line
+     * after two passes even though every input and guard was intact.  A third
+     * capacity walk is intentionally part of the measured epilogue: it
+     * re-evicts every set and does not add or repair any workload output.
+     * Keeping this device-side also prevents a host delay from hiding
+     * completion latency or resetting the GPU before the last writeback. */
+    rad_pause(RAD_EPI_SETTLE);
+    nightly_l0d_drain();
+    nightly_l1_drain();
+#endif
+    rad_pause(NIGHTLY_ROBUST_POST_SPIN);
+  } else {
+    asm volatile("nop");
+  }
+#endif
+  mu_barrier(NIGHTLY_BAR_END - 1u, warps);
+#if MU_L1_BANKS > 0
+  /* New incoherent-L1 configurations provide an explicit writeback and
+   * invalidate operation.  Keep the capacity drains required by existing
+   * FPGA images above, then use the hardware operation when it exists so END
+   * has upstream's stronger GPU-L2 visibility guarantee. */
+  if (tid_in_threadblock == 0u) {
+    mu_l1_flush();
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NIGHTLY_BAR_END - 1u, warps);
+#endif
+  if (warp < MU_NUM_CORES && lane == 0u) {
+    nightly_publish_end_stamps();
+  } else {
+    asm volatile("nop");
+  }
+  /* Optionally do not return from a robust FPGA kernel.  Returning lets every pcTracker entry
+   * become invalid and raises the tile's `finished` edge, which invokes the
+   * defective taped-out L0d flush while the Rocket host starts readback.  The
+   * host observes every END stamp, asserts GPU soft reset, and only then reads
+   * GMEM.  This register-only loop keeps `finished` low until that reset.
+   * Cyclotron does not model the soft-reset MMIO, so its correctness build
+   * uses the same drain with this FPGA-only handshake disabled. */
+#if NIGHTLY_ROBUST_SPIN_UNTIL_RESET
+  for (;;) asm volatile("" ::: "memory");
+#endif
+#else
   /* threadblock warp w runs on core (w % MU_NUM_CORES): warps 0..MU_NUM_CORES-1 cover each core once */
   if (tid_in_threadblock < MU_NUM_CORES * MU_NUM_THREADS) mu_fence();
   else asm volatile("nop");
@@ -111,8 +495,9 @@ static void nightly_kernel_end(uint32_t tid_in_threadblock, uint32_t threads_per
   mu_barrier(NIGHTLY_BAR_END, warps);
 #endif
   if (tid_in_threadblock < MU_NUM_CORES * MU_NUM_THREADS && (tid_in_threadblock % MU_NUM_THREADS) == 0)
-    nightly_pb_put(NIGHTLY_PB_END + (uint32_t)vx_core_id(), nightly_mcycle());
+    nightly_publish_end_stamps();
   else asm volatile("nop");
+#endif
 }
 
 /* Standard GPU main(): wait for the host, run `entry` at NIGHTLY_OCC warps per core. */

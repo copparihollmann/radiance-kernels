@@ -105,6 +105,7 @@ static inline void rad_l0d_drain_at(uint32_t base, uint32_t lines) {
 /* register-only delay; never `volatile` on the counter, because the stack is
  * GMEM here and a spilled counter turns a 128-cycle pad into DRAM traffic. */
 static inline void rad_pause(uint32_t n) {
+  if (n == 0u) return;
   asm volatile("1:\n\t addi %0, %0, -1\n\t bnez %0, 1b\n\t" : "+r"(n));
 }
 

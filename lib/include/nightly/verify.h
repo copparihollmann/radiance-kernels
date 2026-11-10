@@ -24,6 +24,7 @@
 #define NV_SLOT 16u
 #define NV_DONE 0x5EF1D0E5u
 #define NV_POISON16 0xEEEEu
+#define NV_POISON32 0xEEEEEEEEu
 /* The check reads the whole tensor, including the parts other clusters write, so it must not start
  * before every cluster has finished: the host writes NV_GO_MAGIC to slot NV_GO once it has seen
  * every core's END stamp, and the check waits for it. */
@@ -124,6 +125,65 @@ static __attribute__((noinline)) void nightly_verify_bf16(uint32_t out, uint32_t
         nightly_pb_put(32 + t, sum);
       }
     }
+    nightly_pb_put(NV_SLOT + 0, NV_DONE);
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NV_BAR, tpb / MU_NUM_THREADS);
+}
+
+/* Exact comparison for integer/control outputs.  Unlike nightly_verify_bf16(), an adjacent
+ * integer is never accepted as a one-step numerical difference.  The result uses the same
+ * printBuf schema so the host can share the wait/report protocol: `bad` is the number of
+ * unequal uint32_t words, `poison` is the number still carrying the unwritten sentinel, and
+ * the floating-point-only fields are zero. */
+static __attribute__((noinline)) void nightly_verify_u32_exact(uint32_t out, uint32_t gold,
+                                                               uint32_t n, uint32_t tid,
+                                                               uint32_t tpb) {
+  if (tid == 0) {
+    while (nightly_pb_get(NV_GO) != NV_GO_MAGIC) asm volatile("nop");
+  } else {
+    asm volatile("nop");
+  }
+  mu_barrier(NV_BAR, tpb / MU_NUM_THREADS);
+
+  const volatile uint32_t *o = (const volatile uint32_t *)out;
+  const uint32_t *g = (const uint32_t *)gold;
+  uint32_t exact = 0, bad = 0, poison = 0;
+  for (uint32_t i = tid; i < n; i += tpb) {
+    const uint32_t ov = o[i];
+    exact += ov == g[i];
+    bad += ov != g[i];
+    poison += ov == NV_POISON32;
+#ifdef NIGHTLY_VERIFY_LOCATE
+    if (ov == NV_POISON32) nightly_pb_put(NV_LOC_POISON, i);
+    else if (ov != g[i]) nightly_pb_put(NV_LOC_BAD, i);
+#endif
+  }
+
+  volatile __shared uint32_t *red =
+      (volatile __shared uint32_t *)(NV_SMEM + tid * 32);
+  red[0] = exact;
+  red[1] = bad;
+  red[2] = poison;
+  mu_fence_smem();
+  mu_barrier(NV_BAR, tpb / MU_NUM_THREADS);
+  if (tid == 0) {
+    uint32_t total_exact = 0, total_bad = 0, total_poison = 0;
+    for (uint32_t k = 0; k < tpb; k++) {
+      volatile __shared uint32_t *r =
+          (volatile __shared uint32_t *)(NV_SMEM + k * 32);
+      total_exact += r[0];
+      total_bad += r[1];
+      total_poison += r[2];
+    }
+    nightly_pb_put(NV_SLOT + 1, n);
+    nightly_pb_put(NV_SLOT + 2, total_exact);
+    nightly_pb_put(NV_SLOT + 3, 0);
+    nightly_pb_put(NV_SLOT + 4, total_bad);
+    nightly_pb_put(NV_SLOT + 5, total_poison);
+    nightly_pb_put(NV_SLOT + 6, 0);
+    nightly_pb_put(NV_SLOT + 7, 0);
     nightly_pb_put(NV_SLOT + 0, NV_DONE);
   } else {
     asm volatile("nop");
