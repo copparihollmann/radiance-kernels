@@ -67,7 +67,7 @@ The upstream-sized correctness canary is intentionally small:
 
 ```sh
 for sm in 1 2 4; do
-  python3 run.py --preset upstream-canary --sms "$sm" \
+  python3 run.py --fixture upstream-canary --preset "${sm}sm_pipe" \
     --loader logical --out "runs/logical-canary/${sm}sm"
 done
 ```
@@ -79,7 +79,7 @@ exact checker:
 
 ```sh
 for sm in 1 2 4; do
-  python3 run.py --preset meaningful --sms "$sm" --loader logical \
+  python3 run.py --fixture meaningful --preset "${sm}sm_pipe" --loader logical \
     --out "runs/meaningful-parallel/${sm}sm"
 done
 ```

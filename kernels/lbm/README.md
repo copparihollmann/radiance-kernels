@@ -56,10 +56,10 @@ ordered model and is recorded in the artifact manifest.
 ## Software-only use
 
 ```sh
-python3 lbm.py --sms 4 --out runs/4sm --prepare-only
-python3 partition_audit.py --sms 4
+python3 lbm.py --preset 4sm_pipe --out runs/4sm --prepare-only
+python3 partition_audit.py --preset 4sm_pipe
 python3 -m unittest -v test_lbm.py
-python3 lbm.py --sms 1 --out runs/1sm
+python3 lbm.py --preset 1sm_pipe --out runs/1sm
 python3 functional_smoke.py runs/1sm
 ```
 

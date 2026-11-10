@@ -67,8 +67,8 @@ uses no VPU, Gemmini, or MX path.
 
 ```sh
 make test
-python3 streamcluster.py --sms 4 --out runs/official-4sm --prepare-only
-python3 streamcluster.py --sms 4 --out runs/official-4sm
+python3 streamcluster.py --preset 4sm_pipe --out runs/official-4sm --prepare-only
+python3 streamcluster.py --preset 4sm_pipe --out runs/official-4sm
 python3 functional_smoke.py runs/official-4sm
 ```
 

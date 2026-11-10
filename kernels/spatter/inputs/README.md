@@ -5,7 +5,7 @@ The 13 JSON decks in `standard-suite/` are byte-for-byte copies of
 `ec8923711f8dc21eedff7189f12b02eb06845d2f`. The
 [manifest](standard-suite/manifest.csv) records each file's SHA-256 and byte
 size. The upstream `LICENSE` and `COPYING` are included beside the decks.
-The generated [native-size inventory](../evaluation/native-workload-footprint.csv)
+The generated native-size inventory
 enumerates their 114 cases; it does not imply every case has run on Radiance.
 
 The 517,377,170-byte LANL xRAGE input `spatter.json` is preserved locally

@@ -1,16 +1,11 @@
 # Spatter on Radiance
 
-The [workload result summary](../README.md) combines this kernel's
-cycles with the standalone STREAM measurements.
-
 This kernel lives in `radiance-kernels` and builds with `../common.mk`, the same
 Muon and RV64 host infrastructure used by the other kernels. It maps the five
 [Spatter](https://github.com/hpcgarage/spatter) transfer families: Gather,
 Scatter, GatherScatter (`GS`), MultiGather, and MultiScatter. The source JSON
 may come from Spatter's standard suite or the [LANL xRAGE traces](https://github.com/lanl/spatter).
 The fused ELF runs on the Radiance SoC RTL simulator or Cyclotron model.
-A one-cluster U250 image has also run the selected cases recorded in the
-[FireSim evaluation](../evaluation/firesim/README.md).
 Spatter's `gpu-stream.json` contains five Spatter address-transfer families;
 the four standalone STREAM operations live in [../stream](../stream/README.md).
 
@@ -84,8 +79,8 @@ python3 run_chain.py inputs/standard-suite/basic-tests/gpu-stream.json 0 \
 ```
 
 Their complete output digests match. The
-[full-size comparison](evaluation/composition-fullsize-model-results.csv) and
-[memory counters](evaluation/composition-fullsize-memory.csv) retain the model
+full-size comparison and
+memory counters retain the model
 results; `run_chain.py` also records both stage maps and the intermediate
 length in its manifest.
 
@@ -116,7 +111,7 @@ build a particular JSON case:
 python3 run.py --suite smoke.json --case 0 --out runs/smoke-0 --build-only
 ```
 
-Pass `--sms 1`, `--sms 2`, or `--sms 4` to select the physical SM count.
+Pass `--preset 1sm_pipe`, `--preset 2sm_pipe`, or `--preset 4sm_pipe` to select the physical SM count.
 Gather and ordered Scatter assign contiguous, 64-byte-aligned destination
 ranges to SMs; parallel Scatter assigns contiguous blocks of transfer tasks.
 This avoids the former cross-SM lane interleaving. The host tags every physical
@@ -169,23 +164,18 @@ experiment parameter. Four remains the default. Compare absolute cycles and
 correctness at the same dataset and SM count; a larger scaling ratio caused by
 slowing the lower-SM endpoint is not an optimization.
 
-`--robust-end-drain` is an opt-in correctness experiment for long write-heavy
-FPGA workloads. After all worker warps arrive, one lane per core waits for the
-other store queues, capacity-drains that core's L0d and the cluster L1 through
-scratch lines unique to `(SM, core)`, and only then publishes END. With the
-FPGA-only `--robust-spin-until-reset` companion flag, workers stay live after
-END so the defective tile-finished flush cannot race readback; the host
-soft-resets them after every core reports END and before checking GMEM.
-Cyclotron gates omit that flag because the public model lacks the reset MMIO.
-`--robust-serial-fence` candidate retires every worker warp's store queue
-explicitly before those drains. It serializes the fences through an uncached
-printBuf epoch because simultaneous warp fences are unsafe on the taped-out
-SFU path. It requires `--robust-end-drain`, and all fence/drain overhead remains
-inside `kernel_cycles`. The useful
-Spatter/xRAGE transfers and their timing boundaries are unchanged; the drain
-overhead is included in `kernel_cycles`. Do not promote this mode based on a
-single pass or on a host-side delay: require repeated full-output checks on the
-affected FPGA configuration and then all matching SM/memory configurations.
+The end-of-kernel drain protocol is no longer a per-run flag.  It is part of
+the preset (see `../hpc.mk`): after all worker warps arrive, one lane per core
+waits for the other store queues, capacity-drains that core's L0d and the
+cluster L1 through scratch lines unique to `(SM, core)`, and only then
+publishes END.  Workers stay live afterwards so the defective tile-finished
+flush cannot race readback; the host soft-resets them once every core reports
+END.  Each worker warp's store queue is retired explicitly before those drains,
+serialized through an uncached printBuf epoch because simultaneous warp fences
+are unsafe on the taped-out SFU path.
+
+All of that overhead stays inside `kernel_cycles`.  The Spatter/xRAGE transfers
+and their timing boundaries are unchanged.
 
 For the newer hashed `RadianceHBMConfig` with direct DRAM loading (`+loadmem`
 or FireSim LoadMem), set `MU_ADDR_HASH=1` when building. The hash parameters
@@ -199,7 +189,7 @@ payload, and unwritten Scatter destinations otherwise retain stale memory.
 Pass `--full-host-check` to make the host digest every output word and both
 guards after the kernel finishes. That mode provides stronger FPGA
 correctness evidence but adds readback time to whole-program target cycles;
-see the [U250 follow-up](../evaluation/firesim/output-initialization/README.md).
+see the U250 follow-up.
 Pass `--host-timing` to print `HOST_RELEASE_TO_DONE_CYCLES` in the guest UART.
 It reads the RV64 host cycle counter just before Muon reset release and just
 after all-finished is observed, before output readback. The interval includes
@@ -208,7 +198,7 @@ time. A timed two-repetition Gather smoke build has a byte-identical RV32
 image to its untimed control. Both flags require a rebuild and cannot be
 added to an ELF through `--sim-only`.
 The [complete standard-suite JSON set](inputs/README.md) and its
-[native-size inventory](evaluation/native-workload-footprint.csv) are tracked
+native-size inventory are tracked
 here. The inventory covers 114 cases; it is a feasibility audit, not a list
 of completed FPGA runs.
 
@@ -217,15 +207,15 @@ contiguous repetitions `[S, S+C)` using source values from their original
 global indices. It rejects other families and wraps because they need output
 state across chunks. The tiny [chunk smoke input](chunk-smoke.json) splits
 five repetitions into three and two; the final chunk and unsplit run have
-the same digest. The [upstream serial record](evaluation/chunk-smoke-upstream.csv)
+the same digest. The upstream serial record
 checks all three generated ELFs independently. This is a correctness primitive
 for large Gather decompositions. The corresponding
-[original-count GPU AMG chunk runs](../evaluation/firesim/amg-gpu-chunks/README.md)
+original-count GPU AMG chunk runs
 both passed complete-output U250 checks. The separate booted runs do not
 provide a single-launch timing equivalent.
 [`tools/spatter-gather-chunks.py`](tools/spatter-gather-chunks.py) records the
 contiguous count ranges, rebased source indices, per-chunk footprints, and
-expected final digest. The [AMG GPU case 0 plan](evaluation/amg-gpu-chunk-plan.json)
+expected final digest. The AMG GPU case 0 plan
 uses two 7,352,941-repetition chunks to cover the original 14,705,882 count.
 
 Scatter, GS, and MultiScatter can use `--collision-policy ordered` when
@@ -271,7 +261,7 @@ from its receipt-checked load images without creating a giant JSON array:
 python3 tools/extract-xrage-bundle.py --bundle /path/to/fpga-handoff-hpc-all-sm \
   --out /scratch/$USER/radiance-xrage
 python3 run.py --suite /scratch/$USER/radiance-xrage/xrage-suite.json \
-  --case 0 --sms 4 --out runs/xrage-gather-4sm --build-only
+  --case 0 --preset 4sm_pipe --out runs/xrage-gather-4sm --build-only
 ```
 
 The emitted suite uses `u32le` binary-pattern descriptors with byte count,
@@ -327,18 +317,18 @@ throughput result. Neither result should be compared directly with the
 published atomic xRAGE9 GPU result. The logical payload metric counts one
 8-byte read and one
 8-byte write per transfer, excluding pattern traffic; no GPU frequency or
-HBM timing calibration is assumed. See [evaluation/README.md](evaluation/README.md)
+HBM timing calibration is assumed. See evaluation/README.md
 for measured cases and provenance.
 
 For an independent correctness check, `tools/spatter-upstream-golden.py`
 compiles the pinned [original Spatter](https://github.com/hpcgarage/spatter)
 serial backend, runs it on the same deterministic inputs, and compares its
 complete output digest with the Radiance/Cyclotron result. The
-[golden record](evaluation/README.md#independent-upstream-correctness-oracle)
+golden record
 documents nine original-size single-family cases, five small cases, the
 scaled AMG case, and the full-size two-stage composition, with raw artifact
 hashes and reproduction commands.
-The [mutation controls](evaluation/upstream-control-results.csv) rerun one
+The mutation controls rerun one
 small case with changed source data and pattern entries; both changes alter
 upstream's output digest, as does a direct output-bit flip.
 

@@ -1,8 +1,5 @@
 # STREAM on Radiance
 
-The [workload result summary](../README.md) combines these cycles
-with the Spatter measurements.
-
 The four independent STREAM operations use float32 arrays: Copy `C=A`, Scale
 `B=3*C`, Add `C=A+B`, and Triad `A=B+3*C`, matching the elemental equations
 and scalar in STREAM v5.10. They build through `../common.mk`
@@ -31,7 +28,7 @@ value `3.0`; a different value is deliberately labelled `stream-like` rather
 than equation-equivalent. The full campaign defaults to 1,048,576 elements so
 the measured region is not dominated by the former 4,102-element smoke size.
 
-Pass `--sms 1`, `--sms 2`, or `--sms 4` to build for that many physical SMs.
+Pass `--preset 1sm_pipe`, `--preset 2sm_pipe`, or `--preset 4sm_pipe` to build for that many physical SMs.
 Each SM owns a contiguous range aligned to a 64-byte cache line. The host tags
 every physical SM before releasing reset, and the kernel reports `kernel_cycles`
 from the earliest core start through the latest post-fence completion stamp.
@@ -70,45 +67,21 @@ only after recording the host clock domain and hardware revision. The flag
 changes only the RV64 host; the RV32 Muon image was checked byte-for-byte
 against the untimed 256-element Copy smoke build.
 
-`--robust-end-drain` is an opt-in completion mode for configurations where all
-cores reach END but a full host digest still sees dirty output lines. It waits
-for independent warp store queues, capacity-evicts each core's L0d and the
-shared L1 through disjoint `(SM, core)` scratch windows, and records the added
-work inside `kernel_cycles`. On FPGA, pair it with
-`--robust-spin-until-reset` to post END without returning through the defective
-tile-finished flush and let the host soft-reset workers before GMEM readback.
-Cyclotron gates omit that flag because the public model lacks the reset MMIO.
-For a workload that still loses a line, `--robust-serial-fence` explicitly
-fences every worker warp in sequence through an uncached mailbox handoff
-before the cache drains. It requires `--robust-end-drain`; its cost is measured
-and it is an FPGA candidate until repeated complete-output gates pass.
-`--robust-cluster-l1-manager` is a separate, bounded completion candidate. It
-keeps all three robust passes and has every core capacity-drain its private L0d,
-but synchronizes all L0d drains before one manager core per cluster drains the
-cluster-shared L1. The default is off and retains the established epilogue
-exactly. This option also requires `--robust-end-drain`; it has no FPGA
-correctness claim until it passes the same complete-output hardware gates.
-The opt-in protocol reserves reusable barrier ID 13; the STREAM kernel itself
-does not issue barriers and therefore does not conflict with that reservation.
-`--robust-split-l1-drain` is a separate candidate motivated by those barrier
-costs. It keeps the established three L0d/L1 passes and per-core execution,
-but each of the two cores walks half of the four-L1-capacity shared eviction
-window. Together they still touch four complete L1 capacities per cluster per
-pass, through disjoint addresses, without adding inter-core barriers. It is
-mutually exclusive with the manager mode, changes no STREAM operation, and
-must pass complete-output gates on every FPGA image before promotion.
-Use `--diagnostic-readback` to print the actual
-digest and all guard words on failure; that flag changes only the RV64 host
-checker. Neither option reduces the array length or changes an elemental
+The end-of-kernel drain protocol is no longer a per-run flag.  It is part of
+the preset (see `../hpc.mk`): the device publishes END through global memory,
+fences one core at a time, then spins until the host resets it.  That
+combination exists because on FPGA a core that returns through the tile-finished
+flush can leave dirty output lines behind, and because a workload that still
+lost a line needed each worker warp fenced in sequence before the cache drains.
+Override a single knob on the command line (`make HPC_ROBUST_SERIAL_FENCE=0`)
+only for a deliberate experiment; every recorded cycle count assumes the
+defaults.
+
+Use `--diagnostic-readback` to print the actual digest and all guard words on
+failure; that flag changes only the RV64 host checker and no elemental
 equation.
 
-Use `../spatter/tools/spatter-verilator-run.py` and
-`../spatter/tools/spatter-cyclotron-run.py` with `--source-root runs` and a
-separate output root to run an ELF. The shared validator and summarizer produce
-the same cycle and logical-payload tables as the Spatter kernels. Logical
-payload counts two float32 transfers per element for Copy/Scale and three for
+Logical payload counts two float32 transfers per element for Copy/Scale and three for
 Add/Triad; it excludes cache-line amplification. No GPU clock or calibrated
 HBM bandwidth is assumed.
 
-See [evaluation/README.md](evaluation/README.md) for the measured
-one-million-element timing-model cycle and memory counters.

@@ -72,7 +72,7 @@ and four surrounding guards.
 ```sh
 for profile in canary meaningful; do
   for sm in 1 2 4; do
-    python3 run.py --profile "$profile" --sms "$sm" \
+    python3 run.py --profile "$profile" --preset "${sm}sm_pipe" \
       --loader logical --out "runs/logical/${profile}/${sm}sm"
   done
 done

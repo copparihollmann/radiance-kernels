@@ -86,7 +86,7 @@ Build the upstream-size logical canaries:
 
 ```sh
 for sm in 1 2 4; do
-  python3 run.py --sms "$sm" --loader logical --out "runs/logical/${sm}sm"
+  python3 run.py --preset "${sm}sm_pipe" --loader logical --out "runs/logical/${sm}sm"
 done
 ```
 

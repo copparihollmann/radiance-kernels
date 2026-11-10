@@ -78,7 +78,7 @@ cycles are useful only for regression comparison; they are not FPGA timing.
 
 ```sh
 make test
-python3 run.py --profile meaningful --sms 4 --out runs/build/meaningful/4sm
+python3 run.py --profile meaningful --preset 4sm_pipe --out runs/build/meaningful/4sm
 python3 model_check.py --build-root runs/build \
   --cyclotron /path/to/cyclotron --out runs/model-functional
 ```

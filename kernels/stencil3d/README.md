@@ -20,7 +20,7 @@ acceptance rule.
 Example logical artifact:
 
 ```sh
-python3 run.py --size 64 --sms 4 --loader logical \
+python3 run.py --size 64 --preset 4sm_pipe --loader logical \
   --out /scratch/agustin/radiance-fpga-1a/runs/stencil3d/4sm
 ```
 

@@ -30,7 +30,7 @@ accumulation positions are unchanged.
 
 ```sh
 python3 -m unittest -v test_run.py
-python3 run.py --fixture-rows 257 --fixture-seed 7 --sms 4 \
+python3 run.py --fixture-rows 257 --fixture-seed 7 --preset 4sm_pipe \
   --out runs/fixture-4sm --prepare-only
 RISCV64_TOOLCHAIN_PATH=/path/to/riscv-tools make kernel.soc.elf
 ```
@@ -51,7 +51,7 @@ python3 run.py \
   --matrix /path/to/Dubcova3.mtx \
   --vector /path/to/Dubcova3.vec \
   --gold /path/to/Dubcova3.gold \
-  --dataset-name Dubcova3 --sms 4 \
+  --dataset-name Dubcova3 --preset 4sm_pipe \
   --out runs/dubcova3-4sm --prepare-only
 ```
 

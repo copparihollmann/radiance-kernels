@@ -67,6 +67,11 @@ compiled cyclotron binary.
 ## Run Kernels
 
 Similar to the ISA tests, go to `kernels/<kernel_name>` and run `make`.
+
+The HPC benchmark ports (STREAM, Spatter, lbm, spmv, stencil3d and the rest)
+take two extra axes -- which bitstream the ELF is for, and how hard the kernel
+unrolls. See [kernels/README.md](kernels/README.md).
+
 Use `*.elf` binaries for the `BINARY=` argument of the [Chipyard RTL
 simulations](https://chipyard.readthedocs.io/en/latest/Simulation/Software-RTL-Simulation.html).
 

@@ -37,8 +37,8 @@ the upstream contract explicitly permits four ULP.
 Prepare or build a software artifact with, for example:
 
 ```sh
-python3 sfilter.py --size 48 --sms 4 --out runs/4sm --prepare-only
-python3 sfilter.py --size 16 --sms 4 --out runs/smoke
+python3 sfilter.py --size 48 --preset 4sm_pipe --out runs/4sm --prepare-only
+python3 sfilter.py --size 16 --preset 4sm_pipe --out runs/smoke
 python3 functional_smoke.py runs/smoke
 python3 -m unittest -v test_sfilter.py
 ```
